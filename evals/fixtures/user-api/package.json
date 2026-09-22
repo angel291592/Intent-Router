@@ -1,0 +1,26 @@
+{
+  "name": "user-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Small user API. Fixture for the intent-router evaluation suite.",
+  "main": "dist/app.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "lint": "eslint src tests"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "ioredis": "^5.4.1"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.10",
+    "eslint": "^9.6.0",
+    "typescript": "^5.5.3",
+    "vitest": "^1.6.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

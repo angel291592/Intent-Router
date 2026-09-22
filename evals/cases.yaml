@@ -1,0 +1,113 @@
+# Evaluation cases for the intent-router skill.
+#
+# Expectations are fixed on purpose. When a case fails, the skill changes — never
+# the case. Loosening an expectation to reach the threshold makes the numbers in
+# the README meaningless.
+#
+# Field reference and how to add a case: evals/README.md
+#
+# `expect` applies to the LAST turn of a case. Keys are checked only when present,
+# except for triggered / schema_valid / invariants_ok / evidence_valid, which are
+# always checked whenever a spec is expected at all.
+# List-valued keyword checks (question_keywords, text_keywords) pass on ANY match.
+
+- id: add-caching-auto
+  prompt: add caching to the user API
+  mode: auto
+  fixture: user-api
+  expect:
+    state: ASK
+    question_keywords: [invalidation, stale, fail]
+    min_resolved_by_probe: 2
+    evidence_must_include: [src/cache/redis.ts, src/routes/users.ts]
+    max_asked: 1
+
+- id: add-caching-explicit
+  prompt: add caching to the user API
+  mode: explicit
+  fixture: user-api
+  expect:
+    state: ASK
+    question_keywords: [invalidation, stale, fail]
+    min_resolved_by_probe: 2
+    evidence_must_include: [src/cache/redis.ts, src/routes/users.ts]
+    max_asked: 1
+
+- id: add-caching-two-turn
+  prompt: add caching to the user API
+  mode: explicit
+  fixture: user-api
+  turns: ["A"]
+  expect:
+    state: ROUTE
+    unknown_empty: true
+    has_source: [asked, probed]
+    asked_eq: 1
+    min_resolved_by_probe: 2
+  metrics:
+    adr_found: docs/adr/0007
+
+- id: fully-specified
+  prompt: >-
+    Add Redis caching with the existing ioredis client to GET /api/users and
+    GET /api/users/:id, TTL 300s via DEFAULT_TTL_SECONDS; on invalidation failure
+    serve uncached; keep response shapes unchanged.
+  mode: auto
+  fixture: user-api
+  expect:
+    state: ROUTE
+    asked_eq: 0
+    max_inferred: 1
+
+- id: vague-no-ask
+  prompt: make it better. no questions.
+  mode: explicit
+  fixture: user-api
+  expect:
+    state: HALT
+    cause: underspecified
+    open_fields_min: 1
+
+- id: no-repo
+  prompt: add caching to the user API
+  mode: explicit
+  fixture: empty
+  expect:
+    state: ASK
+    resolved_by_probe_eq: 0
+    probed_constraints_eq: 0
+
+- id: question-not-trigger
+  prompt: what does src/cache/redis.ts do?
+  mode: auto
+  fixture: user-api
+  expect:
+    should_trigger: false
+
+- id: git-only-fact
+  prompt: upgrade ioredis to the latest major version
+  mode: explicit
+  fixture: user-api
+  expect:
+    state_in: [ASK, ROUTE]
+    evidence_regex: "git:"
+    text_keywords: [cluster, "420"]
+    max_asked: 1
+
+- id: chinese-ambiguous
+  prompt: 把 users 接口处理一下
+  mode: explicit
+  fixture: user-api
+  expect:
+    state: ASK
+    question_lang: zh
+    max_asked: 1
+
+- id: ungrillable
+  prompt: redesign the user API responses so they feel more modern
+  mode: explicit
+  fixture: user-api
+  expect:
+    state_in: [ASK, HALT]
+    output_regex: "prototype|mock|throwaway"
+    not_target: implement
