@@ -31,6 +31,10 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
   the documented repeat count to the actual default of one run per case.
 - 文档：发布首批评测数字，将 Claude Code 与 OpenCode 标为 verified；把文档里的重复次数更正为实际
   默认值——每例一次。
+- Docs: publish Simplified Chinese editions of the security and conduct policies, add a table of
+  contents and CI/release/stars badges to both READMEs, and expand the repository topics.
+- 文档：发布安全政策与行为准则的简体中文版，为两个 README 增加目录与 CI / Release / Stars 徽章，
+  并扩充仓库 topics。
 
 ## [0.1.0] — 2026-09-22
 
