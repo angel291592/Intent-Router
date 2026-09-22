@@ -4,6 +4,7 @@ README.draft.md
 docs/plans/
 agent.md
 test.md
+after-test.md
 
 # 评测原始输出（体积大、含模型全文），报告 .md 本身入库
 evals/reports/raw/
