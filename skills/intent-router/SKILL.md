@@ -51,7 +51,8 @@ may fill in **how** something is done; it may never invent **what** is being ask
 request itself is unclear — it names neither the object nor an observable outcome ("make it
 better" with nothing to make better) — no-ask mode halts with `cause: underspecified` and the
 open fields, rather than inferring three concrete improvements and routing them as the user's
-intent.
+intent. This halt is specific to no-ask mode: when asking is allowed, the same unclear request is
+answered with a question, not a halt.
 
 **Explicit invocation.** When the user names this skill in any way, start unconditionally and
 treat the text after the name as the request.
@@ -257,7 +258,10 @@ Then exactly one of three outcomes:
 - **HALT** — not sufficient and no way forward. `cause: underspecified` when the request is not
   yet decidable, with `open_fields` naming what is still dangling; `cause: degraded` when lookups
   failed, with `error` naming the failure. The two causes are mutually exclusive and must never be
-  merged: one is the user's next move, the other is an operations signal.
+  merged: one is the user's next move, the other is an operations signal. **Underspecified is not
+  a halt while a question is still possible**: if an askable unknown remains and the budget allows
+  a question, the outcome is ASK, not HALT. HALT `underspecified` is reserved for when asking is
+  impossible — no-ask mode, or the budget already spent.
 
 A spec that reaches ROUTE with an `inferred` constraint in it is fine — that is the design, and it
 is why inferred values are visible. A spec that reaches ROUTE with an inferred *irreversible*
