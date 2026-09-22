@@ -71,8 +71,8 @@
 | 提交邮箱隐私化 | ✅ 已配 | noreply 邮箱，真实邮箱不出现在提交历史 |
 | secret scanning + push protection | 创建仓库时确认开启 | 若检测到推送疑似密钥会直接拦截 |
 | 分支保护（main） | ✅ 已配 | 禁 force push / 禁删除 |
-| **两步验证（2FA）** | ⚠️ **待所有者开启** | https://github.com/settings/security → Two-factor authentication，用 TOTP 应用（如微软验证器）绑定并**保存恢复码**。这是最重要的一步，未开 2FA 前账号安全靠密码单点支撑 |
-| 邮箱隐私选项 | ⚠️ 建议开启 | https://github.com/settings/emails → 勾选 "Block command line pushes that expose my email" |
+| **两步验证（2FA）** | ⚠️ **暂缓（所有者 2026-09-22 决定）** | 原因：GitHub 短信不支持 +86，国内手机装验证器 App 不便。**已采取的降险措施：GitHub 使用独立强密码（16+ 位、不复用）**；可选补救：同页 Passkeys → 用 Windows Hello 绑定（无需手机）。密码疑似泄露时立即改密并 `gh auth refresh` 轮换 token |
+| 邮箱隐私选项 | ⚠️ 暂缓，风险≈0 | 该选项是 Settings → Emails 里 "Keep my email addresses private" 下的嵌套项。git 已全局使用 noreply 邮箱，真实邮箱不会进提交历史；**唯一纪律：不要把 `user.email` 改回真实邮箱** |
 | PAT 轮换 | 按需 | gh 的 token 存凭据管理器，如怀疑泄露：`gh auth refresh` 或 https://github.com/settings/tokens 撤销 |
 | SSH 密钥轮换 | 按需 | 私钥若疑似泄露：GitHub → Settings → SSH keys 删除旧公钥，本地重新生成，按 `~/.ssh/config` 指路重加 |
 
