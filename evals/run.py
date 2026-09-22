@@ -1350,6 +1350,39 @@ def selftest() -> int:
         "evidence_valid" in outcome["failures"] and "evidence_form" not in outcome["failures"],
     )
 
+    # The two exact violations measured in the 2026-09-22 corpus. They contain
+    # both spaces and slashes, so a blacklist rule misses them; they survive as
+    # a Tier 0 fixture after C3 removed the add-caching-explicit transcripts
+    # that produced them.
+    for measured in (
+        "delegated by correctness: src/db/users.ts and src/routes/users.ts confirm x",
+        "delegated by ADR consistency requirement: docs/adr/0007-no-inproc-cache.md",
+    ):
+        doc = json.loads(json.dumps(route))
+        doc["constraints"][0]["evidence"] = measured
+        outcome = check(cases["add-caching-two-turn"], record_for(doc), validator, manifest=manifest)
+        expect(f"measured reasoning sentence is evidence_form: {measured[:32]}…", "evidence_form" in outcome["failures"])
+
+    print("the output template survives parsing and keeps its dirty scalars (S1)")
+    skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+    section6 = skill_text.split("## 6. Output format", 1)[1].split("## 7.", 1)[0]
+    fences = FENCE.findall(section6)
+    expect("the output template is a fenced yaml block", bool(fences))
+    template = fences[0] if fences else ""
+    try:
+        template_ok = isinstance(yaml.safe_load(template), dict)
+    except yaml.YAMLError:
+        template_ok = False
+    expect("the output template parses with yaml.safe_load", template_ok)
+    expect(
+        "the template shows a single-quoted scalar containing ':'",
+        bool(re.search(r"'[^'\n]*:[^'\n]*'", template)),
+    )
+    expect(
+        "the template shows a single-quoted scalar containing '{'",
+        bool(re.search(r"'[^'\n]*\{[^'\n]*'", template)),
+    )
+
     print("report rendering")
     results = [
         {

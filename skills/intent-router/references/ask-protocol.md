@@ -55,8 +55,9 @@ rather than asking the user to pick a letter again.
 When the user answers "you decide", "whatever you think", "your call", "up to you":
 
 - Take the recommended option.
-- Record it as a constraint with `source: inferred` and `evidence: "delegated by user"` — not as
-  `asked`, because nobody actually decided it.
+- Record it as a constraint with `source: inferred` and `evidence: user:delegated` — a reserved
+  token, not as `asked`, because nobody actually decided it. Evidence is always a single
+  whitespace-free token; the human-readable reason goes in the constraint `text`.
 - Increment `resolution.inferred`, not `resolution.asked`.
 
 **Exception: irreversible decisions cannot be delegated.** If the constraint would be

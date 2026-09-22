@@ -122,7 +122,7 @@
         "evidence": {
           "type": "string",
           "minLength": 1,
-          "description": "Where the constraint comes from: path, path:line, path#heading, git:<short-sha> or git:#<pr-number>. Required for probed and inferred constraints — an unsourced claim about a repository is indistinguishable from a guess."
+          "description": "Where the constraint comes from: path, path:line, path#heading, git:<short-sha> or git:#<pr-number>, or the reserved user:delegated when the user handed the decision back. Always a single whitespace-free token; a reasoning sentence is not evidence and belongs in text. Required for probed and inferred constraints — an unsourced claim about a repository is indistinguishable from a guess."
         },
         "irreversible": {
           "type": "boolean",

@@ -28,7 +28,7 @@ should meet the request before the conclusions.
 |---|---|---|
 | `source` | yes | `explicit` \| `probed` \| `asked` \| `inferred`. |
 | `text` | yes | The requirement, actionable without this document's context. |
-| `evidence` | when `probed` or `inferred` | Pointer in one of the evidence formats. The schema enforces this. |
+| `evidence` | when `probed` or `inferred` | Pointer in one of the evidence formats. Always a single whitespace-free token: `path`, `path:line`, `path:line-line`, `path#heading`, `git:<short-sha>`, `git:#<pr-number>`, or the reserved `user:delegated`. The schema enforces this. |
 | `irreversible` | no, default `false` | Cannot be walked back once shipped. |
 | `category` | no | One of the six categories from the parse taxonomy. |
 
@@ -90,6 +90,9 @@ The schema cannot express these. They hold for every emitted spec:
    This is the second half of the sufficiency predicate, restated as a check.
 5. Every `evidence` path component points at something that exists in the workspace as reached, or
    uses the `git:` form. A fabricated pointer is a defect of the worst kind: it survives review.
+   `git:` and `user:delegated` are reserved forms that do not point at the filesystem, so this
+   invariant does not apply to them — but every other evidence value must be a real path, and any
+   value containing whitespace (a reasoning sentence) is not evidence at all.
 
 ## The four worked examples
 

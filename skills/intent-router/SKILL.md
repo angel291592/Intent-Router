@@ -46,7 +46,12 @@ Do not start when:
 **No-ask mode.** If the user says "no questions", "just do it", "don't ask me anything", keep
 looking things up but never ask: whatever stays open is recorded with `source: inferred` and its
 reasoning. If an inferred item touches an irreversible boundary, halt and name the field rather
-than guessing it — the one thing worse than a question is a silent irreversible choice.
+than guessing it — the one thing worse than a question is a silent irreversible choice. Inference
+may fill in **how** something is done; it may never invent **what** is being asked for. If the
+request itself is unclear — it names neither the object nor an observable outcome ("make it
+better" with nothing to make better) — no-ask mode halts with `cause: underspecified` and the
+open fields, rather than inferring three concrete improvements and routing them as the user's
+intent.
 
 **Explicit invocation.** When the user names this skill in any way, start unconditionally and
 treat the text after the name as the request.
@@ -61,10 +66,15 @@ treat the text after the name as the request.
   constraint needed to act without guessing.
 - **inferred** — a value the model supplied itself. Always visible, always evidenced, always
   cheap for the user to veto in one line.
-- **evidence** — a pointer to where a value came from: `path`, `path:line`, `path#heading`,
-  `git:<short-sha>`, `git:#<pr-number>`. It is always a workspace pointer — a reasoning sentence
-  ("correctness requirement…"), a rule of thumb or the name of a concept is not evidence and must
-  not be put in the `evidence` field; put that justification in the constraint `text` instead.
+- **evidence** — a pointer to where a value came from. It is always a **single token with no
+  whitespace**, in one of these forms only: `path`, `path:line`, `path:line-line`,
+  `path#heading`, `git:<short-sha>`, `git:#<pr-number>`, or the reserved `user:delegated` used
+  when the user handed a decision back. Nothing else is evidence. In particular the repository
+  root (`.`), any path under `.git/`, `.claude/` or `.agents/`, the harness config file, and — most
+  of all — a reasoning sentence ("correctness requirement…", "delegated by symmetry with…") are
+  **not** evidence: they are not pointers, they contain spaces, and they must not be put in the
+  `evidence` field. Put that justification in the constraint `text` instead. A value that does not
+  match one of the forms above is a defect even if the thing it names exists.
 - **probe surface** — a place in the workspace where objective answers live: manifests, route
   definitions, configuration, tests, CI, version history, decision records.
 - **ASK budget** — the hard cap on questions for one request. Default **3**.
@@ -168,6 +178,13 @@ ends without enough information and the cause is failed lookups rather than an u
 request, halt with `cause: degraded` and an `error` that names what failed. Never present a broken
 environment as a vague request, or the reverse.
 
+**An empty probe surface is not the same as a failed lookup.** `degraded` means a lookup was
+*attempted and failed*. When the workspace simply has nothing to look up — an empty repository, a
+request that names no existing code — nothing failed, so `degraded` is the wrong cause. Reclassify
+the affected unknown as `kind: ask` and ASK: a person can still answer "what should this become",
+which is exactly the information the missing workspace cannot supply. HALT `degraded` is reserved
+for lookups that broke, never for surfaces that were never there.
+
 ### 4.3 ASK
 
 Only for answers that live in a person's head, or decisions that cannot be walked back.
@@ -205,9 +222,11 @@ user's own words or the workspace state it; otherwise ASK.
   - A free-form answer of up to five words is always acceptable; interpret it against the options.
 
 - **Delegation.** If the user answers "you decide", "whatever", "your call", take the recommended
-  option and record the constraint with `source: inferred` and `evidence: "delegated by user"`.
-  If that constraint is `irreversible: true`, do not accept the delegation: restate the risk in
-  one sentence and ask once more. That second ask counts against the budget.
+  option and record the constraint with `source: inferred` and `evidence: user:delegated` — a
+  reserved token, not a sentence, because evidence is always a single whitespace-free token and a
+  human-readable justification belongs in the constraint `text`. If that constraint is
+  `irreversible: true`, do not accept the delegation: restate the risk in one sentence and ask once
+  more. That second ask counts against the budget.
 - **Language.** Ask in the language the user wrote in — this is a hard rule, not a stylistic
   preference: an English request gets an English question, even if the workspace you probed is
   in another language or your runtime environment has its own language instructions. Spec keys
@@ -249,6 +268,15 @@ constraint is a bug.
 Emit one fenced `yaml` block containing the whole spec, in exactly this field order. Nothing else
 goes inside the fence; prose goes after it.
 
+**Quote every dirty scalar.** Any value containing `:`, `#`, `{`, `}`, `[`, `]`, `,`, `"` or `'`,
+or starting with a character that is not a letter, must be wrapped in **single** quotes — an inner
+`'` is written `''`. Multi-line text uses the block scalar `>` instead. Single quotes are required
+rather than double quotes because the offending characters are usually double quotes themselves
+(`"ioredis": "^5.4.1"`), and single-quoting needs no escaping. The dangerous case is a value with a
+space and a `#` (a pull-request reference like `reverted in #412`): unquoted, YAML treats it as an
+inline comment and **silently truncates the value** — the fence still parses, so a corrupted spec
+survives a review that a hard error would have caught.
+
 ```yaml
 spec_version: "0.1"
 request: add rate limiting to the public endpoints
@@ -261,11 +289,11 @@ constraints:
     text: apply it to the public endpoints only
     category: scope
   - source: probed
-    text: reuse the rate-limit middleware already registered in the app entry point
+    text: 'the entry point already registers a rate-limit middleware: mounted before the routes'
     evidence: src/app.ts:24
     category: approach
   - source: asked
-    text: reject over-limit requests with 429 rather than queueing them
+    text: 'reject over-limit requests with 429 and the body { error: "rate_limited" }, not by queueing them'
     irreversible: true
     category: failure_behavior
 unknown: []
@@ -345,6 +373,13 @@ Some questions cannot be resolved by probing *or* asking, because the user canno
 the abstract either: "make it feel modern", "make the onboarding delightful", "pick a nicer
 layout". The signature is an aesthetic or experiential target with no observable acceptance
 criterion, where every option sounds acceptable in prose.
+
+**Recognise this before spending probe budget, not after.** When the request's goal is aesthetic or
+experiential, name it ungrillable in Pass 1 and route or halt on that basis immediately — do not
+first run several rounds of probing hoping the target will become objective. Deep probing an
+aesthetic target does not converge; it only burns the budget and delays the answer. The signature
+is checkable in one pass: if no conceivable file in the workspace could name an acceptance
+criterion for the goal, the goal is ungrillable.
 
 Do not spend questions on these. Name the ungrillable field, say that it needs something to react
 to rather than another round of discussion, and hand off to a throwaway prototype or mock as the
