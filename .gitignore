@@ -1,6 +1,10 @@
-# 内部文档：不入公开仓库（HANDOFF.md 是调研档案，README.draft.md 是待定稿草稿）
+# 内部文档：不入公开仓库（HANDOFF.md 是调研档案，README.draft.md 是待定稿草稿，docs/plans/ 是中文执行计划）
 HANDOFF.md
 README.draft.md
+docs/plans/
+
+# 评测原始输出（体积大、含模型全文），报告 .md 本身入库
+evals/reports/raw/
 
 # OS 垃圾文件
 Thumbs.db
