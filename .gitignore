@@ -1,0 +1,19 @@
+# 内部文档：不入公开仓库（HANDOFF.md 是调研档案，README.draft.md 是待定稿草稿）
+HANDOFF.md
+README.draft.md
+
+# OS 垃圾文件
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# 编辑器/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 未来可能的构建产物
+__pycache__/
+node_modules/
+dist/
