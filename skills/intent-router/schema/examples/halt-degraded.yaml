@@ -1,0 +1,45 @@
+# HALT / degraded — the same request as route.yaml, but the environment exposes no
+# file-reading or search capability, so every lookup fails. The unknowns are facts
+# about the repository, not preferences: putting them to the human would violate
+# the iron law and would also disguise a broken environment as a vague request.
+# This cause is an operations signal and must never be merged with underspecified.
+spec_version: "0.1"
+request: add caching to the user API
+intent: add_caching
+objects: []
+constraints: []
+unknown:
+  - field: cache_backend
+    kind: probe
+    category: approach
+    note: answerable from the dependency manifest, which could not be read
+  - field: cached_endpoints
+    kind: probe
+    category: scope
+    note: answerable from the route definitions, which could not be read
+  - field: ttl_policy
+    kind: probe
+    category: acceptance
+    note: answerable from the cache module and the existing conventions, neither of which could be read
+decision:
+  state: HALT
+  confidence: 0.1
+  cause: degraded
+  error: no file-reading, search or shell capability is available in this environment; three lookup attempts (dependency manifest, route definitions, cache module) each returned a capability error rather than a result
+resolution:
+  unknowns_found: 3
+  resolved_by_probe: 0
+  asked: 0
+  inferred: 0
+  ask_budget: 3
+trace:
+  - step: parse
+    detail: normalised the request to add_caching; listed three decision-bearing unknowns, all of them answerable from the repository
+  - step: probe
+    detail: attempted to read the dependency manifest — the environment reported no file-reading capability, so this is a failed lookup, not a missing answer
+  - step: probe
+    detail: attempted to search for route definitions and to read the cache module — both attempts failed the same way, which exhausts the lookup budget for these fields
+  - step: typecheck
+    detail: three unknowns remain and every one of them is a repository fact; the ask budget is irrelevant because asking a human for facts that live in the repository is not permitted
+  - step: emit
+    detail: halting with cause degraded and the capability error, so the failure is routed to whoever owns the environment instead of being handed back to the requester as vagueness

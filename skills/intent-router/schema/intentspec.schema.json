@@ -1,0 +1,402 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/angel291592/Intent-Router/main/skills/intent-router/schema/intentspec.schema.json",
+  "title": "IntentSpec",
+  "description": "A typed, machine-readable statement of what a request actually asks for, emitted before planning or coding starts. One artifact, three consumers: a human who reviews and vetoes inferred constraints, an agent that executes, and an audit that replays the trace. Property order in this schema is the order an IntentSpec should be written in.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "spec_version",
+    "request",
+    "intent",
+    "objects",
+    "constraints",
+    "unknown",
+    "decision",
+    "resolution",
+    "trace"
+  ],
+  "properties": {
+    "spec_version": {
+      "const": "0.1",
+      "description": "Version of this schema the document targets."
+    },
+    "request": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "The request in the requester's own words, truncated to 500 characters. Never paraphrased: the point is that a reviewer can compare the spec against what was actually said."
+    },
+    "intent": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "Normalised verb-object identifier in snake_case, e.g. add_caching."
+    },
+    "objects": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "What the intent acts on: files, endpoints, modules, records. Must hold at least one entry when decision.state is ROUTE; may be empty while the target is still unknown."
+    },
+    "constraints": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/constraint"
+      },
+      "description": "Every requirement the run established, each tagged with where it came from."
+    },
+    "unknown": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/unknownItem"
+      },
+      "description": "Decision-bearing questions that are still open. An empty array is one half of the sufficiency predicate."
+    },
+    "decision": {
+      "$ref": "#/$defs/decision"
+    },
+    "resolution": {
+      "$ref": "#/$defs/resolution"
+    },
+    "trace": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/traceItem"
+      },
+      "description": "Replayable record of how the run reached its decision."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["decision"],
+        "properties": {
+          "decision": {
+            "required": ["state"],
+            "properties": {
+              "state": {
+                "const": "ROUTE"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "objects": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "category": {
+      "enum": [
+        "scope",
+        "approach",
+        "data_compatibility",
+        "failure_behavior",
+        "acceptance",
+        "non_goals_constraints"
+      ],
+      "description": "Which kind of intent-level question this concerns: scope (what is acted on, what is excluded), approach (which method or dependency), data_compatibility (data shape, interface contract, backward compatibility), failure_behavior (what happens on error, degradation or empty state), acceptance (what counts as done, measurably), non_goals_constraints (explicit exclusions and hard limits on time, cost or compliance)."
+    },
+    "constraint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "text"],
+      "properties": {
+        "source": {
+          "enum": ["explicit", "probed", "asked", "inferred"],
+          "description": "explicit: stated in the request. probed: found by the run itself. asked: answered by a human. inferred: filled in by the model, so a reviewer can veto it."
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "The requirement, phrased so an executor can act on it without reading this document's context."
+        },
+        "evidence": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Where the constraint comes from: path, path:line, path#heading, git:<short-sha> or git:#<pr-number>. Required for probed and inferred constraints — an unsourced claim about a repository is indistinguishable from a guess."
+        },
+        "irreversible": {
+          "type": "boolean",
+          "default": false,
+          "description": "True when the decision cannot be walked back once shipped. An inferred constraint that is also irreversible blocks ROUTE."
+        },
+        "category": {
+          "$ref": "#/$defs/category"
+        }
+      },
+      "if": {
+        "required": ["source"],
+        "properties": {
+          "source": {
+            "enum": ["probed", "inferred"]
+          }
+        }
+      },
+      "then": {
+        "required": ["evidence"]
+      }
+    },
+    "unknownItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["field", "kind"],
+      "properties": {
+        "field": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Name of the open field, stable enough to be listed in decision.open_fields."
+        },
+        "kind": {
+          "enum": ["probe", "ask"],
+          "description": "probe: an objective answer exists and should have been looked up. ask: the answer lives in a person's head, or the decision is irreversible."
+        },
+        "category": {
+          "$ref": "#/$defs/category"
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Why this is still open."
+        }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "confidence"],
+      "description": "The single outcome of the run. ROUTE, ASK and HALT are the only emitted states; PROBE happens inside the run and never appears here.",
+      "properties": {
+        "state": {
+          "enum": ["ROUTE", "ASK", "HALT"]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Self-reported ordinal, not calibrated. Use it to rank runs, never as a probability."
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "description": "ROUTE only: who the spec is handed to, e.g. implement, plan, research, or a target the requester named."
+        },
+        "question": {
+          "$ref": "#/$defs/question"
+        },
+        "cause": {
+          "enum": ["underspecified", "degraded"],
+          "description": "HALT only. underspecified: the request is not yet decidable, which is the requester's next move. degraded: probing, the model or parsing failed, which is an operations signal. Never merge the two — merging hides backend failure behind a user-facing message."
+        },
+        "open_fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "description": "HALT / underspecified only: the field names still dangling, reported instead of guessed."
+        },
+        "error": {
+          "type": "string",
+          "minLength": 1,
+          "description": "HALT / degraded only: what failed, concretely enough to act on."
+        }
+      },
+      "oneOf": [
+        {
+          "title": "ROUTE",
+          "properties": {
+            "state": {
+              "const": "ROUTE"
+            }
+          },
+          "required": ["state", "target"],
+          "not": {
+            "anyOf": [
+              { "required": ["question"] },
+              { "required": ["cause"] },
+              { "required": ["open_fields"] },
+              { "required": ["error"] }
+            ]
+          }
+        },
+        {
+          "title": "ASK",
+          "properties": {
+            "state": {
+              "const": "ASK"
+            }
+          },
+          "required": ["state", "question"],
+          "not": {
+            "anyOf": [
+              { "required": ["target"] },
+              { "required": ["cause"] },
+              { "required": ["open_fields"] },
+              { "required": ["error"] }
+            ]
+          }
+        },
+        {
+          "title": "HALT",
+          "properties": {
+            "state": {
+              "const": "HALT"
+            }
+          },
+          "required": ["state", "cause"],
+          "not": {
+            "anyOf": [
+              { "required": ["target"] },
+              { "required": ["question"] }
+            ]
+          },
+          "allOf": [
+            {
+              "if": {
+                "required": ["cause"],
+                "properties": {
+                  "cause": {
+                    "const": "underspecified"
+                  }
+                }
+              },
+              "then": {
+                "required": ["open_fields"],
+                "not": {
+                  "required": ["error"]
+                }
+              }
+            },
+            {
+              "if": {
+                "required": ["cause"],
+                "properties": {
+                  "cause": {
+                    "const": "degraded"
+                  }
+                }
+              },
+              "then": {
+                "required": ["error"],
+                "not": {
+                  "required": ["open_fields"]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "question": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "why_human", "recommended", "options"],
+      "description": "ASK only, and one question at a time: never a batch, never a preview of what comes next.",
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The question, complete enough to answer without scrolling back."
+        },
+        "why_human": {
+          "type": "string",
+          "minLength": 1,
+          "description": "One sentence on why this could not be looked up: it is a preference, a priority, or a decision that cannot be undone."
+        },
+        "recommended": {
+          "enum": ["A", "B", "C"],
+          "description": "The option id this run would pick if the requester delegates the choice."
+        },
+        "options": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "text"],
+            "properties": {
+              "id": {
+                "enum": ["A", "B", "C"]
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "description": "A concrete, mutually exclusive choice — not a restatement of the question."
+              }
+            }
+          }
+        }
+      }
+    },
+    "resolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unknowns_found",
+        "resolved_by_probe",
+        "asked",
+        "inferred",
+        "ask_budget"
+      ],
+      "description": "The run's own scorecard. resolved_by_probe / unknowns_found is the number to push up: every question that could have been looked up and was asked anyway is a defect.",
+      "properties": {
+        "unknowns_found": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Decision-bearing unknowns identified while parsing."
+        },
+        "resolved_by_probe": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Unknowns closed by looking them up."
+        },
+        "asked": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Unknowns closed by a human answer. A question that has been emitted but not yet answered does not count here — it is still listed in unknown."
+        },
+        "inferred": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Unknowns closed by the model filling them in."
+        },
+        "ask_budget": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Hard cap on questions for this request, zero in no-ask mode. Stopping is computed, not felt."
+        }
+      }
+    },
+    "traceItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["step", "detail"],
+      "properties": {
+        "step": {
+          "enum": ["parse", "probe", "ask", "typecheck", "emit"]
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What this step did, including probes that failed — a failed lookup is a fact about the environment, not an absence of information."
+        },
+        "evidence": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Same format as constraint evidence."
+        }
+      }
+    }
+  }
+}

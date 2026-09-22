@@ -1,0 +1,64 @@
+# ASK — the same run as route.yaml, one step earlier. Three unknowns are already
+# closed by looking them up; the fourth is a trade-off that lives in a person's
+# head and cannot be undone once shipped, so the run emits a snapshot plus exactly
+# one question and stops. Note that `asked` is still 0: a question that has been
+# emitted but not yet answered stays in `unknown` and is not counted as resolved.
+spec_version: "0.1"
+request: add caching to the user API
+intent: add_caching
+objects:
+  - GET /api/users
+  - GET /api/users/:id
+  - GET /api/users/:id/prefs
+constraints:
+  - source: probed
+    text: 'reuse the Redis client already in the dependencies; an in-process cache was tried and reverted in #412 for cross-instance inconsistency, so do not reintroduce one'
+    evidence: docs/adr/0007-no-inproc-cache.md#decision
+    category: approach
+  - source: probed
+    text: cache the three GET endpoints only; leave the POST and DELETE handlers untouched
+    evidence: src/routes/users.ts
+    category: scope
+  - source: probed
+    text: expire every entry after DEFAULT_TTL_SECONDS (300s), which the repository applies to all cache entries
+    evidence: src/cache/redis.ts:12
+    category: acceptance
+unknown:
+  - field: invalidation_failure_behavior
+    kind: ask
+    category: failure_behavior
+    note: nothing in the code, the tests, the decision records or the version history states which side to fall on, and clients will depend on whichever behaviour ships
+decision:
+  state: ASK
+  confidence: 0.55
+  question:
+    text: When invalidating a cached user record fails, should the API serve the stale cached copy or bypass the cache and serve uncached data?
+    why_human: Both are defensible engineering positions; the choice trades correctness against availability for your users, and it is not reversible once clients rely on the behaviour.
+    recommended: A
+    options:
+      - id: A
+        text: Bypass the cache and serve uncached data — correctness first, at the cost of extra database load during an outage.
+      - id: B
+        text: Serve the stale cached copy — availability first, at the cost of briefly returning data you know is wrong.
+resolution:
+  unknowns_found: 4
+  resolved_by_probe: 3
+  asked: 0
+  inferred: 0
+  ask_budget: 3
+trace:
+  - step: parse
+    detail: normalised the request to add_caching; listed four decision-bearing unknowns (cache_backend, cached_endpoints, ttl_policy, invalidation_failure_behavior)
+  - step: probe
+    detail: read the dependency manifest and the cache module — a Redis client is already a dependency and no in-process cache library is present, which settles cache_backend
+    evidence: src/cache/redis.ts
+  - step: probe
+    detail: read the route definitions — three read handlers and two write handlers, which settles cached_endpoints
+    evidence: src/routes/users.ts
+  - step: probe
+    detail: 'read the cache module constant and the decision record — TTL is fixed at 300 seconds repository-wide and in-process caching was reverted in #412'
+    evidence: src/cache/redis.ts:12
+  - step: typecheck
+    detail: one unknown remains and it is answerable only by a human, while the ask budget still allows a question — not sufficient, so ask rather than guess
+  - step: emit
+    detail: emitting the current snapshot with one question and waiting; no further questions are previewed

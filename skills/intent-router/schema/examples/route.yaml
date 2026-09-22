@@ -1,0 +1,61 @@
+# ROUTE — the walkthrough used in the README, run against evals/fixtures/user-api.
+# Four decision-bearing unknowns: cache backend, which endpoints, TTL policy, and
+# what happens when invalidation fails. Three were looked up; only the fourth —
+# an irreversible trade-off — was put to the human. This is the state emitted
+# after the human answered, so unknown is empty and the predicate holds.
+spec_version: "0.1"
+request: add caching to the user API
+intent: add_caching
+objects:
+  - GET /api/users
+  - GET /api/users/:id
+  - GET /api/users/:id/prefs
+constraints:
+  - source: probed
+    text: 'reuse the Redis client already in the dependencies; an in-process cache was tried and reverted in #412 for cross-instance inconsistency, so do not reintroduce one'
+    evidence: docs/adr/0007-no-inproc-cache.md#decision
+    category: approach
+  - source: probed
+    text: cache the three GET endpoints only; leave the POST and DELETE handlers untouched
+    evidence: src/routes/users.ts
+    category: scope
+  - source: probed
+    text: expire every entry after DEFAULT_TTL_SECONDS (300s), which the repository applies to all cache entries
+    evidence: src/cache/redis.ts:12
+    category: acceptance
+  - source: asked
+    text: when invalidation fails, prefer correctness over availability — bypass the cache and serve uncached data rather than serving a stale copy
+    irreversible: true
+    category: failure_behavior
+unknown: []
+decision:
+  state: ROUTE
+  confidence: 0.88
+  target: implement
+resolution:
+  unknowns_found: 4
+  resolved_by_probe: 3
+  asked: 1
+  inferred: 0
+  ask_budget: 3
+trace:
+  - step: parse
+    detail: normalised the request to add_caching; listed four decision-bearing unknowns (cache_backend, cached_endpoints, ttl_policy, invalidation_failure_behavior)
+  - step: probe
+    detail: read the dependency manifest and the cache module — a Redis client is already a dependency and no in-process cache library is present, which settles cache_backend
+    evidence: src/cache/redis.ts
+  - step: probe
+    detail: read the route definitions — three read handlers and two write handlers, which settles cached_endpoints
+    evidence: src/routes/users.ts
+  - step: probe
+    detail: 'read the version history and the architecture decision record — the in-process cache was reverted in #412, confirming the Redis-only convention rather than merely inferring it'
+    evidence: 'git:#412'
+  - step: probe
+    detail: read the cache module constant — the repository fixes every TTL at 300 seconds, which settles ttl_policy
+    evidence: src/cache/redis.ts:12
+  - step: ask
+    detail: asked the one remaining unknown, a trade-off that is not recorded anywhere and cannot be walked back once clients depend on it; the human chose correctness over availability
+  - step: typecheck
+    detail: unknown is empty and no inferred constraint touches an irreversible boundary — sufficient
+  - step: emit
+    detail: handing the spec to implement; no code is written inside this pass

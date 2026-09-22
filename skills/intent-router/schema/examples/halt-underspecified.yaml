@@ -1,0 +1,50 @@
+# HALT / underspecified — "make it better. no questions." The requester disabled
+# asking, so the run may still look things up but may not ask. Nothing in the
+# repository defines what "better" means, so the run reports the field names that
+# are still dangling instead of picking a scope. This cause is the requester's
+# next move, not a failure of the run — compare halt-degraded.yaml.
+spec_version: "0.1"
+request: make it better. no questions.
+intent: improve_codebase
+objects: []
+constraints:
+  - source: explicit
+    text: no-ask mode — resolve by looking things up only, never put a question to the requester
+    category: non_goals_constraints
+unknown:
+  - field: scope
+    kind: ask
+    category: scope
+    note: neither the request nor the repository indicates which module, endpoint or behaviour should change
+  - field: improvement_axis
+    kind: ask
+    category: approach
+    note: '"better" could mean latency, readability, test coverage or cost, and nothing on record ranks them'
+  - field: acceptance
+    kind: ask
+    category: acceptance
+    note: no measurable definition of done can be derived, so there would be no way to tell whether the work succeeded
+decision:
+  state: HALT
+  confidence: 0.15
+  cause: underspecified
+  open_fields:
+    - scope
+    - improvement_axis
+    - acceptance
+resolution:
+  unknowns_found: 3
+  resolved_by_probe: 0
+  asked: 0
+  inferred: 0
+  ask_budget: 0
+trace:
+  - step: parse
+    detail: the request carries an action but no object and no acceptance criterion; "no questions" sets the ask budget to zero
+  - step: probe
+    detail: searched the agent instruction files, the decision records and the recent version history for a stated definition of "better" — none of them defines one, so nothing here is answerable by looking it up
+    evidence: docs/adr/0007-no-inproc-cache.md
+  - step: typecheck
+    detail: three unknowns remain, all of them answerable only by a human, and the ask budget is zero — the predicate fails
+  - step: emit
+    detail: halting with the open field names; choosing a scope here would be a guess presented as a decision
