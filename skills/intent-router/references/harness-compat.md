@@ -7,14 +7,13 @@ invoke this one by hand. Checked 2026-09-22.
 
 | status | meaning |
 |---|---|
-| **verified** | This skill was actually run there and the transcript is in `evals/reports/` in the project repository. |
+| **verified** | This skill was actually run there and the report is in `evals/reports/` in the project repository. |
 | **spec-compatible** | The environment's own documentation says it loads standard `SKILL.md` skills from a directory this skill can be installed into. Not exercised here. |
 | **needs-adapter** | No official documentation of a `SKILL.md` mechanism was found. Paste the body of `SKILL.md` into the system prompt or the environment's instruction file instead. |
 
-**Nothing is marked verified yet.** The evaluation suite exists (`evals/`) and has not been run at
-the time of writing, so every row below is a documentation claim, including the two harnesses the
-suite targets. Those two move to **verified** when `evals/reports/` holds their reports — and not
-before. A compatibility table that promises more than it checked is worth less than no table.
+**Claude Code and OpenCode are marked verified.** Both were run with the suite and their reports are
+in `evals/reports/`. Every other row is a documentation claim taken from that environment's own
+docs.
 
 ## Table
 
@@ -25,8 +24,8 @@ stands for `intent-router`.
 
 | harness | project directory | global directory | auto-loads by description | explicit invocation | status | docs |
 |---|---|---|---|---|---|---|
-| Claude Code | `.claude/skills/` | `~/.claude/skills/` | yes | `/<skill>` | spec-compatible | [docs](https://docs.claude.com/en/docs/claude-code/skills) |
-| OpenCode | `.agents/skills/` | `~/.config/opencode/skills/` | yes | name the skill in the prompt | spec-compatible | [docs](https://opencode.ai/docs/skills) |
+| Claude Code | `.claude/skills/` | `~/.claude/skills/` | yes | `/<skill>` | verified | [docs](https://docs.claude.com/en/docs/claude-code/skills) |
+| OpenCode | `.agents/skills/` | `~/.config/opencode/skills/` | yes | name the skill in the prompt | verified | [docs](https://opencode.ai/docs/skills) |
 | Codex CLI | `.agents/skills/` | `~/.agents/skills/` | yes | `$<skill>`, or `/skills` | spec-compatible | [docs](https://github.com/openai/codex/blob/main/docs/skills.md) |
 | Cursor | `.agents/skills/`, `.cursor/skills/` | `~/.cursor/skills/`, `~/.agents/skills/` | yes | `/<skill>` | spec-compatible | [docs](https://cursor.com/docs/context/skills) |
 | GitHub Copilot CLI | `.github/skills/`, `.claude/skills/` | `~/.copilot/skills/`, `~/.agents/skills/` | yes | `/<skill>` | spec-compatible | [docs](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-skills) |

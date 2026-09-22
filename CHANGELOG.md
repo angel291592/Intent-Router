@@ -27,6 +27,10 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
 - Evals：runner 可离线复评已落盘转录（`--rescore`）并重算全部数字；把环境性失败与行为失败分开；
   对多轮用例逐轮判定；新增 `--smoke`、`--jobs` 及随用例数计算的阈值。2026-09-22 的两份报告已由
   这些转录重新生成。
+- Docs: publish the first evaluation numbers and mark Claude Code and OpenCode as verified; correct
+  the documented repeat count to the actual default of one run per case.
+- 文档：发布首批评测数字，将 Claude Code 与 OpenCode 标为 verified；把文档里的重复次数更正为实际
+  默认值——每例一次。
 
 ## [0.1.0] — 2026-09-22
 

@@ -28,7 +28,7 @@ lockfile、没有运行时。评测工具在 `evals/` 下，可以通过 `uv run
 `CONTRIBUTING.zh-CN.md` 内容对等、章节一一对应。只改一边的 commit 会被要求补上另一边。
 `SKILL.md`、`references/`、`schema/` 只有英文——指令的翻译版会被误当成可执行版本，然后各自漂移。
 
-**状态标注要诚实。** 兼容性声明使用三态：`verified`（实际跑过，有原文记录）、`spec-compatible`
+**状态标注要诚实。** 兼容性声明使用三态：`verified`（实际跑过，有报告记录）、`spec-compatible`
 （官方文档声明支持，但未实测）、`needs-adapter`（未查到任何机制）。没有报告作支撑，不得把某一行
 升级。
 

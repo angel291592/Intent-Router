@@ -223,15 +223,17 @@ trace: [...]                  # 可回放
 
 ## 评测（Evals）
 
-10 个用例，跑在一个专门作为探测靶子构建的 fixture 仓库上，真实 harness、全程不 mock、每例 3 次。
+10 个用例，跑在一个专门作为探测靶子构建的 fixture 仓库上，真实 harness、全程不 mock。
 用例断言决策态、各项计数器，以及每一条 evidence 指针都指向真实存在的文件——只要出现一条凭空编造的
 引用，无论其它指标多好，整套判不达标。
 
 <!-- evals:begin -->
-**尚未运行。** 套件在 [`evals/`](evals/)，数字会在报告落进
-[`evals/reports/`](evals/reports/) 之后发布在这里，每行标注日期、harness 与模型。在那之前这一节
-保持空白，而不是先填一个估算值：本 README 里的每个数字都必须来自一份你能亲自读到的报告。
+2026-09-23 · opencode · dp/deepseek-flash · 8/10 cases · probe ratio 0.56 · 0 over-asks · 0 hallucinated evidence
+2026-09-23 · claude-code · claude-sonnet-5 · 2/5 cases (subset) · probe ratio 0.61 · 0 over-asks · 0 hallucinated evidence
 <!-- evals:end -->
+
+全量为 10 例；claude-code 以 5 例子集运行。套件达标线是"至少 10 例中 8 例通过、且幻觉引用为 0"。
+全部报告（含未达标者）见 [`evals/reports/`](evals/reports/)。
 
 怎么自己跑、每个用例检查什么：[`evals/README.zh-CN.md`](evals/README.zh-CN.md)。
 
@@ -244,19 +246,20 @@ trace: [...]                  # 可回放
 
 | 状态 | 含义 |
 |---|---|
-| **verified** | 在那里实际跑过，原文记录在 `evals/reports/` |
+| **verified** | 在那里实际跑过，报告在 `evals/reports/` |
 | **spec-compatible** | 其官方文档声明会加载标准 `SKILL.md`；本项目未实测 |
 | **needs-adapter** | 未查到任何 skill 机制的官方文档；把 `SKILL.md` 贴进系统提示 |
 
-**spec-compatible**——Claude Code、OpenCode、Codex CLI、Cursor、GitHub Copilot（CLI 与 VS Code）、
+**verified**——Claude Code、OpenCode
+
+**spec-compatible**——Codex CLI、Cursor、GitHub Copilot（CLI 与 VS Code）、
 Gemini CLI、Antigravity、Windsurf、DeepSeek Harness（dsh）、Pi、Qwen Code、Kimi Code CLI、Trae、
 Cline、Roo Code、Kilo Code、Goose、OpenHands、Amp、Zed、Warp、Kiro CLI、Junie、Augment、
 Factory Droid
 
 **needs-adapter**——Continue
 
-目前**没有任何一项是 verified**：评测套件已就位但尚未运行，所以没有哪个 harness 挣得这个标签。
-各自的目录、调用语法与注意事项：
+目前有两项为 **verified**：二者都用评测跑过，报告在 `evals/reports/`。各自的目录、调用语法与注意事项：
 [`references/harness-compat.md`](skills/intent-router/references/harness-compat.md)。
 
 ---

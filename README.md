@@ -241,16 +241,17 @@ actually trying to do" has an answer that isn't archaeology — while
 ## Evals
 
 Ten cases against a fixture repository built as a probe target, run in a real harness with nothing
-mocked, three times each. Cases assert the decision state, the counters, and that every evidence
-pointer names a file that exists — a single invented citation fails the suite regardless of
-everything else.
+mocked. Cases assert the decision state, the counters, and that every evidence pointer names a file
+that exists — a single invented citation fails the suite regardless of everything else.
 
 <!-- evals:begin -->
-**Not yet run.** The suite is in [`evals/`](evals/) and the numbers will be published here, each
-line naming its date, harness and model, once reports land in
-[`evals/reports/`](evals/reports/). Until then this section stays empty rather than quoting an
-estimate: every figure in this README has to come from a report you can read.
+2026-09-23 · opencode · dp/deepseek-flash · 8/10 cases · probe ratio 0.56 · 0 over-asks · 0 hallucinated evidence
+2026-09-23 · claude-code · claude-sonnet-5 · 2/5 cases (subset) · probe ratio 0.61 · 0 over-asks · 0 hallucinated evidence
 <!-- evals:end -->
+
+A full suite is ten cases; claude-code is run as a five-case subset. The suite passes at at least 8
+of 10 cases with zero hallucinated evidence. Every report, including the failing ones, is in
+[`evals/reports/`](evals/reports/).
 
 How to run it yourself, and what each case checks: [`evals/README.md`](evals/README.md).
 
@@ -264,19 +265,21 @@ environment provides"* — so it runs anywhere that reads the
 
 | status | meaning |
 |---|---|
-| **verified** | run there, transcript in `evals/reports/` |
+| **verified** | run there, report in `evals/reports/` |
 | **spec-compatible** | its documentation says it loads standard `SKILL.md`; not exercised here |
 | **needs-adapter** | no documented skill mechanism; paste `SKILL.md` into the system prompt |
 
-**spec-compatible** — Claude Code, OpenCode, Codex CLI, Cursor, GitHub Copilot (CLI and VS Code),
+**verified** — Claude Code, OpenCode
+
+**spec-compatible** — Codex CLI, Cursor, GitHub Copilot (CLI and VS Code),
 Gemini CLI, Antigravity, Windsurf, DeepSeek Harness (dsh), Pi, Qwen Code, Kimi Code CLI, Trae,
 Cline, Roo Code, Kilo Code, Goose, OpenHands, Amp, Zed, Warp, Kiro CLI, Junie, Augment, Factory
 Droid
 
 **needs-adapter** — Continue
 
-Nothing is **verified** yet: the evaluation suite exists and has not been run, so no harness has
-earned that label. Directories, invocation syntax and per-harness caveats:
+Two harnesses are **verified**: both were run with the suite and their reports are in
+`evals/reports/`. Directories, invocation syntax and per-harness caveats:
 [`references/harness-compat.md`](skills/intent-router/references/harness-compat.md).
 
 ---

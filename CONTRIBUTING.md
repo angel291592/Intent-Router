@@ -33,7 +33,7 @@ what changed in the report's iteration section.
 the other will be asked to include it. `SKILL.md`, `references/` and `schema/` are English only —
 a translated copy of the instructions would be mistaken for the executable one and drift.
 
-**Honest status.** Compatibility claims use three states: `verified` (run, with a transcript),
+**Honest status.** Compatibility claims use three states: `verified` (run, with a report),
 `spec-compatible` (documented, not exercised), `needs-adapter` (no documented mechanism). Do not
 promote a row without a report behind it.
 
