@@ -134,8 +134,11 @@ EVIDENCE_TOKEN_OK = re.compile(
     r"^(?:git:(?:#\d+|[0-9a-f]{7,40})|user:delegated|[^\s:#]+(?::\d+(?:-\d+)?)?(?:#[^\s]+)?)$"
 )
 # Tokens that parse as a token but are not workspace pointers: the repo root,
-# git internals, the installed skill copies, and the harness config file.
-NON_POINTER_PREFIXES = (".", "./", ".git/", ".claude/", ".agents/", "opencode.json")
+# git internals, the installed skill copies, and the harness config file. The
+# bare "." is matched exactly (the repo root), never as a prefix — a dotfile
+# such as .github/workflows/ci.yml is a legitimate workspace pointer.
+NON_POINTER_EXACT = (".",)
+NON_POINTER_PREFIXES = ("./", ".git/", ".claude/", ".agents/", "opencode.json")
 
 # Rate limiting / quota exhaustion is an environment fault, never a behaviour
 # verdict: a run that hits it must be retried and, if still failing, recorded as
@@ -723,6 +726,7 @@ def check_turn(
         if (
             " " in pointer
             or not EVIDENCE_TOKEN_OK.match(pointer)
+            or pointer in NON_POINTER_EXACT
             or pointer.startswith(NON_POINTER_PREFIXES)
         ):
             form_violations.append(pointer)
@@ -1313,7 +1317,7 @@ def selftest() -> int:
     )
 
     print("evidence form versus fabrication (decision 7)")
-    manifest = {"src/cache/redis.ts", "src/routes/users.ts", "package.json"}
+    manifest = {"src/cache/redis.ts", "src/routes/users.ts", "package.json", ".github/workflows/ci.yml"}
     for label, pointer, expected in (
         ("a git ref needs no path check", "git:#412", None),
         ("the reserved delegation token is legal", "user:delegated", None),
@@ -1321,6 +1325,16 @@ def selftest() -> int:
             "a .git/ internal file is a form violation",
             ".git/COMMIT_EDITMSG:1",
             "evidence_form",
+        ),
+        (
+            "the repo root is a form violation",
+            ".",
+            "evidence_form",
+        ),
+        (
+            "a dotfile is a legitimate workspace pointer",
+            ".github/workflows/ci.yml",
+            None,
         ),
         (
             "the old delegation sentence is a form violation",
@@ -1473,9 +1487,23 @@ def run_suite(args: argparse.Namespace) -> int:
         pass_count = 0
         for attempt in range(1, args.repeat + 1):
             record = run_case_once(case, args.harness, args.model)
-            (raw_dir / f"{case['id']}-{attempt}.txt").write_text(
-                record.pop("raw"), encoding="utf-8"
-            )
+            raw_path = raw_dir / f"{case['id']}-{attempt}.txt"
+            # Never silently overwrite a transcript from an earlier run: raw/ is
+            # the Tier 1 evidence and is gitignored, so an overwrite is
+            # unrecoverable. Move the old file under archive/ first (rescore
+            # globs *.txt, so archived files are out of its way).
+            if raw_path.exists():
+                archive = raw_dir / "archive"
+                archive.mkdir(parents=True, exist_ok=True)
+                stamp = date.fromtimestamp(raw_path.stat().st_mtime).isoformat()
+                dest = archive / f"{stamp}-{raw_path.name}"
+                counter = 1
+                while dest.exists():
+                    dest = archive / f"{stamp}-{counter}-{raw_path.name}"
+                    counter += 1
+                raw_path.replace(dest)
+                print(f"  [{case['id']}] archived previous transcript -> {dest.name}")
+            raw_path.write_text(record.pop("raw"), encoding="utf-8")
             outcome = check(
                 case, record, validator, manifest=workspace_manifest(case, args.harness)
             )
@@ -1516,9 +1544,16 @@ def run_suite(args: argparse.Namespace) -> int:
 
     model = env.get("model") or args.model or "(harness default)"
     report = render_report(
-        args.harness, model, env, results, subset=subset, suite_total=total_cases
+        args.harness,
+        model,
+        env,
+        results,
+        date_str=args.date,
+        subset=subset,
+        suite_total=total_cases,
     )
-    report_path = out_dir / f"{date.today().isoformat()}-{args.harness}.md"
+    stamp = args.date or date.today().isoformat()
+    report_path = out_dir / f"{stamp}-{args.harness}.md"
     report_path.write_text(report, encoding="utf-8")
     print(f"\nreport written to {report_path}")
     print(report.split("## 5.")[-1])
