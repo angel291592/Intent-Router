@@ -11,7 +11,7 @@
 | 协议 | MIT（版权人：angel291592，见 `LICENSE`） |
 | 主分支 | `main` |
 | 提交邮箱 | `206995683+angel291592@users.noreply.github.com`（GitHub 隐私代理邮箱，**不要改回真实邮箱**） |
-| 内部文档 | `HANDOFF.md`（调研档案）与 `README.draft.md`（README 草稿）仅存本地，已被 `.gitignore` 排除，**禁止提交到公开仓库** |
+| 内部文档 | `HANDOFF.md`（调研档案）、`README.draft.md`（README 草稿）、`agent.md`（本地项目入口文档）、`test.md`（评测交接单）、`docs/plans/`（中文执行计划）仅存本地，已被 `.gitignore` 排除，**禁止提交到公开仓库** |
 | gh CLI | 安装于 `%ProgramFiles%\GitHub CLI\gh.exe`，已登录账号 `angel291592`（凭据存 Windows 凭据管理器） |
 
 ## 2. 网络与代理（最重要的环境约束）
@@ -51,7 +51,7 @@
 - 贡献者 fork 仓库到自己账号 → 改动 → 向本仓库发 PR → **所有 PR 由所有者（或 AI 代审后报所有者批准）审查合并**。贡献者无直推权限，这是天然安全的。
 - `main` 分支已开启保护：**禁止 force push、禁止删除**。任何人都改写不了历史。
 - 若将来授予某人 collaborator 写权限：仍保持分支保护；如需更严，可在 GitHub 仓库 Settings → Branches → Add rule 勾选 **Require a pull request before merging**（合并前强制 PR，包括所有者自己）。
-- PR 审查要点：是否符合 `HANDOFF.md` §7 设计、是否引入依赖（本项目强调轻量零依赖，L0 形态零密钥零依赖是采纳闸门）、README 叙事是否被破坏。
+- PR 审查要点：是否符合 `HANDOFF.md` §7 设计、是否引入依赖（本项目强调轻量零依赖，L0 形态零密钥零依赖是采纳闸门）、README 叙事是否被破坏、**改动 `SKILL.md` 的 PR 必须附评测重跑报告**（无报告不合并——README 的数字必须可追溯到 `evals/reports/`）、双语人读文档是否同步改动。完整规则见 `CONTRIBUTING.md`。
 - 合并命令：`gh pr merge <编号> --merge`（或 `--squash` 保持线性历史，推荐）。
 
 ## 5. AI 维护策略（给未来 AI session 的指令）
@@ -61,7 +61,7 @@
 3. **权限边界**：AI 可以 commit/push 到 `main`（分支保护未要求 PR），但**不得**：改分支保护规则、删仓库/分支、增删 SSH key/token、修改仓库可见性。这些动作必须由所有者本人执行。
 4. **秘密纪律**：任何 API key/token 不入库、不进日志；gh token 存于 Windows 凭据管理器，不要导出。
 5. **文档同步**：改动使本文档或 `HANDOFF.md` 过时时，原地更新（改写为当前唯一生效的表述，不留修订历史）。
-6. **英文优先**：`README.md`、commit message、代码注释一律英文；面向所有者的说明文档（如本文档）用中文。
+6. **语言分工**：`README.md` 英文 + `README.zh-CN.md` 中文对等（`CONTRIBUTING`、`evals/README` 同理，`CHANGELOG.md` 单文件双语）；**`SKILL.md`、`references/`、`schema/` 英文单源**——指令的翻译版会被误当成可执行版本并漂移，中文只提供解释性导读 `docs/zh-CN/skill-guide.md`。commit message 与代码注释一律英文；面向所有者的说明文档（如本文档、`agent.md`）用中文。
 
 ## 6. 安全基线（所有者本人执行的检查项）
 
