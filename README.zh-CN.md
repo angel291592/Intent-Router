@@ -8,6 +8,9 @@
 拒绝产出。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/angel291592/Intent-Router)](https://github.com/angel291592/Intent-Router/releases)
+[![CI](https://github.com/angel291592/Intent-Router/actions/workflows/ci.yml/badge.svg)](https://github.com/angel291592/Intent-Router/actions/workflows/ci.yml)
+[![Stars](https://img.shields.io/github/stars/angel291592/Intent-Router)](https://github.com/angel291592/Intent-Router/stargazers)
 [![Works without installing anything](https://img.shields.io/badge/backend-L0%20prompt--only-green.svg)](#后端分层backends)
 
 ```
@@ -23,6 +26,27 @@
             ▼
       IntentSpec  ──►  你的 planner / agent / subagent
 ```
+
+---
+
+## 目录
+
+- [问题在哪](#问题在哪)
+- [Intent-Router 做什么](#intent-router-做什么)
+- [四个决策态](#四个决策态)
+- [快速开始](#快速开始)
+- [走通实例："add caching to the user API"](#走通实例add-caching-to-the-user-api)
+- [产物](#产物)
+- [评测（Evals）](#评测evals)
+- [兼容哪些 harness（Works with）](#兼容哪些-harnessworks-with)
+- [编程之外](#编程之外)
+- [横向对比](#横向对比)
+- [七条设计原则](#七条设计原则)
+- [后端分层（Backends）](#后端分层backends)
+- [局限](#局限)
+- [相关工作（Prior art）](#相关工作prior-art)
+- [参与贡献](#参与贡献)
+- [许可](#许可)
 
 ---
 

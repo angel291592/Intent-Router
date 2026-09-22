@@ -8,6 +8,9 @@ Turns a vague request into a typed `IntentSpec` — looking up what it can, aski
 can't, and refusing to emit when the intent is still underspecified.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/angel291592/Intent-Router)](https://github.com/angel291592/Intent-Router/releases)
+[![CI](https://github.com/angel291592/Intent-Router/actions/workflows/ci.yml/badge.svg)](https://github.com/angel291592/Intent-Router/actions/workflows/ci.yml)
+[![Stars](https://img.shields.io/github/stars/angel291592/Intent-Router)](https://github.com/angel291592/Intent-Router/stargazers)
 [![Works without installing anything](https://img.shields.io/badge/backend-L0%20prompt--only-green.svg)](#backends)
 
 ```
@@ -23,6 +26,27 @@ can't, and refusing to emit when the intent is still underspecified.
             ▼
       IntentSpec  ──►  your planner / agent / subagent
 ```
+
+---
+
+## Contents
+
+- [The problem](#the-problem)
+- [What Intent-Router does](#what-intent-router-does)
+- [The four decision states](#the-four-decision-states)
+- [Quick start](#quick-start)
+- [Walkthrough: "add caching to the user API"](#walkthrough-add-caching-to-the-user-api)
+- [The artifact](#the-artifact)
+- [Evals](#evals)
+- [Works with](#works-with)
+- [Beyond code](#beyond-code)
+- [How it compares](#how-it-compares)
+- [Design principles](#design-principles)
+- [Backends](#backends)
+- [Limitations](#limitations)
+- [Prior art](#prior-art)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
