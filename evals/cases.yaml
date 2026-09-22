@@ -6,9 +6,10 @@
 #
 # Field reference and how to add a case: evals/README.md
 #
-# `expect` applies to the LAST turn of a case. Keys are checked only when present,
-# except for triggered / schema_valid / invariants_ok / evidence_valid, which are
-# always checked whenever a spec is expected at all.
+# `expect` applies to the LAST turn of a case; `expect_turn1`, when present,
+# applies to the first turn of a multi-turn case. Keys are checked only when
+# present, except for triggered / schema_valid / invariants_ok / evidence_valid /
+# evidence_form, which are always checked whenever a spec is expected at all.
 # List-valued keyword checks (question_keywords, text_keywords) pass on ANY match.
 
 - id: add-caching-auto
@@ -22,22 +23,17 @@
     evidence_must_include: [src/cache/redis.ts, src/routes/users.ts]
     max_asked: 1
 
-- id: add-caching-explicit
-  prompt: add caching to the user API
-  mode: explicit
-  fixture: user-api
-  expect:
-    state: ASK
-    question_keywords: [invalidation, stale, fail]
-    min_resolved_by_probe: 2
-    evidence_must_include: [src/cache/redis.ts, src/routes/users.ts]
-    max_asked: 1
-
 - id: add-caching-two-turn
   prompt: add caching to the user API
   mode: explicit
   fixture: user-api
   turns: ["A"]
+  expect_turn1:
+    state: ASK
+    question_keywords: [invalidation, stale, fail]
+    min_resolved_by_probe: 2
+    evidence_must_include: [src/cache/redis.ts, src/routes/users.ts]
+    max_asked: 1
   expect:
     state: ROUTE
     unknown_empty: true
@@ -52,12 +48,22 @@
     Add Redis caching with the existing ioredis client to GET /api/users and
     GET /api/users/:id, TTL 300s via DEFAULT_TTL_SECONDS; on invalidation failure
     serve uncached; keep response shapes unchanged.
-  mode: auto
+  mode: explicit
   fixture: user-api
   expect:
     state: ROUTE
     asked_eq: 0
     max_inferred: 1
+
+- id: fully-specified-auto-quiet
+  prompt: >-
+    Add Redis caching with the existing ioredis client to GET /api/users and
+    GET /api/users/:id, TTL 300s via DEFAULT_TTL_SECONDS; on invalidation failure
+    serve uncached; keep response shapes unchanged.
+  mode: auto
+  fixture: user-api
+  expect:
+    should_trigger: false
 
 - id: vague-no-ask
   prompt: make it better. no questions.
