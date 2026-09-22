@@ -1,0 +1,31 @@
+name: ci
+
+# Offline gate only. This workflow never starts an agent session and never calls a model:
+# `--selftest` and `--check-frontmatter` are the two zero-cost tiers described in evals/README.md.
+# The paid tiers (--smoke, --cases, the full suite) require credentials and a real harness, and
+# belong on a maintainer's machine, not in CI.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+
+      - name: Runner self-test (offline, no sessions, no cost)
+        run: uv run --with pyyaml --with jsonschema python evals/run.py --selftest
+
+      - name: SKILL.md frontmatter conformance (offline)
+        run: uv run --with pyyaml --with jsonschema python evals/run.py --check-frontmatter skills/intent-router/SKILL.md

@@ -1,0 +1,66 @@
+name: Bug report
+description: Something the skill did that it should not have done.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A run that asked a question it could have looked up is a bug, and worth reporting as one.
+        Say what the answer was, and which file it was sitting in.
+
+        If it is a security issue, do not open a public issue — see [SECURITY.md](../SECURITY.md).
+
+  - type: input
+    id: harness
+    attributes:
+      label: Harness and version
+      description: The agent environment you ran the skill in, and its version.
+      placeholder: e.g. opencode 1.18.32, Claude Code 2.1.77
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      description: The model the harness was using.
+      placeholder: e.g. dp/deepseek-flash, claude-sonnet-5
+    validations:
+      required: true
+
+  - type: textarea
+    id: prompt
+    attributes:
+      label: What you asked
+      description: The exact request, in the language you typed it.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: emitted
+    attributes:
+      label: What it emitted
+      description: Paste the `IntentSpec`, or the reply if there was no spec.
+      render: yaml
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+      description: Which state, or which field, and why.
+    validations:
+      required: true
+
+  - type: textarea
+    id: lookupable
+    attributes:
+      label: Was the missing answer lookup-able?
+      description: >
+        If it asked a question whose answer was already in your repository, name the file it lived
+        in. This is the most useful bug class the project has.
+    validations:
+      required: false

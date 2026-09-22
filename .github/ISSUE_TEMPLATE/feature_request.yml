@@ -1,0 +1,43 @@
+name: Feature request
+description: A capability, a harness, or a reference surface the skill should cover.
+title: "[feat] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do that the skill does not help with today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you propose
+      description: Be concrete. If it changes `SKILL.md`, say which pass or rule it touches.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: dependencies
+    attributes:
+      label: Does this require installing anything?
+      description: >
+        Zero dependencies is an admission gate: nothing inside `skills/intent-router/` may require a
+        runtime. Evaluation tooling may use temporary dependencies through `uv run --with`.
+      options:
+        - "No — stays prompt-only"
+        - "Yes — explains below why it is unavoidable"
+    validations:
+      required: true
+
+  - type: textarea
+    id: harness
+    attributes:
+      label: If this is a harness request
+      description: >
+        Link the harness's own documentation showing it discovers standard `SKILL.md` skills from a
+        directory. A row is promoted on documents, and to `verified` only on a report.
+    validations:
+      required: false
