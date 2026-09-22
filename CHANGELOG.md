@@ -7,10 +7,26 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
 
 ## [Unreleased]
 
-- Evaluation results for Claude Code and OpenCode, which promote those two rows in the
-  compatibility table from `spec-compatible` to `verified` and fill the README's Evals section.
-- Claude Code 与 OpenCode 的评测结果，届时把兼容性表中这两行从 `spec-compatible` 升为
-  `verified`，并填上 README 的 Evals 节。
+- Skill: output format now carries a hard quoting rule and a worked example whose scalars contain a
+  `:` and a `{...}` with inner double quotes (unquoted dirty scalars were the top parse failure in
+  live runs, and a space-plus-`#` value is silently truncated). Evidence is defined as a single
+  whitespace-free token; the reserved `user:delegated` form replaces the `delegated by user`
+  sentence for delegated decisions. An empty probe surface is answered by asking rather than
+  halting, an unclear request in no-ask mode halts `underspecified` instead of inventing one, HALT
+  `underspecified` is reserved for when asking is impossible, and an aesthetic target is named
+  ungrillable before any probe budget is spent.
+- Evals: the runner can re-score persisted transcripts offline (`--rescore`) and re-derive every
+  number, separates environmental failures from behaviour, judges each turn of a multi-turn case,
+  and adds `--smoke`, `--jobs` and a case-count-derived threshold. The 2026-09-22 reports are
+  regenerated from those transcripts.
+- Skill：输出格式新增 quoting 硬规则，示例本身带含 `:` 与 `{...}`（内含双引号）的标量（实测中
+  未引号的"脏"标量是解析失败的头号原因，含"空格 + `#`"的值更会被静默截断）。evidence 被定义为
+  不含空白的单 token；委派决策改用保留形态 `user:delegated`，取代 `delegated by user` 句子。
+  空探测面改为提问而非 HALT；no-ask 模式下意图不明时 HALT `underspecified` 而非自行补全；HALT
+  `underspecified` 保留给"无法提问"的情形；美学型目标在花任何探测预算之前即命名为 ungrillable。
+- Evals：runner 可离线复评已落盘转录（`--rescore`）并重算全部数字；把环境性失败与行为失败分开；
+  对多轮用例逐轮判定；新增 `--smoke`、`--jobs` 及随用例数计算的阈值。2026-09-22 的两份报告已由
+  这些转录重新生成。
 
 ## [0.1.0] — 2026-09-22
 

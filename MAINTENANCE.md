@@ -51,7 +51,7 @@
 - 贡献者 fork 仓库到自己账号 → 改动 → 向本仓库发 PR → **所有 PR 由所有者（或 AI 代审后报所有者批准）审查合并**。贡献者无直推权限，这是天然安全的。
 - `main` 分支已开启保护：**禁止 force push、禁止删除**。任何人都改写不了历史。
 - 若将来授予某人 collaborator 写权限：仍保持分支保护；如需更严，可在 GitHub 仓库 Settings → Branches → Add rule 勾选 **Require a pull request before merging**（合并前强制 PR，包括所有者自己）。
-- PR 审查要点：是否符合 `HANDOFF.md` §7 设计、是否引入依赖（本项目强调轻量零依赖，L0 形态零密钥零依赖是采纳闸门）、README 叙事是否被破坏、**改动 `SKILL.md` 的 PR 必须附评测重跑报告**（无报告不合并——README 的数字必须可追溯到 `evals/reports/`）、双语人读文档是否同步改动。完整规则见 `CONTRIBUTING.md`。
+- PR 审查要点：是否符合 `HANDOFF.md` §7 设计、是否引入依赖（本项目强调轻量零依赖，L0 形态零密钥零依赖是采纳闸门）、README 叙事是否被破坏、**改动按层附对应评测证据**（无证据不合并——README 的数字必须可追溯到 `evals/reports/`）：只动 `run.py` 附 Tier 0 `--selftest` + Tier 1 `--rescore` 输出（均零会话）；动 skill 侧文件（`SKILL.md`/`references/`/`schema/`）附 Tier 3 定向重跑（受影响用例 × 2 次）；任何要进 README 的数字须来自 Tier 4 全量跑、双语人读文档是否同步改动。完整规则见 `CONTRIBUTING.md`。
 - 合并命令：`gh pr merge <编号> --merge`（或 `--squash` 保持线性历史，推荐）。
 
 ## 5. AI 维护策略（给未来 AI session 的指令）
