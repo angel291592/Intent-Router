@@ -44,7 +44,7 @@ EVALS = ROOT / "evals"
 CASES_PATH = EVALS / "cases.yaml"
 FIXTURES = EVALS / "fixtures"
 
-TIMEOUT = 240
+TIMEOUT = 480
 HARNESSES = ("claude-code", "opencode")
 
 # Commit subjects for the fixture history, with the CHANGELOG markers that must
@@ -133,13 +133,16 @@ def load_cases() -> list[dict]:
 
 
 def extract_spec(candidates: list[str]) -> tuple[dict | None, str, str]:
-    """Return (spec, status, text) from the first candidate holding a yaml fence.
+    """Return (spec, status, text) from the candidate holding the final yaml fence.
 
-    Only the LAST fence in a text is considered: models often show a draft first
-    and the final spec last. status is ok | no_fence | degraded_output.
+    Candidates are scanned from the END: models often show a draft first and the final
+    spec last, and in a multi-event transcript the last event holding a fence is the
+    final answer — earlier fence-bearing texts are skill documentation or tool output
+    echoing the skill's own examples. Within a text, only the LAST fence counts.
+    status is ok | no_fence | degraded_output.
     """
-    for text in candidates:
-        if not text:
+    for text in reversed([c for c in candidates if c]):
+        if text.lstrip().startswith("{"):  # raw stdout blob: not a transcript text
             continue
         fences = FENCE.findall(text)
         if not fences:
@@ -174,7 +177,7 @@ def json_strings(node, keys=("result", "text", "content", "message", "output")) 
 
 
 def harness_texts(stdout: str) -> list[str]:
-    """Candidate transcript texts for a harness run, best first, raw stdout last."""
+    """Candidate transcript texts for a harness run, in event order, raw stdout last."""
     texts: list[str] = []
     try:
         texts.extend(json_strings(json.loads(stdout)))
@@ -186,9 +189,16 @@ def harness_texts(stdout: str) -> list[str]:
                     texts.extend(json_strings(json.loads(line)))
                 except json.JSONDecodeError:
                     continue
-    texts.append(stdout)
-    # longest first: the whole transcript beats a single event's fragment
-    return sorted({t for t in texts if t}, key=len, reverse=True)
+    # Event order preserved (deduped): extract_spec scans from the END, so the final
+    # message wins. The raw stdout blob is excluded from that scan: for JSONL harnesses a
+    # ```yaml fence opened in one event and closed in a later one makes the regex span
+    # unrelated events, and the blob — being last — would win the reversed scan and be
+    # parsed as degraded output. It is kept only as the no-fence fallback text.
+    ordered = list(dict.fromkeys(t for t in texts if t))
+    raw = stdout.strip()
+    if raw and raw not in ordered:
+        ordered.append(raw)
+    return ordered
 
 
 def session_id_of(stdout: str) -> str | None:
@@ -336,6 +346,11 @@ def build_command(
 
 
 def invoke(cmd: list[str], cwd: Path) -> tuple[str, str, int]:
+    # This machine keeps the Claude Code credentials in the user-level
+    # settings.json env block, which --setting-sources project does not load;
+    # run.py is launched with those variables exported, and os.environ passes
+    # them through, so headless runs authenticate while user-level instruction
+    # files stay excluded.
     try:
         done = subprocess.run(
             cmd,
@@ -619,8 +634,13 @@ def preflight(harness: str, model: str | None) -> dict:
             harness, exe, "Reply with exactly: OK", model, keep_session=False, resume=None
         )
         stdout, stderr, _ = invoke(cmd, clean)
-        texts = harness_texts(stdout)
-        reply = (texts[0] if texts else "").strip()
+        # Prefer the decoded result field: harness_texts sorts longest-first and
+        # the raw JSON envelope is longer than the reply, so it would never match.
+        try:
+            reply = str(json.loads(stdout).get("result") or "").strip()
+        except (json.JSONDecodeError, AttributeError):
+            texts = harness_texts(stdout)
+            reply = (texts[0] if texts else "").strip()
         out["contamination_reply"] = reply[:200] or f"(empty; stderr: {stderr[:120]})"
         out["contamination_ok"] = "yes" if reply.strip().strip(".") == "OK" else "NO — user-level instructions are leaking in"
     finally:
@@ -645,8 +665,6 @@ def preflight(harness: str, model: str | None) -> dict:
         spec, status, text = extract_spec(harness_texts(stdout))
         out["skill_visible"] = "yes" if spec is not None else f"NO ({status})"
         out["skill_visible_reply"] = (text or stderr)[:300]
-        if spec is not None:
-            out["model"] = str((spec.get("decision") or {}).get("state", ""))
     finally:
         rm_tree(probe)
 

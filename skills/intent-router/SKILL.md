@@ -62,7 +62,9 @@ treat the text after the name as the request.
 - **inferred** — a value the model supplied itself. Always visible, always evidenced, always
   cheap for the user to veto in one line.
 - **evidence** — a pointer to where a value came from: `path`, `path:line`, `path#heading`,
-  `git:<short-sha>`, `git:#<pr-number>`.
+  `git:<short-sha>`, `git:#<pr-number>`. It is always a workspace pointer — a reasoning sentence
+  ("correctness requirement…"), a rule of thumb or the name of a concept is not evidence and must
+  not be put in the `evidence` field; put that justification in the constraint `text` instead.
 - **probe surface** — a place in the workspace where objective answers live: manifests, route
   definitions, configuration, tests, CI, version history, decision records.
 - **ASK budget** — the hard cap on questions for one request. Default **3**.
@@ -82,7 +84,10 @@ Produce a draft spec. Do not emit it, do not act on it.
 4. Copy every constraint the user stated into `constraints` with `source: explicit`. A constraint
    the user stated is never re-derived and never questioned.
 5. Enumerate the unknowns. Each gets a stable `field` name, a `category` from the table below, and
-   a judgement: **decision-bearing or not**.
+   a judgement: **decision-bearing or not**. In the emitted spec an unknown item carries exactly
+   `field`, `kind`, and optionally `category` and `note` — never a `decision_bearing` flag, a
+   free-form `detail`, or any other key; the judgement itself is expressed by keeping the item out
+   of `unknown` when it is not decision-bearing.
 
 | category | the question it asks | example in a code workspace |
 |---|---|---|
@@ -93,8 +98,20 @@ Produce a draft spec. Do not emit it, do not act on it.
 | `acceptance` | what counts as done, measurably | which TTL matches the repository's convention |
 | `non_goals_constraints` | explicit exclusions, hard limits on time, cost, compliance | no new dependencies |
 
+When the request touches caching, writes, retries or any state that can fail, enumerate the
+failure path as its own unknown: not just "what should the feature do" but "what should happen
+when the feature's own step fails" — a cache write that errors, an invalidation that misses, a
+dependency that times out. Skipping the failure path while emitting a happy-path spec is the
+guess this pass exists to prevent.
+
 Unknowns that are **not** decision-bearing do not enter Pass 2. Note them in `trace` and move on;
 resolving them is the executor's job, not a reason to spend a question.
+
+`resolution.unknowns_found` counts **every decision-bearing unknown identified in Pass 1**,
+including the ones later closed by probe, answer or inference — it is not the count of what is
+still open at emit time (that is `len(unknown)`). It must hold that `unknowns_found =
+resolved_by_probe + asked + inferred + len(unknown)`; under-count the unknowns you already
+resolved and the scorecard stops balancing.
 
 ## 4. Pass 2 — Resolve
 
@@ -120,6 +137,9 @@ Work the probe surfaces in this order, stopping as soon as the unknown is settle
 1. **Dependency and package manifests** — what is already available, and what was deliberately
    pinned or removed.
 2. **Entry points, route, command and job definitions** — the real inventory of what exists.
+   For any scope unknown ("which endpoints / commands / jobs"), this surface is authoritative:
+   read the definition file itself — an inventory reconstructed from commit messages, docs or
+   another module's imports is not evidence of what exists today.
 3. **Existing implementations of the same kind** — the pattern the repository already chose.
 4. **Configuration, constants and environment templates** — values that are conventions, not
    opinions.
@@ -136,8 +156,11 @@ survives its budget, escalate it: to `ask` if a person could answer it, otherwis
 
 **Every probed value carries evidence.** An unsourced claim about a workspace is indistinguishable
 from a guess, so `constraints` entries with `source: probed` or `source: inferred` must have an
-`evidence` pointer. While probing, also record facts you were not looking for when they constrain
-the work — a reverted approach or a pinned version is exactly the constraint nobody remembers.
+`evidence` pointer. One pointer per field: a single `path`, `path:line`, `path#heading` or
+`git:` reference — never comma-join two locations into one field; name the second location in
+its own constraint or its own trace entry. While probing, also record facts you were not looking
+for when they constrain the work — a reverted approach or a pinned version is exactly the
+constraint nobody remembers.
 
 **Degraded.** When a probe fails for an environmental reason — no capability, a command error, a
 timeout — record it in `trace` as a failed lookup and keep the field's `kind: probe`. If the run
@@ -148,6 +171,23 @@ environment as a vague request, or the reverse.
 ### 4.3 ASK
 
 Only for answers that live in a person's head, or decisions that cannot be walked back.
+
+**Ask order.** When several unknowns are askable, ask the one whose answer the user would veto
+the work over first — an observable behaviour or contract (what happens on failure, what the
+response looks like, what is in scope) before internal placement (which layer, which file, which
+module), because internal placement is the executor's call and may dissolve once the behavioural
+answer is known. Never pick a question for being easy to answer.
+
+**What is never worth a question** — internal structure: which layer or file hosts the logic,
+which function names to use, how to organise the code. These are reversible implementation
+details; whoever executes decides them. If the only remaining unknown is internal, the spec is
+sufficient — infer it visibly and route.
+
+**Eliminating options is not resolving the unknown.** If only one option remains *because you
+ruled the others out by reasoning* — "stale reads are unacceptable, so fall through is the only
+choice" — the unknown is still open: the surviving option is itself the preference the user
+should confirm (fail fast with 5xx, serve uncached, queue and retry…). Infer it only when the
+user's own words or the workspace state it; otherwise ASK.
 
 - **Budget: 3 questions per request** by default. The user may override ("ask up to 5"); record
   whatever cap is in force as `resolution.ask_budget`. In no-ask mode the budget is `0`.
@@ -168,8 +208,10 @@ Only for answers that live in a person's head, or decisions that cannot be walke
   option and record the constraint with `source: inferred` and `evidence: "delegated by user"`.
   If that constraint is `irreversible: true`, do not accept the delegation: restate the risk in
   one sentence and ask once more. That second ask counts against the budget.
-- **Language.** Ask in the language the user wrote in. Spec keys stay English; values may be in
-  the user's language.
+- **Language.** Ask in the language the user wrote in — this is a hard rule, not a stylistic
+  preference: an English request gets an English question, even if the workspace you probed is
+  in another language or your runtime environment has its own language instructions. Spec keys
+  stay English; values may be in the user's language.
 - **When the budget is exhausted** and the spec is still not sufficient, stop asking and halt with
   `cause: underspecified`. Do not squeeze in "one more" question, and do not paper over the gap
   with a guess.
@@ -254,6 +296,16 @@ trace:
 `confidence` is a self-reported ordinal, not a calibrated probability. `resolution` is the
 scorecard: `resolved_by_probe / unknowns_found` is the number to drive up, and it must hold that
 `unknowns_found = resolved_by_probe + asked + inferred + len(unknown)`.
+
+Count by reconstruction at emit time, not from memory: `resolved_by_probe` = number of
+`constraints` with `source: probed` that answered an unknown you listed in Pass 1; `inferred` =
+number with `source: inferred`; `asked` = answers received; `unknowns_found` = the sum of all
+four. A run that probed four workspace facts but reports `resolved_by_probe: 0` has broken the
+scorecard — the probes are visible in `constraints`, so the counts must agree with them.
+
+Every `trace` step is exactly one of `parse`, `probe`, `ask`, `typecheck`, `emit` — there is no
+`infer`, `resolve` or `decide` step; an unknown you closed by inference is recorded as a
+constraint with `source: inferred`, not as a new trace step.
 
 For the other two states, `decision` carries different fields and nothing else changes:
 
