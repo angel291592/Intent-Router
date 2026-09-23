@@ -2,10 +2,12 @@
 
 [English](README.md) | 简体中文
 
-**给编码 agent 用的意图编译器（intent compiler）。**
+**给 AI agent 用的意图编译器（intent compiler）。**
 
 把一句含糊的请求变成一份带类型的 `IntentSpec`——能自己查到的就去查，只问查不到的，意图仍不充分时
 拒绝产出。
+
+这个编译器根本不知道什么是代码仓库。代码只是它目前被实测过的那个领域。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/angel291592/Intent-Router)](https://github.com/angel291592/Intent-Router/releases)
@@ -14,18 +16,24 @@
 [![Works without installing anything](https://img.shields.io/badge/backend-L0%20prompt--only-green.svg)](#后端分层backends)
 
 ```
-  "add caching to the user API"
-            │
-            ▼
-  ┌─────────────────────┐
-  │  parse   → resolve  │   找出 4 个未知项
-  │  probe   → ask      │   3 个靠读你的仓库解决
-  │  typecheck → emit   │   只问 1 个（那个不可逆的）
-  └─────────────────────┘
-            │
-            ▼
-      IntentSpec  ──►  你的 planner / agent / subagent
+              "给 user API 加缓存"                   "这个客户炸了，你处理一下"
+                        │                                         │
+                        ▼                                         ▼
+ ┌────────────────────────────────────────────────────────────────────────────────────┐
+ │  parse  →  resolve  →  typecheck  →  emit                      一个引擎，一份规格  │
+ ├────────────────────────────────────────────────────────────────────────────────────┤
+ │  PROBE  依赖、路由、git 历史、ADR          │  订单与工单记录、账户权益、           │
+ │         —— 完全不打扰你                    │  当前生效的政策条款                   │
+ │                                            │                                       │
+ │  ASK    发旧数据，还是不走缓存？           │  退款，还是换货？                     │
+ │         唯一没有文件能回答的那个           │  唯一发出去就收不回的那个             │
+ └────────────────────────────────────────────────────────────────────────────────────┘
+                        │                                         │
+                        ▼                                         ▼
+                 IntentSpec  ──────►  你的 planner / agent / 工作流 / 人
 ```
+
+同样三趟、同样的停止谓词。变的只有"它去哪里查"。
 
 <!-- demo:begin -->
 一次真实运行的样子——你只说一句话，它自己去读仓库，只问文件回答不了的那一个问题：
@@ -49,93 +57,79 @@ npx skills add angel291592/Intent-Router
 
 ## 目录
 
-- [问题在哪](#问题在哪)
-- [Intent-Router 做什么](#intent-router-做什么)
-- [四个决策态](#四个决策态)
-- [快速开始](#快速开始)
-- [走通实例："add caching to the user API"](#走通实例add-caching-to-the-user-api)
-- [产物](#产物)
-- [评测（Evals）](#评测evals)
-- [兼容哪些 harness（Works with）](#兼容哪些-harnessworks-with)
-- [编程之外](#编程之外)
-- [横向对比](#横向对比)
-- [七条设计原则](#七条设计原则)
-- [后端分层（Backends）](#后端分层backends)
-- [局限](#局限)
-- [相关工作（Prior art）](#相关工作prior-art)
-- [参与贡献](#参与贡献)
-- [许可](#许可)
+- [问题在哪](#问题在哪) · [它怎么工作](#它怎么工作) · [四个决策态](#四个决策态)
+- [两个走通实例](#两个走通实例)——一个在代码仓库里，一个在客服工单里
+- [产物](#产物) · [适用领域](#适用领域) · [快速开始](#快速开始) · [评测（Evals）](#评测evals)
+- [七条设计原则](#七条设计原则) · [局限](#局限)
+- [横向对比](#横向对比) · [后端分层（Backends）](#后端分层backends) · [相关工作（Prior art）](#相关工作prior-art) · [参与贡献](#参与贡献)
 
 ---
 
 ## 问题在哪
 
-> A compiler doesn't guess the address of an undefined symbol.
-> Your agent shouldn't guess your intent.
->
-> （编译器不会去猜一个未定义符号的地址。你的 agent 也不该猜你的意图。）
+> 编译器不会去猜一个未定义符号的地址。
+> 你的 agent 也不该去猜你的意图。
 
-当你对编码 agent 说*"重构这个模块"*或*"加个缓存"*，只会发生两件事之一：
+当你丢给 agent 一句 *"重构一下这个模块"*、*"看看我们的流失率"* 或者 *"这个客户你处理一下"*，
+接下来只会发生两件事之一。
 
-**它靠猜。** 你拿到 400 行自信满满的代码，建立在一个你从未给出的假设上。你读完、发现前提就是错的、
-扔掉。agent 从来没搞错*怎么写代码*——它搞错的是*你想要什么*，而且是花光你的 token 之后才发现。
+**它开始猜。** 你拿到 400 行自信满满的产出，建立在一个你从没做过的假设上。你读完、发现前提就错了、
+整份丢掉。它从来没搞错*怎么做*——它搞错的是*你要什么*，而且是在烧完你的 token 之后才发现。
 
-**或者它来访谈你。** 这更好，也正是 `/grill-me` 一类 skill 擅长的。但账单是实打实的：grill-me 自己的
-文档把**"四轮四十六个问题"**称作一次普通会话。而且访谈结束后，该 skill 明确是无状态的——*"它不写
-任何文件，不留下任何工作区。它唯一留下的，是你脑子里那个更清晰的想法。"*
+**或者它开始盘问你。** 这比猜要好，也是 `/grill-me` 这类 skill 做得好的地方。但账单是实打实的：
+grill-me 自己的文档把 **"四轮四十六个问题"** 称作*一次普通 session*。而盘问结束之后，那个 skill
+明确是无状态的——*"它不写任何文件，不留下任何工作区。它唯一留下的，是你自己脑子里那个更清晰的想法。"*
 
-于是你付两次钱。一次付在问题上，另一次付在下游没人读得到答案上。下一个 agent、下一个 session、
-下一位同事——全部从零开始。
+于是你付了两次钱。一次买问题，另一次是因为下游没人读得懂这些答案。下一个 agent、下一个 session、
+下一个同事——统统从零开始。
 
-**这两种失败共用同一个根因：没有人判断过，缺失的信息到底值不值得去问一个人。**
+**这两种失败共用一个根因：没有任何人判断过，缺的那条信息到底值不值得去问一个人类。**
 
-那四十六个问题里有一半，答案就躺在你的 `package.json`、你的路由文件、你的迁移历史、你的 ADR 里。
-编译器解析未定义符号时不会打断你问 `malloc` 在哪——它自己去给定的库里找。缺的就是这一步。
+那四十六个问题里有一半早就有答案了——在你的 `package.json` 里、你的路由文件里、你的 ADR 里。
+或者，换到隔壁那条工单队列：在订单记录里、在账户权益表里、在当前生效的退款政策里。编译器在解析
+一个未定义符号时，不会打断你去问 `malloc` 在哪——它自己去给定的库里找。这就是缺掉的那一步，
+而这一步跟代码没关系。
 
 ---
 
-## Intent-Router 做什么
+## 它怎么工作
 
-三个阶段，按编译器的顺序：
+三趟，按编译器的顺序。
 
-### 1. Parse——请求 → 候选结构
+**1. Parse——请求 → 候选结构。** 原始请求变成一份 `IntentSpec` 草稿：归一化的动作、它作用的对象、
+用户明确说出的约束，以及一张 `unknown` 字段清单。不发明任何东西；凡是模型自己填进去的都打上
+`source: inferred`，让你一眼就能否掉。
 
-原始请求变成一份草案 `IntentSpec`：归一化后的动作、作用对象、显式约束，以及一份 `unknown` 清单。
-不凭空发明任何东西；凡是模型自己填补的一律标 `source: inferred`，让你一眼就能否决。
-
-### 2. Resolve——所有人都跳过的那一步
-
-每个 `unknown` 在触达你之前先被分类：
+**2. Resolve——所有人都跳过的那一步。** 每个 `unknown` 在到达你之前先被分类：
 
 | 状态 | 什么时候 | 会发生什么 |
 |---|---|---|
-| **PROBE** | 答案存在于它能触达的地方 | 它自己去读。代码、依赖、配置、版本历史、测试、CI、文档、API。**不打扰你。** |
-| **ASK** | 答案只存在于人的脑子里——偏好、取舍、不可逆的边界 | 一次一问，两个具体选项加一个推荐默认值。 |
+| **PROBE** | 答案存在于它能够到的地方 | 它自己去读。代码、依赖、配置、版本历史、测试、CI、文档——或者一条工单记录、一张权益表、一份政策文件、你之前的笔记、一个 API。**完全不打扰你。** |
+| **ASK** | 答案只存在于人脑里——偏好、权衡、不可逆的边界 | 只问一个问题，给两个具体选项和一个推荐默认值。 |
 
-让这套机制成立的那条规则，也是你应该拿来要求它的那条：
+让这套东西成立的那条规则，也是你应该拿来考核它的那条：
 
-> **凡是"存在客观答案且你有手段拿到"的——PROBE，禁止 ASK。**
-> ASK 只保留给"答案在人脑子里"或"决定不可逆"的情形。
+> **只要客观答案存在、而你有办法够到它——就去 PROBE，永远不要 ASK。**
+> ASK 只留给那些真的活在人脑里的答案，或者走不回头的决定。
 
-### 3. Typecheck & emit——一个可判定的停止条件
-
-"感觉差不多了"就停的访谈会一路问到四十六个问题，把上下文窗口撑满。Intent-Router 改用一个谓词来停：
+**3. Typecheck & emit——一个可判定的停止条件。** "感觉差不多了就停"的盘问会一路问到四十六个问题，
+把上下文窗口撑满。Intent-Router 改成在一个谓词上停：
 
 ```
-充分  ⟺  所有 required 字段已填
-      ∧  没有 inferred 字段触及不可逆边界
+充分  ⟺  每个必填字段都已填上
+      ∧  没有任何 inferred 字段触到不可逆边界
 ```
 
-不充分，而且 ASK 预算已耗尽？它**不产出**。它停下来，告诉你哪个字段仍然悬空——正如编译器宁可
-拒绝链接，也不随机挑一个地址。
+不充分、而 ASK 预算又用完了？它**不产出**。它停下来，点名还开着的那个字段——就像编译器宁可拒绝
+链接，也不会随手挑一个地址。
 
-HALT 带原因，而且两类原因绝不合并：
+停下来时带着原因，而且这两种原因永不合并：
 
-- `underspecified`——请求本身确实还不可判定。轮到你。
-- `degraded`——探测失败、模型超时、解析出错。**这是运维信号，不是用户的问题。**
+- `underspecified`——这个请求确实还不可判定。下一步在你。
+- `degraded`——探测失败了、模型超时了、解析崩了。**这是运维信号，不是用户的问题。**
 
-我找到的每一个 clarify/route 库都把这两者压成同一个 `FALLBACK`。结果就是：某个后端挂了一周，
-路由把 100% 流量静默送给默认 handler，而你的日志里什么异常都看不出来。
+我找到的每一个 clarify/route 库都把这两者塌缩成一个 `FALLBACK`。这就是为什么会出现：某个后端挂了，
+路由器悄悄把 100% 流量打给默认处理器打了一整周，而你的日志里一个字都没说。
 
 ---
 
@@ -143,92 +137,75 @@ HALT 带原因，而且两类原因绝不合并：
 
 | 状态 | 含义 | 产出 |
 |---|---|---|
-| `ROUTE` | 充分，目标唯一 | `IntentSpec` + target |
-| `PROBE` | 缺的信息可自查 | （内部态——回到 resolve 循环） |
-| `ASK` | 缺的信息需要人判断 | 一个问题、两个选项、一个默认值 |
-| `HALT` | `underspecified` \| `degraded` | 点名的悬空字段，或一条运维告警 |
+| `ROUTE` | 已充分，目标唯一明确 | `IntentSpec` + 目标 |
+| `PROBE` | 缺的信息可以查 | （内部态——回到 resolve 循环） |
+| `ASK` | 缺的信息需要人来判断 | 一个问题、两个选项、一个默认值 |
+| `HALT` | `underspecified` \| `degraded` | 一个点名的开放字段，或一条运维告警 |
 
-别人把它表述为一条**原则**——grill-me 的 `grilling` skill 说*"查事实是你的活，永远不是用户的"*。
-Intent-Router 把它变成一个**状态**：每次探测都留下一个 `evidence` 指针，每次运行都上报
+别人把它写成一条**原则**——grill-me 的 `grilling` skill 说 *"找事实是你的活儿，永远不是用户的活儿。"*
+Intent-Router 把它做成一个**状态**：每次探测都留下 `evidence` 指针，每次运行都报
 `resolved_by_probe / unknowns_found`，而停止是一个谓词，不是一种感觉。
 
 ---
 
-## 快速开始
+## 两个走通实例
 
-本页顶部的一行命令就是全部安装过程；这里是完整形态。
+同一个引擎、同一份产物，两个完全不同的世界。第一个是有公开评测和上面那组截图背书的；第二个展示
+当视野里根本没有代码仓库时，变的是什么——答案是：只有探测面变了，别的都没变。
 
-无需安装，无需 API key，零依赖。它就是一个 skill。
+### A. 在代码仓库里——*"add caching to the user API"*
 
-```bash
-npx skills add angel291592/Intent-Router
-```
-
-它会检测你装了哪些 agent 并逐个安装。skill 落地名为 `intent-router`。
-
-<details>
-<summary>手动安装，或安装器不认识的 agent</summary>
-
-把 `skills/intent-router/` 目录（不是仓库根目录）复制到你的 agent 读取的目录：
-
-- `.claude/skills/`——Claude Code
-- `.agents/skills/`——Cursor、Codex、OpenCode、Gemini CLI、Copilot、Pi、Amp、Zed 等
-
-前面加 `~/` 就是全局安装。逐 harness 的路径（包括那些用自己专属目录名的）见
-[`references/harness-compat.md`](skills/intent-router/references/harness-compat.md)。
-
-**完全没有 skill 机制？** `SKILL.md` 是一个不绑定任何工具的单文件 markdown——把正文贴进系统提示
-即可。`references/` 是按需加载的，可以一并贴上，也可以不带。
-</details>
-
-然后照常工作就行。Intent-Router 的设计意图是**在请求本身就含糊时自动触发**——而不是等你想起来
-调用它。（相比之下 `grill-me` 明确写着*"agent 不会自己去拿它"*。）想强制调用时：
+**Parse** 找出四个未知项：用哪个缓存后端、哪些端点、什么 TTL 策略、失效失败时怎么办。
+**Resolve** 在跟你说一个字之前先把它们分类：
 
 ```
-/intent-router refactor the auth module     # Claude Code、Cursor、Copilot、Zed、Kiro、Augment
-$intent-router refactor the auth module     # Codex
-/skill:intent-router refactor the auth module   # Pi、Kimi Code
+PROBE  用哪个缓存后端    → package.json: ioredis@5；src/cache/redis.ts 已存在   ✓ 已解决
+PROBE  哪些端点          → src/routes/users.ts: 3 个 GET handler                ✓ 已解决
+PROBE  TTL 策略          → src/cache/redis.ts:12——仓库惯例是 300s               ✓ 已解决
+ASK    失效失败怎么办    → 仓库里没有。这是个权衡。而且不可逆。
 ```
 
-`SKILL.md` 为什么这样写——逐节中文导读（skill 本体保持英文单源）：
-[`docs/zh-CN/skill-guide.md`](docs/zh-CN/skill-guide.md)。
+只有一个问题到你面前：
 
----
+> **失效失败时，该往哪边失败？**
+> **A**（推荐）——不走缓存。更慢，但永远正确。
+> **B**——发旧数据。更快，但最多 300s 内可能是错的。
+> *为什么这个得问你、不能我定：这是个产品决策——你的用户能不能看到过期数据。它不在你的代码里，
+> 而且一旦客户端依赖上了，改回来很贵。*
 
-## 走通实例："add caching to the user API"
+**Emit**：`unknown: []`，所以它编译通过。`resolved_by_probe: 3, asked: 1`。
 
-**Parse** 找出四个未知项：用哪个缓存后端、缓存哪些端点、TTL 策略是什么、失效失败时怎么办。
+而且它还抓到了一件"猜的"和"盘问的"都抓不到的事：ADR 0007 写着进程内缓存早就试过、后来被回退了。
+这条约束带着文件指针进了 spec——不是因为你想起来了，而是因为探测很便宜，记性不便宜。
 
-**Resolve** 在对你说任何话之前先把它们分类：
+### B. 在客服工单里——*"这个客户炸了，你处理一下"*
+
+一行代码都不涉及。四类未知项照样出现，而且大部分照样是查得到的：
 
 ```
-PROBE  缓存后端       → package.json：ioredis@5；src/cache/redis.ts 已存在   ✓ 已解决
-PROBE  哪些端点       → src/routes/users.ts：3 个 GET handler                ✓ 已解决
-PROBE  TTL 策略       → src/cache/redis.ts:12——仓库约定是 300s               ✓ 已解决
-ASK    失效失败怎么办  → 仓库里没有。这是个取舍。而且不可逆。
+PROBE  到底发生了什么    → 订单 #8821：晚到 12 天，承运商标记为丢件          ✓ 已解决
+PROBE  他有什么权益      → Pro 套餐，30 天保障——还剩 9 天                   ✓ 已解决
+PROBE  我们已经补偿过啥  → 工单 #4402：给过 10% 抵扣，客户拒绝了            ✓ 已解决
+ASK    退款还是换货      → 政策两个都允许。发一个就等于否掉另一个。
 ```
 
-只有一个问题会到你面前：
+> **退款，还是换货？**
+> **A**（推荐）——换货加急。保住订阅；成本由承运商理赔覆盖。
+> **B**——全额退款。今天就把纠纷结掉，大概也把这个账户一起结掉。
+> *为什么这个得问你、不能我定：两个都被政策允许，由客户的偏好来定，而退款一旦发出就收不回来。*
 
-> **缓存失效失败时，应该往哪边倒？**
-> **A**（推荐）——不走缓存直接取。更慢，但永远正确。
-> **B**——返回旧数据。很快，但最长 300 秒内可能是错的。
-> *为什么这个必须问你：这是一个产品决策——你的用户是否可以看到过期数据。它不在你的代码里，而且
-> 一旦客户端依赖上了，改回来的代价很高。*
+`resolved_by_probe: 3, asked: 1`——而且 agent 从头到尾没让客户再把事情重讲一遍，因为工单里已经写了。
+"这笔购买还在保障期内吗"是一条**记录**，不是一个观点；去问它，正是这东西要消灭的那个 bug。
 
-**Emit**：`unknown: []`，编译通过。`resolved_by_probe: 3, asked: 1`。
-
-一次 grilling 会把四个全问了。一个靠猜的 agent 一个都不问，默默选了 B。
-**Intent-Router 只问那个本来就该由你回答的。**
-
-而且它还捞到了另外两者都抓不到的东西：ADR 0007 写着进程内缓存已经试过并且被回滚了。这条约束带着
-文件指针进了 spec——不是因为你记得，而是因为探测很便宜，记忆不便宜。
+> **诚实声明：** 实例 A 是[评测套件](#评测evals)覆盖、也是上面截图对应的那个领域。实例 B 是按
+> [`references/domains.md`](skills/intent-router/references/domains.md) 里已写明的探测面推演出来的
+> ——skill 是为它设计、也为它写了规格，但**目前还没有公开评测跑过这个领域**。见[适用领域](#适用领域)。
 
 ---
 
 ## 产物
 
-一份文件，三种消费者：人来审阅、agent 来执行、审计来回放。
+一个文件，三种消费者：人来审、agent 来执行、审计者来重放。
 
 ```yaml
 intent: add_caching
@@ -236,10 +213,10 @@ objects: [GET /api/users, GET /api/users/:id, GET /api/users/:id/prefs]
 constraints:
   - source: explicit
     text: don't change response shape
-  - source: probed            # 来自 package.json + src/cache/redis.ts
+  - source: probed            # 从 package.json + src/cache/redis.ts 查到
     text: use the existing Redis client, not a new dependency
     evidence: src/cache/redis.ts:12
-  - source: probed            # 来自版本历史 + docs/adr/0007.md
+  - source: probed            # 从版本历史 + docs/adr/0007.md 查到
     text: in-process caching was tried and reverted in #412 — don't reintroduce
     evidence: docs/adr/0007-no-inproc-cache.md
   - source: asked
@@ -251,182 +228,244 @@ decision:
   confidence: 0.88
 resolution:
   unknowns_found: 4
-  resolved_by_probe: 3        # ← 要优化的那个数
+  resolved_by_probe: 3        # ← 要优化的就是这个数
   asked: 1
-trace: [...]                  # 可回放
+trace: [...]                  # 可重放
 ```
 
-完整字段由
-[`intentspec.schema.json`](skills/intent-router/schema/intentspec.schema.json)（JSON Schema draft
-2020-12）固定，四个决策态各有一份走通示例，见
+出了代码领域，字段一个都不变——变的只有 `evidence` 指针指向什么。文件路径换成一个记录标识或文档
+小节（`ticket:4402`、`policy:returns#eu`）；"凡探测过的都必须带指针"这条要求不放松，只是格式变了。
+
+完整字段清单由 [`intentspec.schema.json`](skills/intent-router/schema/intentspec.schema.json)
+（JSON Schema draft 2020-12）固定，四个状态各有一个走通样例在
 [`schema/examples/`](skills/intent-router/schema/examples/)。
 
-默认只在回复里打印 spec，不写任何文件。只有在你要求保存、或你的项目已存在 `.intent/` 目录时，才写
-到 `.intent/<intent>.intent.yaml`。把那个文件连同它产生的 diff 一起提交进 git，"这个 PR 到底想干
-什么"就有了答案而不用考古——同时 `resolved_by_probe / unknowns_found` 给了你一个可以拿来要求这个
-工具的指标。
+默认情况下 spec 只打印在回复里，不写任何文件。只有你明确要求、或者你的项目里已经有 `.intent/`
+目录时，它才会存到 `.intent/<intent>.intent.yaml`。把那个文件跟它产出的 diff 一起提交进 git，
+"这个 PR 到底想干什么"就有了答案，不用再考古——同时 `resolved_by_probe / unknowns_found`
+给了你一个可以拿来考核这个工具的数字。
+
+---
+
+## 适用领域
+
+三趟和那条充分性谓词是领域无关的。领域之间变的只有一件事：**客观答案能在哪里被找到。**
+状态标注沿用本项目标注 harness 兼容性的同一套说法——实测过、写了规格、或者两者都没有。
+
+| 领域 | PROBE 能够到 | 值得问的那个问题 | 状态 |
+|---|---|---|---|
+| **编码 agent** | 仓库、依赖、版本历史、测试、CI、ADR | 不可逆的技术权衡 | ✅ **已实测**——[评测套件](#评测evals)，10 个用例 |
+| **客服与服务工单** | 工单历史、订单与事件日志、账户权益、当前生效的政策 | 退款还是换货——当两者都被允许、且发一个就否掉另一个 | 📋 **已写规格**，见 [`domains.md`](skills/intent-router/references/domains.md) |
+| **研究与分析** | 先前笔记、历史报告、在用的来源白名单、已缓存的检索结果 | 深度还是广度——当交付物的形态会因此改变 | 📋 **已写规格** |
+| **运维与数据作业** | schema、看板、上一次运行的输出、部署与事故历史、留存策略 | 回填能不能改写历史行 | 📋 **已写规格** |
+| **多角色助手** | 候选角色 registry、附件元数据、对话历史、用户等级与地区 | 两个真正重叠的专家该给谁 | 📋 **已写规格** |
+| 你的领域 | 你给它接入的任何东西 | —— | 把探测面写出来，它就能编译 |
+
+**已实测** = [`evals/reports/`](evals/reports/) 里有一份公开报告。**已写规格** = 探测面、值得问与
+不值得问的例子，都已写进 skill 的 reference 文件并按需加载；但还没有公开评测跑过。这里没有任何一行
+是因为"听起来说得通"就被标成可用的。
+
+多角色这一格额外多一条规则，而它配得上这个位置：**一条路由必须声明自己不是什么。**
+光写 `"这种情况路由给我"`，重叠的专家会互相吞掉对方的请求；
+`"这种情况别给我 → 该给 Z"` 才是真正把边界钉住的东西。把描述写得更精确从来治不好重叠——
+点名邻居才行。
+
+---
+
+## 快速开始
+
+无需安装，无需 API key，零依赖。它就是一个 skill。
+
+```bash
+npx skills add angel291592/Intent-Router
+```
+
+它会探测你装了哪些 agent 并逐个装进去。skill 名字是 `intent-router`。
+
+<details>
+<summary>手动安装，或安装器不认识的 agent</summary>
+
+把 `skills/intent-router/` **这个目录**（不是仓库根目录）拷进你的 agent 会读的目录：
+
+- `.claude/skills/`——Claude Code
+- `.agents/skills/`——Cursor、Codex、OpenCode、Gemini CLI、Copilot、Pi、Amp、Zed 等
+
+前面加 `~/` 就是全局安装。逐个 harness 的路径（包括那些用自己专属目录名的）在
+[`references/harness-compat.md`](skills/intent-router/references/harness-compat.md)。
+
+**完全没有 skill 机制？** `SKILL.md` 就是一个单文件 markdown，不绑定任何工具——把正文粘进你的
+system prompt 即可。`references/` 是按需加载的，可以一起粘，也可以不要。
+</details>
+
+然后就照常干活。Intent-Router 的设计意图是**在请求本身不充分时自己触发**——而不是等你想起来去调它。
+（相比之下 `grill-me` 自己的文档写着 *"agent 不会主动去用它。"*）想强制触发就：
+
+```
+/intent-router refactor the auth module     # Claude Code、Cursor、Copilot、Zed、Kiro、Augment
+$intent-router refactor the auth module     # Codex
+/skill:intent-router refactor the auth module   # Pi、Kimi Code
+```
+
+<details>
+<summary>它能在哪些 agent 里跑</summary>
+
+`SKILL.md` 不点名任何工具——它只要求 *"你的环境提供的任何读文件、搜索或 shell 能力"*——所以凡是能读
+[Agent Skills](https://agentskills.io/) 格式的地方它都能跑。
+
+**verified**（在这里跑过，报告在 `evals/reports/`）——OpenCode
+
+**spec-compatible**（其文档声称支持标准 `SKILL.md`；本项目未实测）——Claude Code、Codex CLI、
+Cursor、GitHub Copilot（CLI 与 VS Code）、Gemini CLI、Antigravity、Windsurf、DeepSeek Harness
+（dsh）、Pi、Qwen Code、Kimi Code CLI、Trae、Cline、Roo Code、Kilo Code、Goose、OpenHands、Amp、
+Zed、Warp、Kiro CLI、Junie、Augment、Factory Droid
+
+**needs-adapter**（没有公开的 skill 机制；把 `SKILL.md` 粘进 system prompt）——Continue
+
+目录、调用语法与逐个 harness 的注意事项：
+[`references/harness-compat.md`](skills/intent-router/references/harness-compat.md)。
+</details>
+
+`SKILL.md` 为什么写成这样——逐节的中文导读（skill 本体保持英文单源）：
+[`docs/zh-CN/skill-guide.md`](docs/zh-CN/skill-guide.md)。
 
 ---
 
 ## 评测（Evals）
 
-10 个用例，跑在一个专门作为探测靶子构建的 fixture 仓库上，真实 harness、全程不 mock。
-用例断言决策态、各项计数器，以及每一条 evidence 指针都指向真实存在的文件——只要出现一条凭空编造的
-引用，无论其它指标多好，整套判不达标。
+10 个用例，跑在一个专门作为探测靶子构建的 fixture 仓库上，在真实 harness 里跑，零 mock。用例断言
+决策态、各个计数器，以及**每个 evidence 指针指向的文件必须真实存在**——只要有一处编造的引用，
+整个套件就算失败，其他全对也不算。
 
 <!-- evals:begin -->
 2026-09-23 · opencode · dp/deepseek-flash · 8/10 cases · probe ratio 0.56 · 0 over-asks · 0 hallucinated evidence
 <!-- evals:end -->
 
-全量为 10 例，达标线是"至少 10 例中 8 例通过、且幻觉引用为 0"。每一份已发布报告都在
+套件共 10 个用例，至少通过 8 个，且零编造 evidence。所有公开报告都在
 [`evals/reports/`](evals/reports/)。
 
-怎么自己跑、每个用例检查什么：[`evals/README.zh-CN.md`](evals/README.zh-CN.md)。
-
----
-
-## 兼容哪些 harness（Works with）
-
-`SKILL.md` 不点名任何工具——它要的是*"你的环境提供的任何文件读取、搜索或 shell 能力"*——所以它能在
-任何读取 [Agent Skills](https://agentskills.io/) 格式的地方运行。
-
-| 状态 | 含义 |
-|---|---|
-| **verified** | 在那里实际跑过，报告在 `evals/reports/` |
-| **spec-compatible** | 其官方文档声明会加载标准 `SKILL.md`；本项目未实测 |
-| **needs-adapter** | 未查到任何 skill 机制的官方文档；把 `SKILL.md` 贴进系统提示 |
-
-**verified**——OpenCode
-
-**spec-compatible**——Claude Code、Codex CLI、Cursor、GitHub Copilot（CLI 与 VS Code）、
-Gemini CLI、Antigravity、Windsurf、DeepSeek Harness（dsh）、Pi、Qwen Code、Kimi Code CLI、Trae、
-Cline、Roo Code、Kilo Code、Goose、OpenHands、Amp、Zed、Warp、Kiro CLI、Junie、Augment、
-Factory Droid
-
-**needs-adapter**——Continue
-
-目前 OpenCode 一项为 **verified**：用评测跑过，报告在 `evals/reports/`。其余各行是文档声明。
-各自的目录、调用语法与注意事项：
-[`references/harness-compat.md`](skills/intent-router/references/harness-compat.md)。
-
----
-
-## 编程之外
-
-编译器本身与领域无关；变的只有探测面（probe surface）。"可查"的定义，就是"你给了它什么访问权限"。
-
-| 领域 | PROBE 能触达 | 典型的 ASK |
-|---|---|---|
-| 编码 agent | 仓库、依赖、版本历史、测试、CI、ADR | 不可逆的取舍 |
-| 多角色助手 | 候选注册表、附件元数据、历史记录 | 两个重叠角色选哪个 |
-| 客服分流 | 工单历史、账户状态、权益 | 退款还是换货 |
-| 研究助手 | 既有笔记、来源、检索缓存 | 范围与深度 |
-
-同一个谓词在所有领域里决定何时停止。路由是意图通过类型检查*之后*才做的事——而在多角色场景里，
-注册一条路由应当强制声明**它不是什么**，而不只是它是什么。只有`"符合 X 时路由给我"`会让重叠的角色
-互相串味；`"出现 Y 时别路由给我 → 改投 Z"`才是真正锁住边界的东西。
-
----
-
-## 横向对比
-
-| | 收敛含糊输入 | 不问自己能查到的 | 可机读产物 | 可判定的停止 | 自动触发 |
-|---|---|---|---|---|---|
-| **Intent-Router** | ✅ | ✅ `PROBE`，带 evidence 与指标 | ✅ `IntentSpec` | ✅ 谓词 | ✅ |
-| [grill-me](https://github.com/mattpocock/skills) | ✅ 轮次/frontier | ⚠️ 是原则，未被追踪（无 evidence、无指标） | ❌ 设计上无状态 | ⚠️ "frontier 空了" | ❌ 手动 |
-| [spec-kit `/clarify`](https://github.com/github/spec-kit) | ✅ 11 类扫描 | ❌ 直接问 | ✅ 写回 `spec.md` | ✅ ≤10 问 | ⚠️ 需要 `specs/<feature>/` 及其工作流 |
-| [semantic-router](https://github.com/aurelio-labs/semantic-router) / [RouteLLM](https://github.com/lm-sys/RouteLLM) | ❌ 返回 `None` | — | ❌ 一个标签 | ✅ 阈值 | ✅ |
-| [Jev](https://www.jevai.org/)（带类型的判决） | ❌ 需要清晰输入 | — | ✅ 带类型 + 已校准 | ✅ 置信度 | ✅ |
-
-要读的是这几行的空缺，不是那些对勾。**grill-me** 收敛得非常漂亮，也说出了正确的原则，但什么都不
-留下。**spec-kit** 什么都留下，代价是你得把它整套工作流一起买回家。**路由器**判得快，但根本处理
-不了歧义。**Jev** 返回的正是你想要的、带类型且已校准的判决——*前提是意图已经清晰*，而那才是难的
-部分。
-
-Intent-Router 补的就是这四者共同空着的那一层：**在动手之前，决定该查、该问，还是该做。**
+怎么自己跑、每个用例查什么：[`evals/README.md`](evals/README.md)。
 
 ---
 
 ## 七条设计原则
 
-1. **PROBE 永远优于 ASK。** 一个你本可以自己查到的问题就是一个 bug。追踪
+1. **PROBE 永远优先于 ASK。** 一个你本来自己能查到的问题，就是一个 bug。盯住
    `resolved_by_probe / unknowns_found` 并把它推高。
-2. **停止是算出来的，不是感觉出来的。** 一个作用于 required 字段的谓词，加一个硬性 ASK 预算。
-   没有哪次会话该跑到四十六个问题。
-3. **推断必须可见。** 凡是模型填补的一律标 `inferred` 并附上 evidence。否决一行，比多答三个问题
-   便宜。
-4. **两类失败，两种信号。** `underspecified` 是用户的事；`degraded` 该呼运维。合并就会掩盖故障。
-5. **产出契约，不是对话。** 不可机读的东西，下一个 session 要从零开始。
-6. **路由要声明"我不是什么"。** 负向判据才是防止重叠目标互相串味的东西。
-7. **宁可拒绝，不要猜。** 不充分且预算耗尽？HALT，并点名那个悬空字段。
-
----
-
-## 后端分层（Backends）
-
-每一档的决策语义都相同。默认那档零成本。**v0.1 只发 L0。**
-
-| 档 | 后端 | 成本 | 什么时候用 |
-|---|---|---|---|
-| **L0**（默认，已发布） | 纯提示词。零依赖、零密钥。 | $0 | 永远从这里开始 |
-| **L1**（规划中） | 任意 OpenAI 兼容端点 + JSON schema | ~$0.0001/次判决 | 生产环境、延迟可控 |
-| **L2**（规划中，可选） | [Jev](https://www.jevai.org/) 或本地分类器 | ~$0.0004/次判决 | 你需要校准过的置信度与审计轨迹 |
-
-L2 正是 Jev 社区总结出来的分工——*LLM 负责创建与修复语义结构，System One 模型负责对已知结构反复
-判决*——而 Intent-Router 提供那个"结构"。它刻意是可选的：Jev 闭源、需要 waitlist，其 benchmark 由
-厂商自报。L0 必须始终足以让人先试起来。
+2. **停止是算出来的，不是感觉出来的。** 一个跑在必填字段上的谓词，加一个硬性 ASK 预算。
+   不会有 session 一路问到四十六个问题。
+3. **推断必须可见。** 凡是模型自己填的都打 `inferred` 并带上依据。否掉一行，比多回答三个问题便宜。
+4. **两种失败，两种信号。** `underspecified` 该用户动；`degraded` 该叫运维。合并它们等于藏事故。
+5. **交出一份契约，不是一段对话。** 如果它不是机器可读的，下一个 session 还是从零开始。
+6. **路由要声明自己不是什么。** 负向条件才是防止重叠目标互相渗透的东西。
+7. **宁可拒绝，不要猜。** 不充分而且预算用完了？停下来，点名那个开放字段。
 
 ---
 
 ## 局限
 
-先说清楚，因为你一定会碰到。
+先说清楚，因为你一定会撞上。
 
-- **问不出来的问题依然问不出来。** *"这个该给人什么感觉？"*既不能靠探测解决，也不能靠提问解决——
-  它需要一个能让人做出反应的东西。Intent-Router 会把这类标出来，告诉你去做原型，而不是在上面烧
-  轮次。这条局限诚实地继承自 grill-me，它也点明了这一点。
-- **没有仓库就没有探测。** 在纯对话场景里 `PROBE` 无处可查，引擎会退化为 ASK。仍然比猜好，但主打
-  的那个优势会小很多。
-- **L0 的 confidence 是模型自报的。** 把它当序数看，不是校准过的概率。想要真正的校准（ECE、
-  Brier）？那是 L2。
-- **自动触发是概率行为。** 每个 harness 都是拿你的请求去匹配 skill 的 `description`，没有哪个能
-  保证命中。真要紧的时候，显式调用。
-- **别让它验证自己。** 如果你拿 Intent-Router 自己产出的标签去训练分类器，你会得到一个对自己的
-  错误越来越自信的系统。标注要来自独立证据。
+- **没有来源，就没法探测。** 这个引擎的上限就是它能够到的东西。**非代码领域不是问题所在**——一套
+  工单系统、一份政策文件、一个笔记库，都是很富的探测面。真正**无来源**的场景是：纯对话、什么都没接，
+  此时 `PROBE` 无处可查，整条流程退化为提问。那仍然比猜好，但头条收益会小很多。
+- **问不出来的问题依然问不出来。** *"这个体验该是什么感觉？"*——探测和提问都解决不了，它需要一个
+  能让人产生反应的东西。Intent-Router 会把这类标出来，告诉你去做原型，而不是在上面烧轮次。
+  这条局限诚实地继承自 grill-me，它自己也点明了。
+- **只有编码领域有数字。** [适用领域](#适用领域)里所有标"已写规格"的都是设计与文档，**不是实测**。
+  ✅ 那行你可以信；📋 那几行请当作起点，在你自己的场景里自行验证。
+- **L0 的 confidence 是模型自报的。** 当序数看，别当校准值。想要真校准（ECE、Brier）？那是 L2。
+- **自动触发是概率性的。** 每个 harness 都拿你的请求去匹配 skill 的 `description`，没有一个能保证
+  命中。要紧的时候就显式调用。
+- **别让它自己验证自己。** 一旦你拿 Intent-Router 自己的标注去训分类器，你得到的是一个对自己的错误
+  越来越自信的系统。用独立证据来打标。
+
+---
+
+## 横向对比
+
+**Intent-Router 填的正是四个好工具都留空的那一层：在动手之前，先决定该查、该问、还是该做。**
+grill-me 收敛得很漂亮、原则也说对了，但什么都不留下。spec-kit 什么都留下，但你得把它整套工作流
+一起买。路由器决策很快，但根本处理不了模糊。Jev 返回的正是你想要的那种带类型、已校准的决策——
+*前提是意图已经清楚了*，而那恰恰是难的部分。
+
+<details>
+<summary>完整对比表——要读的是格子里的落差，不是那些勾</summary>
+
+| | 能收敛模糊输入 | 不问自己查得到的 | 机器可读产物 | 可判定的停止 | 自动触发 |
+|---|---|---|---|---|---|
+| **Intent-Router** | ✅ | ✅ `PROBE`，带 evidence 与 metric | ✅ `IntentSpec` | ✅ 谓词 | ✅ |
+| [grill-me](https://github.com/mattpocock/skills) | ✅ 轮次/frontier | ⚠️ 只是原则，未被追踪（无 evidence、无 metric） | ❌ 设计上无状态 | ⚠️ "frontier 空了" | ❌ 手动 |
+| [spec-kit `/clarify`](https://github.com/github/spec-kit) | ✅ 11 类扫描 | ❌ 直接问你 | ✅ 回写进 `spec.md` | ✅ ≤10 个问题 | ⚠️ 需要 `specs/<feature>/` 与它的工作流 |
+| [semantic-router](https://github.com/aurelio-labs/semantic-router) / [RouteLLM](https://github.com/lm-sys/RouteLLM) | ❌ 返回 `None` | —— | ❌ 一个标签 | ✅ 阈值 | ✅ |
+| [Jev](https://www.jevai.org/)（带类型的决策） | ❌ 需要清晰输入 | —— | ✅ 带类型 + 已校准 | ✅ confidence | ✅ |
+
+</details>
+
+---
+
+## 后端分层（Backends）
+
+每一层的决策语义完全相同。默认那层不要钱、不要密钥，也就是 v0.1 实际发布的那层：**L0，纯 prompt。**
+另外两层要钱的都在计划中，且都是可选的。
+
+<details>
+<summary>分层表，以及 L2 为什么被刻意设计成可选</summary>
+
+| 层 | 后端 | 成本 | 什么时候用 |
+|---|---|---|---|
+| **L0** *(默认，已发布)* | 纯 prompt。零依赖、零密钥。 | $0 | 永远先从这里开始 |
+| **L1** *(计划中)* | 任何 OpenAI 兼容端点 + JSON schema | ~$0.0001/次决策 | 生产环境，需要延迟可控 |
+| **L2** *(计划中，可选)* | [Jev](https://www.jevai.org/) 或本地分类器 | ~$0.0004/次决策 | 你需要校准过的 confidence 与审计轨迹 |
+
+L2 是 Jev 社区最终达成的那种分工——*LLM 创建并修复语义结构；一个 System One 模型在已知结构之间
+反复做决策*——由 Intent-Router 来提供那个结构。它被刻意设计成可选：Jev 是闭权重、需要排队申请，
+基准数据也是厂商自报的。L0 必须永远足以让人先试起来。
+
+</details>
 
 ---
 
 ## 相关工作（Prior art）
 
-这是一次综合，各个组成部分本身都值得一读。
+这是一次综合，不是无菌室里的发明。有四个项目塑造了它：
+[grill-me](https://github.com/mattpocock/skills)（grilling 原语，以及本项目立足的那条原则）、
+[spec-kit](https://github.com/github/spec-kit)（`/clarify` 的有界问题预算）、
+[Jev](https://www.jevai.org/)（带类型的决策，以及 LLM→IR→decider 分层）、
+[Camunda #63664](https://github.com/camunda/camunda/issues/63664)（对这个问题最清晰的一次陈述）。
+它们命名的那些东西，功劳归它们。
+
+<details>
+<summary>每一个具体贡献了什么，以及 Intent-Router 补了什么</summary>
 
 - **[mattpocock/skills](https://github.com/mattpocock/skills)**——`grill-me` 与 grilling 原语。
-  轮次/frontier 模型、passivity 失败模式、grillable/ungrillable 之分，全部来自这里。它的
-  `grilling` skill 也已经说出了本项目赖以成立的那条原则——*"查事实是你的活，永远不是用户的……
-  凡是你自己能查到的，别去问用户"*——这个命名的功劳属于它。Intent-Router 的贡献是把那条原则变成
-  一个背后有产物的状态：*有状态、自己动手、会终止*。
-- **[github/spec-kit](https://github.com/github/spec-kit)**——`/clarify`：分类扫描、有界的提问
-  预算、一次一问且带推荐选项、答案写回产物。设计非常优秀，但与它自己的工作流强耦合。
-  Intent-Router 把它解耦出来。
+  轮次/frontier 模型、"被动性"这个失败模式、以及"问得出来 / 问不出来"的区分，全部来自这里。
+  它的 `grilling` skill 也正是本项目立足的那条原则的出处——*"找事实是你的活儿，永远不是用户的活儿……
+  凡是你自己能查到的，就别问用户"*——命名之功归它。Intent-Router 的贡献是把那条原则变成一个**状态**，
+  背后带一份产物：*有状态、自助、且会终止*。
+- **[github/spec-kit](https://github.com/github/spec-kit)**——`/clarify`：分类法扫描、有界的问题
+  预算、一次一问且带推荐选项、答案回写进产物。设计极好，但与它自己的工作流强耦合。
+  Intent-Router 把它解绑了。
 - **[TypeSafe Jev](https://www.jevai.org/)** 与
-  [非官方工具包](https://github.com/HiQS-Labs/Jev-unofficial-toolkit)——用带类型、已校准的判决
-  取代散文，以及塑造了 `IntentSpec` 的那个 LLM→IR→decider 分工。
+  [非官方工具包](https://github.com/HiQS-Labs/Jev-unofficial-toolkit)——用带类型、已校准的决策
+  取代散文，以及塑造了 `IntentSpec` 的那个 LLM→IR→decider 分层。
 - **[semantic-router](https://github.com/aurelio-labs/semantic-router)**、
   **[RouteLLM](https://github.com/lm-sys/RouteLLM)**、
   **[vLLM Semantic Router](https://github.com/vllm-project/semantic-router)**——Intent-Router
-  给它们喂数据，而不是取代它们的那一层。
+  向其喂数据、而非取代的那一层路由。
 - **[reaatech/confidence-router](https://github.com/reaatech/confidence-router)**、
-  **[JevLang](https://github.com/TimMikeladze/JevLang)**——以库的形态实现的
-  route/clarify/fallback 阈值与可回放的策略审计。
+  **[JevLang](https://github.com/TimMikeladze/JevLang)**——把 route/clarify/fallback 阈值与
+  可重放的策略审计做成库。
 - **[Camunda #63664](https://github.com/camunda/camunda/issues/63664)**——对这个问题最清晰的一次
-  陈述：grilling 假定用户拥有解决方案的设计权，而用户真正该拥有的是*问题*，该由 agent 去研究那些
-  可研究的部分。`PROBE` 就是这个 issue，被变成了一个状态。
+  陈述：盘问假设了用户拥有解决方案设计，而用户其实应该拥有**问题**，让 agent 去研究那些可研究的东西。
+  `PROBE` 就是这个 issue 变成的状态。
+
+</details>
 
 ---
 
 ## 参与贡献
 
-欢迎提 issue 与 PR——见 [CONTRIBUTING.zh-CN.md](CONTRIBUTING.zh-CN.md)。
+欢迎 issue 与 PR——见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 许可
 

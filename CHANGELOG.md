@@ -7,6 +7,34 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
 
 ## [Unreleased]
 
+- Docs: both READMEs are repositioned from "an intent compiler for coding agents" to "an intent
+  compiler for AI agents". The engine is domain-independent — only the probe surfaces change — and
+  the old framing hid that behind a repository-shaped narrative. Concretely: a dual-domain opening
+  diagram, a second worked walkthrough set in a support queue alongside the caching one, and
+  `Beyond code` promoted from a four-row table near the bottom into a `Where it works` section that
+  labels each domain **measured** (a published eval report) or **specified** (probe surfaces written
+  into `references/domains.md`, no run yet). No skill file, schema or eval case changed; the coding
+  domain remains the only one with numbers, and every 📋 row says so.
+- Docs: the `No repo, no probes` limitation is corrected to `No sources, no probes`. It had conflated
+  "not code" with "no probe surface", which understated the engine's own documented domains — a
+  ticket system or policy archive is a rich probe surface; a sourceless setting is pure conversation
+  with nothing connected.
+- Docs: the comparison table, the harness compatibility list, the backend tiers and the prior-art
+  detail are folded into `<details>` blocks, with the claim each one supports left visible. Nothing
+  was removed — the prior-art credits in particular are kept in full.
+
+- Docs：双语 README 的定位从"给编码 agent 用的意图编译器"上移为"给 AI agent 用的意图编译器"。
+  引擎本身是领域无关的——变的只有探测面——而旧叙事把这一点藏在了一套仓库形状的说法后面。具体动作：
+  首屏改为双领域对照图；在 caching 实例之外新增一个客服工单场景的走通实例；把 `编程之外` 从靠底部的
+  四行小表升级为 `适用领域` 章节，逐个领域标注**已实测**（有公开评测报告）或**已写规格**
+  （探测面已写进 `references/domains.md`，但还没跑过）。skill 文件、schema、评测用例一个都没改；
+  编码领域仍是唯一有数字的领域，每个 📋 行都明说了这一点。
+- Docs：把 `没有仓库就没法探测` 这条局限改正为 `没有来源就没法探测`。原措辞把"非代码"与"无探测面"
+  混为一谈，低估了引擎自己已写规格的那些领域——一套工单系统或政策档案都是很富的探测面；真正无来源的
+  场景是纯对话、什么都没接。
+- Docs：横向对比表、harness 兼容清单、后端分层表、相关工作细节都折叠进 `<details>`，只把各自支撑的
+  那句结论留在外面。没有删除任何内容——尤其相关工作的 credit 全部保留。
+
 - Docs: a three-frame demo now sits above the fold on both READMEs — the auto-triggered probe
   sequence, the single question it asks, and the emitted spec. Rendered faithfully from the
   2026-09-23 opencode evaluation transcript.
