@@ -285,7 +285,7 @@ trace: [...]                  # 可重放
 
 | 领域 | PROBE 能够到 | 值得问的那个问题 | 状态 |
 |---|---|---|---|
-| **编码 agent** | 仓库、依赖、版本历史、测试、CI、ADR | 不可逆的技术权衡 | ✅ **已实测**——[评测套件](#评测evals)，10 个用例 |
+| **编码 agent** | 仓库、依赖、版本历史、测试、CI、ADR | 不可逆的技术权衡 | ✅ **已实测**——[评测套件](#评测evals)，14 个用例 |
 | **客服与服务工单** | 工单历史、订单与事件日志、账户权益、当前生效的政策 | 退款还是换货——当两者都被允许、且发一个就否掉另一个 | 📋 **已写规格**，见 [`domains.md`](skills/intent-router/references/domains.md) |
 | **研究与分析** | 先前笔记、历史报告、在用的来源白名单、已缓存的检索结果 | 深度还是广度——当交付物的形态会因此改变 | 📋 **已写规格** |
 | **运维与数据作业** | schema、看板、上一次运行的输出、部署与事故历史、留存策略 | 回填能不能改写历史行 | 📋 **已写规格** |
@@ -363,16 +363,18 @@ Zed、Warp、Kiro CLI、Junie、Augment、Factory Droid
 
 ## 评测（Evals）
 
-10 个用例，跑在一个专门作为探测靶子构建的 fixture 仓库上，在真实 harness 里跑，零 mock。用例断言
+14 个用例，跑在专门作为探测靶子构建的 fixture 工作区上，在真实 harness 里跑，零 mock。用例断言
 决策态、各个计数器，以及**每个 evidence 指针指向的文件必须真实存在**——只要有一处编造的引用，
 整个套件就算失败，其他全对也不算。
 
 <!-- evals:begin -->
 2026-09-23 · opencode · dp/deepseek-flash · 8/10 cases · probe ratio 0.56 · 0 over-asks · 0 hallucinated evidence
+2026-09-23 · opencode · dp/deepseek-flash · 8/8 subset cases · probe ratio 1.00 · 0 over-asks · 0 hallucinated evidence
 <!-- evals:end -->
 
-套件共 10 个用例，至少通过 8 个，且零编造 evidence。所有公开报告都在
-[`evals/reports/`](evals/reports/)。
+第一行是全量套件的单次运行；第二行是 2026-09-23 提示词强化后对 8 用例子集的单次重测——子集
+口径，与全量数字分开陈述。套件共 14 个用例，至少通过 12 个，且零编造 evidence。所有公开报告
+都在 [`evals/reports/`](evals/reports/)。
 
 怎么自己跑、每个用例查什么：[`evals/README.md`](evals/README.md)。
 

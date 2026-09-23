@@ -312,7 +312,7 @@ way this project states harness compatibility — measured, specified, or neithe
 
 | Domain | PROBE reaches | The question worth asking | Status |
 |---|---|---|---|
-| **Coding agents** | repo, deps, version history, tests, CI, ADRs | irreversible technical trade-offs | ✅ **measured** — [eval suite](#evals), 10 cases |
+| **Coding agents** | repo, deps, version history, tests, CI, ADRs | irreversible technical trade-offs | ✅ **measured** — [eval suite](#evals), 14 cases |
 | **Support & service triage** | ticket history, order and event logs, entitlements, the policy in force | refund vs. replace, when both are allowed and one forecloses the other | 📋 **specified** in [`domains.md`](skills/intent-router/references/domains.md) |
 | **Research & analysis** | prior notes, previous reports, the source allow-list, cached retrievals | depth vs. breadth, when the deliverable changes shape | 📋 **specified** |
 | **Ops & data work** | schema, dashboards, last run's output, deploy and incident history, retention policy | may a backfill rewrite historical rows | 📋 **specified** |
@@ -398,15 +398,18 @@ itself stays English-only):
 
 ## Evals
 
-Ten cases against a fixture repository built as a probe target, run in a real harness with nothing
+Fourteen cases against fixture workspaces built as probe targets, run in a real harness with nothing
 mocked. Cases assert the decision state, the counters, and that every evidence pointer names a file
 that exists — a single invented citation fails the suite regardless of everything else.
 
 <!-- evals:begin -->
 2026-09-23 · opencode · dp/deepseek-flash · 8/10 cases · probe ratio 0.56 · 0 over-asks · 0 hallucinated evidence
+2026-09-23 · opencode · dp/deepseek-flash · 8/8 subset cases · probe ratio 1.00 · 0 over-asks · 0 hallucinated evidence
 <!-- evals:end -->
 
-The suite is ten cases and passes at at least 8 of 10 with zero hallucinated evidence. Every
+Line one is the full suite in a single run; line two is a single-run re-test of an 8-case subset
+after the 2026-09-23 prompt hardening — a subset result, kept separate from the full-suite figure.
+The suite is fourteen cases and passes at at least 12 of 14 with zero hallucinated evidence. Every
 published report is in [`evals/reports/`](evals/reports/).
 
 How to run it yourself, and what each case checks: [`evals/README.md`](evals/README.md).
