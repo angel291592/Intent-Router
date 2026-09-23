@@ -4,22 +4,21 @@ English | [简体中文](README.zh-CN.md)
 
 **An intent compiler for AI agents.**
 
-Turns a vague request into a typed `IntentSpec` — looking up what it can, asking only what it
-can't, and refusing to emit when the intent is still underspecified.
+Turns a vague request into a typed `IntentSpec`: it looks up what it can, asks only what it can't,
+and refuses to emit while the intent is still underspecified.
 
-**What that buys you, in plain language:**
+What that buys you:
 
-- **Senior-engineer agent interaction, with no prompt-engineering prerequisite.** Say it the way
-  you'd say it to a capable teammate — *"add caching to the user API"*. The skill writes the
-  briefing a senior engineer would have written first, so the quality of what you get no longer
-  depends on how well you've learned to word a prompt.
-- **Less answering, not more.** Before anything reaches you, it looks up what your repo, ticket
-  system or docs already answer — the forty-six-question interview becomes the single question
-  that genuinely needs your judgment.
-- **Better work, carried further.** Every run ends in a machine-readable `IntentSpec` whose probed
-  fields carry evidence pointers — the output rests on what your project actually says instead of
-  an unstated guess, and the next agent, session or teammate picks up from that contract instead
-  of zero.
+- You get the interaction of a senior engineer without having to learn prompt engineering. Say it
+  the way you'd say it to a capable teammate, *"add caching to the user API"*, and the skill writes
+  the briefing a senior engineer would have written first. What comes back stops depending on how
+  well you've learned to word a prompt.
+- You answer less, not more. Before anything reaches you it reads what your repo, ticket system or
+  docs already answer, so the forty-six-question interview becomes the one question that genuinely
+  needs your judgment.
+- The work carries further. Every run ends in a machine-readable `IntentSpec` whose probed fields
+  carry evidence pointers, so the output rests on what your project actually says rather than on an
+  unstated guess, and the next agent, session or teammate starts from that contract instead of zero.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/angel291592/Intent-Router)](https://github.com/angel291592/Intent-Router/releases)
@@ -49,8 +48,8 @@ Same three passes. Same stopping predicate. Only the places it looks change.
 
 <!-- demo:begin -->
 What a real run looks like — one sentence in, it reads the repo itself and asks only what no
-file can answer. From the measured run behind the numbers below: 8 of 10 cases, 0 hallucinated
-evidence.
+file can answer. From the measured run behind the numbers below: 8 of the 10 cases the suite held
+that day, 0 hallucinated evidence.
 
 <p align="center">
   <img src="docs/assets/demo-1-probe.png" width="760" alt="Intent-Router loads automatically and probes the repo: package.json, src/routes/users.ts, src/cache/redis.ts and more"><br><br>
@@ -407,10 +406,11 @@ that exists — a single invented citation fails the suite regardless of everyth
 2026-09-23 · opencode · dp/deepseek-flash · 8/8 subset cases · probe ratio 1.00 · 0 over-asks · 0 hallucinated evidence
 <!-- evals:end -->
 
-Line one is the full suite in a single run; line two is a single-run re-test of an 8-case subset
-after the 2026-09-23 prompt hardening — a subset result, kept separate from the full-suite figure.
-The suite is fourteen cases and passes at at least 12 of 14 with zero hallucinated evidence. Every
-published report is in [`evals/reports/`](evals/reports/).
+Line one is a full-suite run of the suite as it stood that day, which was ten cases; line two is a
+single-run re-test of an 8-case subset after the 2026-09-23 prompt hardening — a subset result,
+kept separate from the full-suite figure. The suite has since grown to fourteen cases, which puts
+its threshold at 12 of 14 with zero hallucinated evidence; no full-suite run at that size has been
+published yet. Every published report is in [`evals/reports/`](evals/reports/).
 
 How to run it yourself, and what each case checks: [`evals/README.md`](evals/README.md).
 

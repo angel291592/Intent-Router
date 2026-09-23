@@ -5,6 +5,38 @@ Each entry is given in English and then in Chinese. / 每条目先英文后中�
 This project follows semantic versioning from 1.0 onwards; 0.x releases may change anything. /
 本项目自 1.0 起遵循语义化版本；0.x 阶段任何内容都可能变动。
 
+## [Unreleased]
+
+- Schema: `evidence` now carries a `pattern` requiring a single whitespace-free token. The field's
+  own documentation had always claimed the schema enforced this, but the schema accepted any
+  non-empty string — so anyone validating a spec against it saw a reasoning sentence pass as a
+  pointer. Which of the nine legal forms the token is, and whether the path it names exists, stay
+  with the eval runner, and the schema now says so.
+- Docs: `probe-surfaces.md` lists all nine evidence forms instead of five. It was missing
+  `path:line-line`, `user:delegated`, `record:<system>/<id>` and `doc:<slug>#<section>` while being
+  the file the skill loads on demand for evidence formats, so the table is now also stated to be
+  exhaustive.
+- Docs: the eval figures in both READMEs are restated by suite size. The published full-suite run
+  is 8 of the ten cases the suite held that day; the suite has since grown to fourteen, so 12 of 14
+  is given as the threshold rather than as a result, and the absence of a fourteen-case run is
+  stated outright. The cost and threshold figures in `evals/README` follow the current fourteen
+  cases.
+- Docs: the README opening drops its three bold sub-headings and its "in plain language" preamble
+  in favour of plain sentences. Nothing is removed, and the Chinese version trades four em dashes
+  on the first screen for ordinary punctuation.
+- Schema：`evidence` 新增 `pattern`，要求它是单个不含空白的 token。该字段自己的文档一直声称
+  "schema 会强制这一点"，但 schema 实际只要求非空字符串——任何拿它校验 spec 的人，都会看到一个
+  推理句冒充指针通过校验。具体是九种合法形式中的哪一种、以及路径是否真实存在，仍由评测 runner
+  判定，schema 里现已如实写明。
+- Docs：`probe-surfaces.md` 的 evidence 形式表补齐为九种（原先只有五种）。缺的是
+  `path:line-line`、`user:delegated`、`record:<system>/<id>` 与 `doc:<slug>#<section>`——而它正是
+  skill 为"evidence 形式"按需加载的那个文件；该表现已明示为穷举。
+- Docs：两版 README 的评测数字改按套件规模分别陈述。已公开的全量运行是当日 10 例套件中通过 8 例；
+  套件此后扩到 14 例，因此 12/14 只作为**阈值**陈述而不是结果，并明写这一规模尚无全量运行。
+  `evals/README` 的成本与阈值数字改按当前 14 例。
+- Docs：README 开篇去掉三条粗体小标题与"换成大白话"这类元叙述，改用正常句子陈述，内容一条未删；
+  中文版首屏的四处破折号改回常规标点。
+
 ## [0.2.0] — 2026-09-23
 
 - Skill: the trigger surface now covers requests outside code. The `description` keeps every code
@@ -166,8 +198,6 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
   那句结论留在外面。没有删除任何内容——尤其相关工作的 credit 全部保留。
 - Docs：双语 README 首屏新增三帧 demo——自动触发的探测序列、它问的唯一一个问题、产出的 spec。
   画面逐字取自 2026-09-23 opencode 评测的真实 transcript 渲染。
-
-## [Unreleased]
 
 ## [0.1.2] — 2026-09-23
 

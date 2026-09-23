@@ -4,19 +4,19 @@
 
 **给 AI agent 用的意图编译器（intent compiler）。**
 
-把一句含糊的请求变成一份带类型的 `IntentSpec`——能自己查到的就去查，只问查不到的，意图仍不充分时
+把一句含糊的请求变成一份带类型的 `IntentSpec`：能自己查到的就去查，只问查不到的，意图仍不充分时
 拒绝产出。
 
-**换成大白话，这给你带来的是：**
+这给你带来的是：
 
-- **不需要先学提示词工程，就能得到高端工程师级别的 agent 交互。** 你只要像对一个靠谱的同事那样
-  说话——*"给 user API 加缓存"*。先写好那份"资深工程师动手前必写的需求简报"的活儿，由它来干，
-  产出质量不再取决于你把提示词措辞练到了什么段位。
-- **要你回答的更少，而不是更多。** 在任何问题到达你之前，它先去你的仓库、工单系统或文档里查——
-  四十六问的盘问，被压缩成唯一一个真正需要你拍板的问题。
-- **活儿干得更好，而且能被接续。** 每次运行都以一份机器可读的 `IntentSpec` 收尾，凡探测过的字段
-  都带 evidence 指针——产出建立在你的项目实际说了什么之上，而不是一个没说出口的假设；下一个
-  agent、下一个 session、下一个同事，从这份契约接着干，而不是从零开始。
+- 不需要先学提示词工程，也能得到高端工程师级别的 agent 交互。你只要像对一个靠谱的同事那样说话，
+  比如*"给 user API 加缓存"*，那份"资深工程师动手前必写的需求简报"的活儿由它来干，产出质量不再
+  取决于你把提示词措辞练到了什么段位。
+- 要你回答的更少，而不是更多。在任何问题到达你之前，它先去你的仓库、工单系统或文档里查一遍，
+  四十六问的盘问于是被压缩成唯一一个真正需要你拍板的问题。
+- 活儿干得更好，而且能被接续。每次运行都以一份机器可读的 `IntentSpec` 收尾，凡探测过的字段都带
+  evidence 指针，产出建立在你的项目实际说了什么之上，而不是一个没说出口的假设；下一个 agent、
+  下一个 session、下一个同事，从这份契约接着干，而不是从零开始。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/angel291592/Intent-Router)](https://github.com/angel291592/Intent-Router/releases)
@@ -45,8 +45,8 @@
 同样三趟、同样的停止谓词。变的只有"它去哪里查"。
 
 <!-- demo:begin -->
-一次真实运行的样子——你只说一句话，它自己去读仓库，只问文件回答不了的那一个问题。画面来自
-下方数字背后的实测运行：10 例中 8 例通过，0 条幻觉引用。
+一次真实运行的样子：你只说一句话，它自己去读仓库，只问文件回答不了的那一个问题。画面来自
+下方数字背后的实测运行：当日 10 例套件中 8 例通过，0 条幻觉引用。
 
 <p align="center">
   <img src="docs/assets/demo-1-probe.png" width="760" alt="Intent-Router 自动加载并探测仓库：package.json、src/routes/users.ts、src/cache/redis.ts 等"><br><br>
@@ -55,7 +55,7 @@
 </p>
 <!-- demo:end -->
 
-无需安装，无需 API key，零依赖——它就是一个 skill：
+无需安装，无需 API key，零依赖，它就是一个 skill：
 
 ```bash
 npx skills add angel291592/Intent-Router
@@ -372,9 +372,10 @@ Zed、Warp、Kiro CLI、Junie、Augment、Factory Droid
 2026-09-23 · opencode · dp/deepseek-flash · 8/8 subset cases · probe ratio 1.00 · 0 over-asks · 0 hallucinated evidence
 <!-- evals:end -->
 
-第一行是全量套件的单次运行；第二行是 2026-09-23 提示词强化后对 8 用例子集的单次重测——子集
-口径，与全量数字分开陈述。套件共 14 个用例，至少通过 12 个，且零编造 evidence。所有公开报告
-都在 [`evals/reports/`](evals/reports/)。
+第一行是当日套件规模（10 例）下的全量单次运行；第二行是 2026-09-23 提示词强化后对 8 用例子集的
+单次重测——子集口径，与全量数字分开陈述。套件此后扩到 14 个用例，阈值随之为 14 例中至少通过
+12 例、且零编造 evidence；这一规模下的全量运行尚无公开报告。所有公开报告都在
+[`evals/reports/`](evals/reports/)。
 
 怎么自己跑、每个用例查什么：[`evals/README.md`](evals/README.md)。
 

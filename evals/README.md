@@ -67,9 +67,10 @@ and `--rescore` never reach preflight and start no session.
 
 ## 3. Cost
 
-A full suite is **11 case sessions per harness** (ten cases, plus one extra turn for the two-turn
-case), each 1–6 model calls, plus **2 preflight sessions** — 13 sessions, about 16 minutes with
-`--jobs 4`. The same run also has `--smoke` (1 case session + 2 preflight) and Tier 3 re-runs
+A full suite is **15 case sessions per harness** (fourteen cases, plus one extra turn for the
+two-turn case), each 1–6 model calls, plus **2 preflight sessions** — 17 sessions. The ten-case
+suite measured about 16 minutes with `--jobs 4`, so budget roughly 20 minutes for fourteen. The
+same run also has `--smoke` (1 case session + 2 preflight) and Tier 3 re-runs
 (affected cases × 2, plus 2 preflight). Tier 0 and Tier 1 cost nothing. Iterate on
 `--cases <id> --repeat 2` and keep a full suite for the moment you need numbers.
 
@@ -79,11 +80,11 @@ case), each 1–6 model calls, plus **2 preflight sessions** — 13 sessions, ab
 per-case table, an iteration log, and the one-line summary the top-level README quotes.
 
 A case passes on a single run by default; with `--repeat N` (N > 1) more than half of its runs
-must pass. The suite meets its threshold when **at least 8 of 10 cases pass and hallucinated
-evidence is exactly 0** — a single evidence pointer to a file that does not exist fails the suite
-regardless of everything else, because an invented citation survives review in a way a wrong
-answer does not. The threshold is `ceil(0.8 × cases)`, so it tracks the case count automatically
-rather than a hard-coded 8.
+must pass. The suite meets its threshold when **at least `ceil(0.8 × cases)` of its cases pass and
+hallucinated evidence is exactly 0** — a single evidence pointer to a file that does not exist
+fails the suite regardless of everything else, because an invented citation survives review in a
+way a wrong answer does not. The threshold tracks the case count automatically rather than a
+hard-coded number, so the fourteen-case suite needs 12.
 
 Four failure modes are counted separately from wrong decisions, because they say something
 different: `not triggered` (expected to fire but no spec was emitted), `degraded output` (a spec
