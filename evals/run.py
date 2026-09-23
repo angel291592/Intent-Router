@@ -1243,6 +1243,149 @@ def check_frontmatter(path: Path) -> int:
     return 1 if problems else 0
 
 
+def tracked_md_files() -> list[Path]:
+    """Markdown files known to git, fixtures excluded.
+
+    The scan set must come from `git ls-files`, never from a directory walk:
+    agent.md, HANDOFF.md, MAINTENANCE.md and docs/plans/ are internal documents
+    that stay untracked and reference each other, so a filesystem walk would
+    fail CI on links that were never meant to be public. evals/fixtures/ holds
+    fake repos used as probe targets — evaluation assets, not subject to the
+    public documentation link discipline.
+    """
+    out = subprocess.run(
+        ["git", "ls-files", "*.md"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if out.returncode != 0:
+        raise SystemExit(f"git ls-files failed: {out.stderr.strip()}")
+    return [
+        ROOT / line
+        for line in out.stdout.splitlines()
+        if line and not line.startswith("evals/fixtures/")
+    ]
+
+
+def report_readme_lines(report_paths: list[Path]) -> set[str]:
+    """The `## 5. Line for the README` fence content of each tracked report.
+
+    extract_section() cannot be used: it demands the next `## ` heading, and
+    section 5 is the last one in a report. A fenced block right after that
+    heading is matched directly instead.
+    """
+    lines: set[str] = set()
+    for path in report_paths:
+        match = re.search(
+            r"^## 5\. Line for the README\n+```\n(.*?)\n```",
+            path.read_text(encoding="utf-8"),
+            re.S | re.M,
+        )
+        if match:
+            lines.add(match.group(1).strip())
+    return lines
+
+
+def skill_reference_problems() -> list[str]:
+    """Bare `references/*.md` / `schema/...` paths inside the skill body.
+
+    These are backticked paths, not markdown links, so the relative-link check
+    cannot see them — and SKILL.md §9's reference table is what the skill loads
+    on demand at runtime; one wrong name there is a broken feature.
+    """
+    skill_root = SKILL_DIR
+    paths = [skill_root / "SKILL.md", *sorted((skill_root / "references").glob("*.md"))]
+    pattern = re.compile(r"`((?:\.\./)?(?:references|schema)/[^`\s]+)`")
+    problems: list[str] = []
+    for path in paths:
+        for match in pattern.finditer(path.read_text(encoding="utf-8")):
+            target = (path.parent / match.group(1)).resolve()
+            if not target.exists():
+                problems.append(f"{path.relative_to(ROOT)}: missing {match.group(1)}")
+    return problems
+
+
+def check_docs() -> int:
+    """Four offline conformance gates over the public documentation. All four
+    groups run before reporting — one CI pass should surface every problem."""
+    link_problems: list[str] = []
+    for path in tracked_md_files():
+        base = path.parent
+        text = path.read_text(encoding="utf-8")
+        for target in re.findall(r"\]\(([^)]+)\)", text):
+            if target.startswith(("http://", "https://", "mailto:", "#")):
+                continue
+            relative = target.split("#", 1)[0]
+            if not relative:
+                continue  # pure in-page anchor: GitHub's slug rules are unreliable for CJK
+            if not (base / relative).exists():
+                link_problems.append(f"{path.relative_to(ROOT)}: broken link {target}")
+
+    version_problems: list[str] = []
+    frontmatter = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8").split("\n---\n", 1)[0]
+    version_match = re.search(r"(?m)^\s*version:\s*[\"']?([^\"'\s]+)", frontmatter)
+    skill_version = version_match.group(1) if version_match else None
+    changelog_version = None
+    for line in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8").splitlines():
+        heading = re.match(r"^## \[([^\]]+)\]", line)
+        if heading and heading.group(1) != "Unreleased":
+            changelog_version = heading.group(1)
+            break
+    if skill_version and changelog_version and skill_version != changelog_version:
+        version_problems.append(
+            f"SKILL.md version {skill_version!r} != CHANGELOG {changelog_version!r}"
+        )
+    elif not skill_version:
+        version_problems.append("SKILL.md frontmatter has no metadata.version")
+    elif not changelog_version:
+        version_problems.append("CHANGELOG.md has no released version heading")
+
+    readme_lines: dict[str, list[str]] = {}
+    for name in ("README.md", "README.zh-CN.md"):
+        text = (ROOT / name).read_text(encoding="utf-8")
+        block = re.search(r"<!-- evals:begin -->\n(.*?)<!-- evals:end -->", text, re.S)
+        readme_lines[name] = [
+            line.strip() for line in (block.group(1).splitlines() if block else []) if line.strip()
+        ]
+    consistency_problems: list[str] = []
+    if readme_lines["README.md"] != readme_lines["README.zh-CN.md"]:
+        consistency_problems.append("README.md and README.zh-CN.md evals blocks differ")
+    known = report_readme_lines(
+        [Path(line) for line in subprocess.run(
+            ["git", "ls-files", "evals/reports"],
+            cwd=ROOT, capture_output=True, text=True,
+        ).stdout.splitlines() if line.endswith(".md")]
+    )
+    for name, lines in readme_lines.items():
+        for line in lines:
+            if known and line not in known:
+                consistency_problems.append(
+                    f"{name}: evals line is not verbatim from a tracked report: {line!r}"
+                )
+
+    reference_problems = skill_reference_problems()
+
+    counts = {
+        "relative links": (len(tracked_md_files()), len(link_problems)),
+        "version match": (1, len(version_problems)),
+        "README evals lines": (sum(len(v) for v in readme_lines.values()), len(consistency_problems)),
+        "skill references": (1, len(reference_problems)),
+    }
+    for name, problems in (
+        ("relative link", link_problems),
+        ("version", version_problems),
+        ("README consistency", consistency_problems),
+        ("skill reference", reference_problems),
+    ):
+        for problem in problems:
+            print(f"FAIL [{name}]: {problem}")
+    for name, (checked, bad) in counts.items():
+        print(f"{name}: {checked - bad} ok, {bad} problem(s)")
+    print("OK" if not (link_problems or version_problems or consistency_problems or reference_problems) else "FAIL")
+    return 1 if (link_problems or version_problems or consistency_problems or reference_problems) else 0
+
+
 def selftest() -> int:
     """Offline check of the parsing and assertion logic. No harness, no cost."""
     validator = load_schema_validator()
@@ -1793,6 +1936,7 @@ def main() -> int:
     parser.add_argument("--out", default=str(EVALS / "reports"))
     parser.add_argument("--model", default=None)
     parser.add_argument("--check-frontmatter", metavar="PATH")
+    parser.add_argument("--check-docs", action="store_true")
     parser.add_argument("--selftest", action="store_true")
     args = parser.parse_args()
 
@@ -1802,8 +1946,12 @@ def main() -> int:
         return selftest()
     if args.check_frontmatter:
         return check_frontmatter(Path(args.check_frontmatter))
+    if args.check_docs:
+        return check_docs()
     if not args.harness:
-        parser.error("one of --harness, --rescore, --check-frontmatter or --selftest is required")
+        parser.error(
+            "one of --harness, --rescore, --check-frontmatter, --check-docs or --selftest is required"
+        )
     return run_suite(args)
 
 
