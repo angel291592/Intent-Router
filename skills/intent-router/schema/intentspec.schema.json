@@ -122,7 +122,8 @@
         "evidence": {
           "type": "string",
           "minLength": 1,
-          "description": "Where the constraint comes from: path, path:line, path#heading, git:<short-sha> or git:#<pr-number>, the reserved user:delegated when the user handed the decision back, record:<system>/<id> for a record in a system of record, or doc:<slug>#<section> for a document section without a path. Always a single whitespace-free token; a reasoning sentence is not evidence and belongs in text. Required for probed and inferred constraints — an unsourced claim about a repository is indistinguishable from a guess."
+          "pattern": "^\\S+$",
+          "description": "Where the constraint comes from: path, path:line, path:line-line, path#heading, git:<short-sha> or git:#<pr-number>, the reserved user:delegated when the user handed the decision back, record:<system>/<id> for a record in a system of record, or doc:<slug>#<section> for a document section without a path. Always a single whitespace-free token, which is what the pattern enforces: a reasoning sentence is not evidence and belongs in text. Whether the token also matches one of the forms above, and whether the path it names exists, is checked by the eval runner rather than here. Required for probed and inferred constraints — an unsourced claim about a repository is indistinguishable from a guess."
         },
         "irreversible": {
           "type": "boolean",

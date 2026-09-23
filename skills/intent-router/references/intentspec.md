@@ -28,7 +28,7 @@ should meet the request before the conclusions.
 |---|---|---|
 | `source` | yes | `explicit` \| `probed` \| `asked` \| `inferred`. |
 | `text` | yes | The requirement, actionable without this document's context. |
-| `evidence` | when `probed` or `inferred` | Pointer in one of the evidence formats. Always a single whitespace-free token: `path`, `path:line`, `path:line-line`, `path#heading`, `git:<short-sha>`, `git:#<pr-number>`, the reserved `user:delegated`, `record:<system>/<id>`, or `doc:<slug>#<section>`. The schema enforces this. |
+| `evidence` | when `probed` or `inferred` | Pointer in one of the evidence formats. Always a single whitespace-free token: `path`, `path:line`, `path:line-line`, `path#heading`, `git:<short-sha>`, `git:#<pr-number>`, the reserved `user:delegated`, `record:<system>/<id>`, or `doc:<slug>#<section>`. The schema enforces the single-token shape; which form it is, and whether the path exists, is checked by the eval runner. |
 | `irreversible` | no, default `false` | Cannot be walked back once shipped. |
 | `category` | no | One of the six categories from the parse taxonomy. |
 

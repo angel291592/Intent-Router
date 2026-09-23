@@ -133,13 +133,22 @@ Only when the environment actually exposes them, and never as a substitute for t
 |---|---|
 | `path` | a whole file is the evidence |
 | `path:line` | a specific declaration, constant or assertion |
+| `path:line-line` | a range of lines |
 | `path#heading` | a section of a document |
 | `git:<short-sha>` | a commit |
 | `git:#<number>` | a pull request or issue |
+| `user:delegated` | reserved: the user handed the decision back (`ask-protocol.md`) |
+| `record:<system>/<id>` | reserved: a record in a system of record that has no path (`domains.md`) |
+| `doc:<slug>#<section>` | reserved: a document section that has no path (`domains.md`) |
+
+That list is exhaustive: a value matching none of these forms is a defect even when the thing it
+names exists.
 
 Rules: the path must be one that exists in the workspace as reached; never cite a path you did not
 actually open; never cite a plausible-looking path from memory of other projects. A fabricated
-evidence pointer is worse than an admitted unknown, because it survives review.
+evidence pointer is worse than an admitted unknown, because it survives review. The four reserved
+forms name no file, so no existence check can catch a fabricated one — point them only at a commit,
+a record or a section you actually reached.
 
 ## Budget
 
