@@ -1,0 +1,15 @@
+{
+  "order_id": "8821",
+  "account": "acme",
+  "status": "delayed",
+  "placed_at": "2026-09-02",
+  "promised_arrival": "2026-09-11",
+  "amount": 480.0,
+  "currency": "USD",
+  "carrier": "SwiftShip",
+  "carrier_status": "lost_in_transit",
+  "carrier_noted_at": "2026-09-17",
+  "items": [
+    {"sku": "KIT-114", "description": "starter kit", "qty": 2}
+  ]
+}

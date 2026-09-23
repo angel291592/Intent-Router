@@ -1,0 +1,19 @@
+# Account: acme
+
+plan: pro
+guarantee_days: 30
+guarantee_from_order_date: true
+
+entitlements:
+  - priority support
+  - 30-day delivery guarantee (counts from the promised arrival date)
+  - goodwill allowance: 40 USD per rolling year
+
+goodwill_history:
+  used_this_year: 48   # USD; 10% credit (~48 USD) on order 8790 in August
+  remaining_this_year: 0
+
+notes: >
+  Account manager flagged 2026-08: customer rejected a goodwill credit on
+  ticket 4402. Next remedy on this account should be concrete (refund or
+  replacement), not a discount.

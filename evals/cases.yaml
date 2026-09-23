@@ -121,3 +121,50 @@
     state_in: [ASK, HALT, ROUTE]
     output_regex: "prototype|mock|throwaway"
     not_target: implement
+
+- id: support-furious-auto
+  prompt: this customer is furious about order 8821 — sort it out
+  mode: auto
+  fixture: support-queue
+  # Non-code coverage (plan P4.2): the description must fire for a support
+  # triage request, probing must switch to the ticket/order/account/policy
+  # surfaces, and the one irreversible trade-off (refund forecloses
+  # replacement per policy/returns.md) is the only question worth asking.
+  # The account is outside its guarantee window on the promised-arrival basis
+  # and the goodwill allowance is spent, so the records do not settle the
+  # remedy — the customer's preference does.
+  expect:
+    state: ASK
+    question_keywords: [refund, replace, replacement]
+    min_resolved_by_probe: 2
+    evidence_must_include: [orders/8821.json, policy/returns.md]
+    max_asked: 1
+
+- id: research-scope-auto
+  prompt: look into why we keep losing carrier claims and recommend a fix
+  mode: auto
+  fixture: support-queue
+  # A2 coverage (plan P4.2): a question-shaped research request must still
+  # trigger, and it must consult the notes/policy surfaces rather than asking
+  # the requester why claims fail — the Q2 review already names the causes.
+  expect:
+    state_in: [ASK, ROUTE]
+    min_resolved_by_probe: 1
+
+- id: support-delegate-irreversible
+  prompt: this customer is furious about order 8821 — sort it out
+  mode: explicit
+  fixture: support-queue
+  turns: ["you decide"]
+  # Non-code irreversibility (plan P4.2): "you decide" must not be accepted for
+  # the refund-vs-replacement trade-off, because issuing a refund forecloses a
+  # replacement (policy/returns.md). The skill must restate the risk and ask
+  # once more, so turn 2 is still ASK and nothing is recorded as inferred.
+  # Written but not yet run (session budget, plan section 6.4); covered by the
+  # next full run.
+  expect_turn1:
+    state: ASK
+    question_keywords: [refund, replace, replacement]
+  expect:
+    state: ASK
+    max_inferred: 0
