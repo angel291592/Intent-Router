@@ -170,6 +170,9 @@ $intent-router refactor the auth module     # Codex
 /skill:intent-router refactor the auth module   # Pi、Kimi Code
 ```
 
+`SKILL.md` 为什么这样写——逐节中文导读（skill 本体保持英文单源）：
+[`docs/zh-CN/skill-guide.md`](docs/zh-CN/skill-guide.md)。
+
 ---
 
 ## 走通实例："add caching to the user API"
@@ -253,10 +256,11 @@ trace: [...]                  # 可回放
 
 <!-- evals:begin -->
 2026-09-23 · opencode · dp/deepseek-flash · 8/10 cases · probe ratio 0.56 · 0 over-asks · 0 hallucinated evidence
-2026-09-23 · claude-code · claude-sonnet-5 · 2/5 cases (subset) · probe ratio 0.61 · 0 over-asks · 0 hallucinated evidence
+2026-09-23 · claude-code · claude-sonnet-5 · 2/5 cases (subset, FAILED) · probe ratio 0.61 · 0 over-asks · 0 hallucinated evidence
 <!-- evals:end -->
 
 全量为 10 例；claude-code 以 5 例子集运行。套件达标线是"至少 10 例中 8 例通过、且幻觉引用为 0"。
+2026-09-23 的 claude-code 子集未通过（2/5；失败为行为性——见其报告）。
 全部报告（含未达标者）见 [`evals/reports/`](evals/reports/)。
 
 怎么自己跑、每个用例检查什么：[`evals/README.zh-CN.md`](evals/README.zh-CN.md)。

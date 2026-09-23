@@ -184,6 +184,10 @@ $intent-router refactor the auth module     # Codex
 /skill:intent-router refactor the auth module   # Pi, Kimi Code
 ```
 
+Why `SKILL.md` is written the way it is — a section-by-section Chinese walkthrough (the skill
+itself stays English-only):
+[`docs/zh-CN/skill-guide.md`](docs/zh-CN/skill-guide.md).
+
 ---
 
 ## Walkthrough: "add caching to the user API"
@@ -270,11 +274,12 @@ that exists — a single invented citation fails the suite regardless of everyth
 
 <!-- evals:begin -->
 2026-09-23 · opencode · dp/deepseek-flash · 8/10 cases · probe ratio 0.56 · 0 over-asks · 0 hallucinated evidence
-2026-09-23 · claude-code · claude-sonnet-5 · 2/5 cases (subset) · probe ratio 0.61 · 0 over-asks · 0 hallucinated evidence
+2026-09-23 · claude-code · claude-sonnet-5 · 2/5 cases (subset, FAILED) · probe ratio 0.61 · 0 over-asks · 0 hallucinated evidence
 <!-- evals:end -->
 
 A full suite is ten cases; claude-code is run as a five-case subset. The suite passes at at least 8
-of 10 cases with zero hallucinated evidence. Every report, including the failing ones, is in
+of 10 cases with zero hallucinated evidence. The 2026-09-23 claude-code subset did not pass (2 of 5;
+the failures are behavioural — see its report). Every report, including the failing ones, is in
 [`evals/reports/`](evals/reports/).
 
 How to run it yourself, and what each case checks: [`evals/README.md`](evals/README.md).
