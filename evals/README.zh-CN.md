@@ -28,7 +28,7 @@ uv run --with pyyaml --with jsonschema python evals/run.py --selftest
 uv run --with pyyaml --with jsonschema python evals/run.py \
     --rescore evals/reports/raw/opencode
 
-# Tier 2 — 6 次会话：认证、skill 可见性、可解析性。任何昂贵跑之前先跑它。
+# Tier 2 — 1 次用例会话 + 2 次预检：认证、skill 可见性、可解析性。任何昂贵跑之前先跑它。
 uv run --with pyyaml --with jsonschema python evals/run.py \
     --smoke --harness opencode --model <id>
 
@@ -62,8 +62,8 @@ skill 在安装位置是否可见、以及实际应答的 harness 版本与模�
 
 全量一轮是**每 harness 11 次用例会话**（10 例，加两轮用例额外 1 次），每次 1–6 轮模型调用，外加
 **2 次预检会话**——共 13 次会话，`--jobs 4` 下约 16 分钟。默认**非对称**：opencode 跑全量 10 例，
-claude-code 跑文档写定的 5 例子集，因为两者消耗的是不同额度。同一轮还可用 `--smoke`（2 会话 + 2
-预检）与 Tier 3 定向重跑（受影响用例 × 2 次 + 2 预检）。Tier 0 与 Tier 1 零成本。迭代时用
+claude-code 跑文档写定的 5 例子集，因为两者消耗的是不同额度。同一轮还可用 `--smoke`（1 用例会话 +
+2 预检）与 Tier 3 定向重跑（受影响用例 × 2 次 + 2 预检）。Tier 0 与 Tier 1 零成本。迭代时用
 `--cases <id> --repeat 2`，只在真的需要出数字时跑全量。
 
 ## 4. 怎么读报告

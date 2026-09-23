@@ -31,7 +31,7 @@ uv run --with pyyaml --with jsonschema python evals/run.py --selftest
 uv run --with pyyaml --with jsonschema python evals/run.py \
     --rescore evals/reports/raw/opencode
 
-# Tier 2 — six sessions: auth, skill visibility, parseability. Run before any expensive run.
+# Tier 2 — 1 case session + 2 preflight sessions: auth, skill visibility, parseability. Run before any expensive run.
 uv run --with pyyaml --with jsonschema python evals/run.py \
     --smoke --harness opencode --model <id>
 
@@ -71,7 +71,7 @@ A full suite is **11 case sessions per harness** (ten cases, plus one extra turn
 case), each 1–6 model calls, plus **2 preflight sessions** — 13 sessions, about 16 minutes with
 `--jobs 4`. It is not symmetric by default: opencode carries the full ten cases, claude-code a
 documented five-case subset, because the two draw on different budgets. The same run also has
-`--smoke` (2 sessions + 2 preflight) and Tier 3 re-runs (affected cases × 2, plus 2 preflight).
+`--smoke` (1 case session + 2 preflight) and Tier 3 re-runs (affected cases × 2, plus 2 preflight).
 Tier 0 and Tier 1 cost nothing. Iterate on `--cases <id> --repeat 2` and keep a full suite for the
 moment you need numbers.
 
