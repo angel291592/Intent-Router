@@ -41,8 +41,9 @@ lockfile、没有运行时。评测工具在 `evals/` 下，可以通过 `uv run
 ```bash
 uv run --with pyyaml --with jsonschema python evals/run.py --selftest
 uv run --with pyyaml --with jsonschema python evals/run.py --check-frontmatter skills/intent-router/SKILL.md
+uv run --with pyyaml --with jsonschema python evals/run.py --check-docs
 uv run --with pyyaml --with jsonschema python evals/run.py --harness claude-code --cases <id> --repeat 1
 ```
 
-前两条是离线的，零成本。第三条会起真实会话——跑全量之前请先看
+前三条是离线的，零成本。第四条会起真实会话——跑全量之前请先看
 [`evals/README.zh-CN.md`](evals/README.zh-CN.md) 里的成本说明。

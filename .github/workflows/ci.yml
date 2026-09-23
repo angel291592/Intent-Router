@@ -1,9 +1,9 @@
 name: ci
 
 # Offline gate only. This workflow never starts an agent session and never calls a model:
-# `--selftest` and `--check-frontmatter` are the two zero-cost tiers described in evals/README.md.
-# The paid tiers (--smoke, --cases, the full suite) require credentials and a real harness, and
-# belong on a maintainer's machine, not in CI.
+# `--selftest`, `--check-frontmatter` and `--check-docs` are the three zero-cost tiers described
+# in evals/README.md. The paid tiers (--smoke, --cases, the full suite) require credentials and a
+# real harness, and belong on a maintainer's machine, not in CI.
 
 on:
   push:
@@ -29,3 +29,6 @@ jobs:
 
       - name: SKILL.md frontmatter conformance (offline)
         run: uv run --with pyyaml --with jsonschema python evals/run.py --check-frontmatter skills/intent-router/SKILL.md
+
+      - name: Docs and version conformance (offline)
+        run: uv run --with pyyaml --with jsonschema python evals/run.py --check-docs

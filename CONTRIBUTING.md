@@ -48,8 +48,9 @@ One thing per commit. English, imperative, prefixed `feat:` / `fix:` / `docs:` /
 ```bash
 uv run --with pyyaml --with jsonschema python evals/run.py --selftest
 uv run --with pyyaml --with jsonschema python evals/run.py --check-frontmatter skills/intent-router/SKILL.md
+uv run --with pyyaml --with jsonschema python evals/run.py --check-docs
 uv run --with pyyaml --with jsonschema python evals/run.py --harness claude-code --cases <id> --repeat 1
 ```
 
-The first two are offline and cost nothing. The third starts a real session — see
+The first three are offline and cost nothing. The fourth starts a real session — see
 [`evals/README.md`](evals/README.md) for what a full suite costs before running one.

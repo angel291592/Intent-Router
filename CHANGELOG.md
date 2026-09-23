@@ -7,6 +7,33 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
 
 ## [Unreleased]
 
+- Evals: `cases.yaml` now rejects unknown case-level and assertion keys at load time, listing every
+  problem at once. A misspelled assertion key used to be silently dropped by the checker, turning
+  the case into an empty assertion that could never fail.
+- Docs: the claude-code reports are withdrawn from the repository and Claude Code is marked
+  `spec-compatible` again. The channel they ran through forced `thinking` off and answered English
+  prompts in Chinese, so the failures cannot be attributed to the skill — publishing them would be
+  either unfair to the skill or misleading about the harness. The methodology and cases remain
+  public; the README still quotes only numbers from committed reports (opencode full suite 8/10).
+- Docs: the install command now sits above the fold on both READMEs, and a demo slot is reserved
+  (`<!-- demo:begin -->` in both READMEs, assets under `docs/assets/`).
+- CI: a fourth offline gate, `--check-docs`, checks that every relative link in tracked markdown
+  resolves, that the SKILL.md version matches the CHANGELOG, that both READMEs' evals blocks quote
+  a tracked report verbatim, and that every `references/` / `schema/` path named inside the skill
+  exists. Zero sessions, zero cost.
+
+- Evals：`cases.yaml` 在加载期拒绝未知的 case 级与断言级键，并一次性列出全部问题。此前拼错的
+  断言键会被检查器静默丢弃，让该用例变成一个永不可能失败的空断言。
+- Docs：claude-code 的评测报告从仓库撤下，Claude Code 重新标注为 `spec-compatible`。当次运行
+  所经通道强制关闭了 `thinking`、对英文请求也以中文作答，失败无法归因于 skill 本身——公开它们
+  要么对 skill 不公，要么对 harness 误导。方法论与用例仍公开；README 仍然只引用已入库报告里的
+  数字（opencode 全量 8/10）。
+- Docs：安装命令上移至双语 README 首屏，并预留 demo 位（双语 README 的 `<!-- demo:begin -->`，
+  产物放 `docs/assets/`）。
+- CI：新增第四道离线闸门 `--check-docs`：校验 git 跟踪的 markdown 内相对链接全部可达、SKILL.md
+  版本号与 CHANGELOG 一致、双语 README 的 evals 块逐字来自某份已入库报告、skill 正文中点名的
+  `references/` / `schema/` 路径全部存在。零会话、零成本。
+
 ## [0.1.1] — 2026-09-23
 
 - Skill: output format now carries a hard quoting rule and a worked example whose scalars contain a
