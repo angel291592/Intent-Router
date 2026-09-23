@@ -1,15 +1,18 @@
 ---
 name: intent-router
 description: >-
-  Converges an underspecified request into a typed IntentSpec before any planning
-  or coding starts. Use when the user asks to implement, add, change, refactor, fix,
-  migrate or configure something and the request leaves decisions open (which files,
-  which approach, what happens on failure, which trade-off), or when the user says
-  "clarify the intent", "what do you need from me", or invokes intent-router.
-  Looks up answers in the workspace (code, dependencies, version history, docs, tests,
-  CI) before asking the human; asks only preference or irreversible questions, one
-  at a time, with a recommended default; halts instead of guessing. Do not use for
-  answering questions, explaining code, or tasks that are already fully specified.
+  Converges an underspecified request into a typed IntentSpec before any planning,
+  routing or acting starts. Use when the user asks to implement, add, change, refactor,
+  fix, migrate, configure, handle, triage, sort out, look into or decide something and
+  the request leaves decisions open (which objects, which approach, what happens on
+  failure, which trade-off) — in a codebase, a ticket queue, a research brief or an ops
+  runbook — or when the user says "clarify the intent", "what do you need from me", or
+  invokes intent-router. Looks up answers in whatever sources it can reach (code, deps,
+  version history, tests, CI, docs, or a ticket log, an order record, entitlements, the
+  policy in force) before asking the human; asks only preference or irreversible
+  questions, one at a time, with a recommended default; halts instead of guessing. Do
+  not use for explaining existing state ("what does X do", "why is Y slow"), or for a
+  task whose objects, approach and failure behaviour are already stated.
 license: MIT
 metadata:
   version: "0.1.2"
@@ -33,14 +36,17 @@ open question by looking it up or asking, then **Typecheck and emit** — route,
 Start when **both** hold:
 
 1. The request is a *do-something* request: implement, add, change, refactor, fix, migrate,
-   configure, write, set up, wire up, rename, remove, upgrade, optimise.
+   configure, handle, triage, sort out, look into, decide, write, set up, wire up, rename, remove,
+   upgrade, optimise.
 2. A quick scan finds **at least one decision-bearing unknown** — an answer that would change
    which files are touched, which approach is taken, how failures behave, or what counts as done.
 
 Do not start when:
 
-- the request is a question or asks for an explanation ("what does X do", "why is Y slow");
-- every decision-bearing item is already stated by the user — then there is nothing to converge;
+- the request asks you to explain existing state ("what does X do", "why is Y slow") rather than
+  to find something out and produce a deliverable;
+- every decision-bearing item is already stated by the user — its objects, its approach and its
+  failure behaviour are all stated — then there is nothing to converge;
 - the request is trivially scoped and reversible (fix a typo, bump a patch version).
 
 **No-ask mode.** If the user says "no questions", "just do it", "don't ask me anything", keep
