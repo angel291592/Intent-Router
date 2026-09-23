@@ -7,6 +7,8 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-09-23
+
 - Schema: `evidence` now carries a `pattern` requiring a single whitespace-free token. The field's
   own documentation had always claimed the schema enforced this, but the schema accepted any
   non-empty string — so anyone validating a spec against it saw a reasoning sentence pass as a
@@ -316,7 +318,8 @@ First release. L0 only: a prompt-only skill with no dependencies and no keys. /
 - L1 and L2 backends are declared and not implemented.
 - L1 与 L2 后端只做声明，未实现。
 
-[Unreleased]: https://github.com/angel291592/Intent-Router/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/angel291592/Intent-Router/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/angel291592/Intent-Router/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/angel291592/Intent-Router/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/angel291592/Intent-Router/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/angel291592/Intent-Router/compare/v0.1.0...v0.1.1
