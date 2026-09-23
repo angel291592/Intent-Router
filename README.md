@@ -37,7 +37,8 @@ Same three passes. Same stopping predicate. Only the places it looks change.
 
 <!-- demo:begin -->
 What a real run looks like — one sentence in, it reads the repo itself and asks only what no
-file can answer:
+file can answer. From the measured run behind the numbers below: 8 of 10 cases, 0 hallucinated
+evidence.
 
 <p align="center">
   <img src="docs/assets/demo-1-probe.png" width="760" alt="Intent-Router loads automatically and probes the repo: package.json, src/routes/users.ts, src/cache/redis.ts and more"><br><br>

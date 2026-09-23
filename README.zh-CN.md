@@ -36,7 +36,8 @@
 同样三趟、同样的停止谓词。变的只有"它去哪里查"。
 
 <!-- demo:begin -->
-一次真实运行的样子——你只说一句话，它自己去读仓库，只问文件回答不了的那一个问题：
+一次真实运行的样子——你只说一句话，它自己去读仓库，只问文件回答不了的那一个问题。画面来自
+下方数字背后的实测运行：10 例中 8 例通过，0 条幻觉引用。
 
 <p align="center">
   <img src="docs/assets/demo-1-probe.png" width="760" alt="Intent-Router 自动加载并探测仓库：package.json、src/routes/users.ts、src/cache/redis.ts 等"><br><br>
