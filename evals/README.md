@@ -69,11 +69,9 @@ and `--rescore` never reach preflight and start no session.
 
 A full suite is **11 case sessions per harness** (ten cases, plus one extra turn for the two-turn
 case), each 1–6 model calls, plus **2 preflight sessions** — 13 sessions, about 16 minutes with
-`--jobs 4`. It is not symmetric by default: opencode carries the full ten cases, claude-code a
-documented five-case subset, because the two draw on different budgets. The same run also has
-`--smoke` (1 case session + 2 preflight) and Tier 3 re-runs (affected cases × 2, plus 2 preflight).
-Tier 0 and Tier 1 cost nothing. Iterate on `--cases <id> --repeat 2` and keep a full suite for the
-moment you need numbers.
+`--jobs 4`. The same run also has `--smoke` (1 case session + 2 preflight) and Tier 3 re-runs
+(affected cases × 2, plus 2 preflight). Tier 0 and Tier 1 cost nothing. Iterate on
+`--cases <id> --repeat 2` and keep a full suite for the moment you need numbers.
 
 ## 4. Reading a report
 

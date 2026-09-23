@@ -11,9 +11,11 @@ invoke this one by hand. Checked 2026-09-22.
 | **spec-compatible** | The environment's own documentation says it loads standard `SKILL.md` skills from a directory this skill can be installed into. Not exercised here. |
 | **needs-adapter** | No official documentation of a `SKILL.md` mechanism was found. Paste the body of `SKILL.md` into the system prompt or the environment's instruction file instead. |
 
-**Claude Code and OpenCode are marked verified.** Both were run with the suite and their reports are
-in `evals/reports/`. Every other row is a documentation claim taken from that environment's own
-docs.
+**OpenCode is marked verified.** It was run with the suite and its report is in `evals/reports/`.
+Claude Code was run too, but its reports are not published: the channel they ran through restricted
+the model in ways that make the results unattributable to the skill, so it is held at
+`spec-compatible` until a clean-channel run passes. Every other row is a documentation claim taken
+from that environment's own docs.
 
 ## Table
 
@@ -24,7 +26,7 @@ stands for `intent-router`.
 
 | harness | project directory | global directory | auto-loads by description | explicit invocation | status | docs |
 |---|---|---|---|---|---|---|
-| Claude Code | `.claude/skills/` | `~/.claude/skills/` | yes | `/<skill>` | verified | [docs](https://docs.claude.com/en/docs/claude-code/skills) |
+| Claude Code | `.claude/skills/` | `~/.claude/skills/` | yes | `/<skill>` | spec-compatible | [docs](https://docs.claude.com/en/docs/claude-code/skills) |
 | OpenCode | `.agents/skills/` | `~/.config/opencode/skills/` | yes | name the skill in the prompt | verified | [docs](https://opencode.ai/docs/skills) |
 | Codex CLI | `.agents/skills/` | `~/.agents/skills/` | yes | `$<skill>`, or `/skills` | spec-compatible | [docs](https://github.com/openai/codex/blob/main/docs/skills.md) |
 | Cursor | `.agents/skills/`, `.cursor/skills/` | `~/.cursor/skills/`, `~/.agents/skills/` | yes | `/<skill>` | spec-compatible | [docs](https://cursor.com/docs/context/skills) |

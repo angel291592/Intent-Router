@@ -256,12 +256,10 @@ trace: [...]                  # 可回放
 
 <!-- evals:begin -->
 2026-09-23 · opencode · dp/deepseek-flash · 8/10 cases · probe ratio 0.56 · 0 over-asks · 0 hallucinated evidence
-2026-09-23 · claude-code · claude-sonnet-5 · 2/5 cases (subset, FAILED) · probe ratio 0.61 · 0 over-asks · 0 hallucinated evidence
 <!-- evals:end -->
 
-全量为 10 例；claude-code 以 5 例子集运行。套件达标线是"至少 10 例中 8 例通过、且幻觉引用为 0"。
-2026-09-23 的 claude-code 子集未通过（2/5；失败为行为性——见其报告）。
-全部报告（含未达标者）见 [`evals/reports/`](evals/reports/)。
+全量为 10 例，达标线是"至少 10 例中 8 例通过、且幻觉引用为 0"。每一份已发布报告都在
+[`evals/reports/`](evals/reports/)。
 
 怎么自己跑、每个用例检查什么：[`evals/README.zh-CN.md`](evals/README.zh-CN.md)。
 
@@ -278,16 +276,17 @@ trace: [...]                  # 可回放
 | **spec-compatible** | 其官方文档声明会加载标准 `SKILL.md`；本项目未实测 |
 | **needs-adapter** | 未查到任何 skill 机制的官方文档；把 `SKILL.md` 贴进系统提示 |
 
-**verified**——Claude Code、OpenCode
+**verified**——OpenCode
 
-**spec-compatible**——Codex CLI、Cursor、GitHub Copilot（CLI 与 VS Code）、
+**spec-compatible**——Claude Code、Codex CLI、Cursor、GitHub Copilot（CLI 与 VS Code）、
 Gemini CLI、Antigravity、Windsurf、DeepSeek Harness（dsh）、Pi、Qwen Code、Kimi Code CLI、Trae、
 Cline、Roo Code、Kilo Code、Goose、OpenHands、Amp、Zed、Warp、Kiro CLI、Junie、Augment、
 Factory Droid
 
 **needs-adapter**——Continue
 
-目前有两项为 **verified**：二者都用评测跑过，报告在 `evals/reports/`。各自的目录、调用语法与注意事项：
+目前 OpenCode 一项为 **verified**：用评测跑过，报告在 `evals/reports/`。其余各行是文档声明。
+各自的目录、调用语法与注意事项：
 [`references/harness-compat.md`](skills/intent-router/references/harness-compat.md)。
 
 ---

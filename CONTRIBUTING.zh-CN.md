@@ -30,7 +30,7 @@ lockfile、没有运行时。评测工具在 `evals/` 下，可以通过 `uv run
 
 **状态标注要诚实。** 兼容性声明使用三态：`verified`（实际跑过，有报告记录）、`spec-compatible`
 （官方文档声明支持，但未实测）、`needs-adapter`（未查到任何机制）。没有报告作支撑，不得把某一行
-升级。
+升级；撤下报告的 harness 应回落为 `spec-compatible`，不得保留 `verified` 标签。
 
 ## 提交信息
 

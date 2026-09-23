@@ -9,6 +9,10 @@ MAINTENANCE.md
 # 评测原始输出（体积大、含模型全文），报告 .md 本身入库
 evals/reports/raw/
 
+# claude-code 的评测结果暂不公开（通道受限，thinking 被迫关闭，失败无法归因于 skill）；
+# 方法论与用例仍公开。将来在干净通道复测通过后，删掉本行并把报告重新入库。
+evals/reports/*-claude-code.md
+
 # OS 垃圾文件
 Thumbs.db
 Desktop.ini

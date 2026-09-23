@@ -35,7 +35,8 @@ a translated copy of the instructions would be mistaken for the executable one a
 
 **Honest status.** Compatibility claims use three states: `verified` (run, with a report),
 `spec-compatible` (documented, not exercised), `needs-adapter` (no documented mechanism). Do not
-promote a row without a report behind it.
+promote a row without a report behind it — and a harness whose report is withdrawn drops back to
+`spec-compatible`; it may not keep the `verified` label.
 
 ## Commits
 
