@@ -133,11 +133,18 @@
   # The account is outside its guarantee window on the promised-arrival basis
   # and the goodwill allowance is spent, so the records do not settle the
   # remedy — the customer's preference does.
+  # evidence_must_include matches by substring (the include semantics), so a
+  # source counts whether the run spelled its pointer as a raw path or with the
+  # reserved namespaces P3 introduced — the 2026-09-23 glm-5.3-flash runs
+  # emitted record:orders/8821 and doc:returns-policy#remedy-exclusivity,
+  # imitating the route-support.yaml worked example. The behaviour required is
+  # unchanged: the order record and the returns policy must both have been
+  # probed and cited.
   expect:
     state: ASK
     question_keywords: [refund, replace, replacement]
     min_resolved_by_probe: 2
-    evidence_must_include: [orders/8821.json, policy/returns.md]
+    evidence_must_include: [orders/8821, returns]
     max_asked: 1
 
 - id: research-scope-auto

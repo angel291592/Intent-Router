@@ -94,7 +94,7 @@ spec）、`degraded output`（产出了但解析不了）、`timeouts`、`harnes
 | `id` | 稳定标识，同时是原始输出的文件名 |
 | `prompt` | 用户原样输入的内容 |
 | `mode` | `auto`（靠 description 自动触发）或 `explicit`（点名 skill，调用语法由 runner 按 harness 映射） |
-| `fixture` | `user-api` 或 `empty` |
+| `fixture` | `user-api`（TypeScript 假项目）或 `empty`（无来源）；`support-queue` 承载非代码用例 |
 | `turns` | 可选的后续回答；有它时 `expect` 作用于最后一轮、`expect_turn1` 作用于第一轮 |
 | `expect` | 断言，必须全部成立 |
 | `expect_turn1` | 多轮用例第一轮的可选断言 |
@@ -102,7 +102,7 @@ spec）、`degraded output`（产出了但解析不了）、`timeouts`、`harnes
 
 断言键：`state`、`state_in`、`cause`、`should_trigger`、`asked_eq`、`max_asked`、
 `min_resolved_by_probe`、`resolved_by_probe_eq`、`probed_constraints_eq`、`max_inferred`、
-`unknown_empty`、`has_source`、`open_fields_min`、`evidence_must_include`（前缀匹配）、
+`unknown_empty`、`has_source`、`open_fields_min`、`evidence_must_include`（子串匹配）、
 `evidence_regex`、`question_keywords`（任一命中）、`text_keywords`（任一命中）、`output_regex`
 （不区分大小写）、`question_lang`、`not_target`。
 
@@ -117,5 +117,5 @@ spec"时恒被检查，用例无需列出。运行上报的失败名还包括 `t
 
 - 长到耗尽提问预算的对话（四轮及以上）。
 - 第二个生态的 fixture；现有 fixture 全是 TypeScript/Node。
-- 非编程领域——`references/domains.md` 里的探测面未被实测。
+- 非编程领域——support-queue 用例已存在，但还没有已入库的报告覆盖它们。
 - 自动触发可靠性只测了两例（一例该触发、一例不该触发），所以该比率是指示性的，不是精确值。

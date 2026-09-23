@@ -107,7 +107,7 @@ Cases live in `cases.yaml`. Keys:
 | `id` | stable identifier, also the raw-transcript filename |
 | `prompt` | exactly what the user types |
 | `mode` | `auto` (rely on the description firing) or `explicit` (name the skill; the runner maps the syntax per harness) |
-| `fixture` | `user-api` or `empty` |
+| `fixture` | `user-api` (TypeScript project) or `empty` (no sources); `support-queue` holds the non-code cases |
 | `turns` | optional follow-up answers; `expect` then applies to the last turn, and `expect_turn1` to the first |
 | `expect` | assertions, all of which must hold |
 | `expect_turn1` | optional assertions for the first turn of a multi-turn case |
@@ -115,7 +115,7 @@ Cases live in `cases.yaml`. Keys:
 
 Assertion keys: `state`, `state_in`, `cause`, `should_trigger`, `asked_eq`, `max_asked`,
 `min_resolved_by_probe`, `resolved_by_probe_eq`, `probed_constraints_eq`, `max_inferred`,
-`unknown_empty`, `has_source`, `open_fields_min`, `evidence_must_include` (prefix match),
+`unknown_empty`, `has_source`, `open_fields_min`, `evidence_must_include` (substring match),
 `evidence_regex`, `question_keywords` (any match), `text_keywords` (any match), `output_regex`
 (case-insensitive), `question_lang`, `not_target`.
 
@@ -132,6 +132,6 @@ report's iteration section.
 
 - A conversation long enough to exhaust the ask budget (four turns or more).
 - A second fixture in another ecosystem; everything here is TypeScript/Node.
-- Non-code domains — the probe surfaces in `references/domains.md` are unexercised.
+- Non-code domains — the support-queue cases exist, but no published report covers them yet.
 - Auto-trigger reliability is measured on two cases only, one that should fire and one that should
   not, so the rate is indicative rather than precise.

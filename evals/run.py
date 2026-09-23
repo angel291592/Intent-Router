@@ -570,7 +570,21 @@ def _invoke_once(cmd: list[str], cwd: Path) -> tuple[str, str, int]:
             encoding="utf-8",
             errors="replace",
             timeout=TIMEOUT,
-            env={**os.environ, "PYTHONUTF8": "1"},
+            env={
+                **os.environ,
+                "PYTHONUTF8": "1",
+                # opencode's Claude Code compatibility layer injects the user's
+                # global ~/.claude/CLAUDE.md into every session. On this machine
+                # that file is a 13.5k-token personal workflow protocol whose
+                # first line is "always reply in Chinese" — it made an English
+                # eval prompt get answered in Chinese and drove the model to
+                # classify eval prompts as real work items. The evaluation must
+                # measure the skill, not the operator's global instructions
+                # (plan §0.2 logic, now enforced for opencode too). Skills are
+                # unaffected: the second flag keeps .claude/skills loading on.
+                "OPENCODE_DISABLE_CLAUDE_CODE_PROMPT": "1",
+                "OPENCODE_DISABLE_CLAUDE_CODE_SKILLS": "0",
+            },
         )
     except subprocess.TimeoutExpired:
         return "", f"timeout after {TIMEOUT}s", 124
@@ -925,7 +939,7 @@ def check_turn(
         elif key == "evidence_must_include":
             pointers = [p for _, p in evidence_items(spec)]
             missing = [
-                prefix for prefix in want if not any(p.startswith(prefix) for p in pointers)
+                fragment for fragment in want if not any(fragment in p for p in pointers)
             ]
             if missing:
                 measured["evidence_missing"] = missing
@@ -1697,6 +1711,106 @@ def selftest() -> int:
     expect(
         "the template shows a single-quoted scalar containing '{'",
         bool(re.search(r"'[^'\n]*\{[^'\n]*'", template)),
+    )
+
+    print("a measured success replayed as a Tier 0 case")
+    # The support spec below is the real opencode-go2/glm-5.3-flash output from
+    # the 2026-09-23 run (raw/opencode archive), kept after the operator
+    # deferred the full-suite re-measurement. The run probed six non-code
+    # surfaces, asked only the one irreversible remedy question, and failed the
+    # old prefix-based evidence_must_include solely because it spelled its
+    # pointers with the record:/doc: namespaces this round introduced. Replayed
+    # here against the substring-based assertion, it pins the successful
+    # non-code behaviour as a permanent free regression test.
+    measured = yaml.safe_load(
+        """
+        spec_version: "0.1"
+        request: 'this customer is furious about order 8821 — sort it out'
+        intent: resolve_customer_complaint
+        objects:
+          - order 8821
+          - acme account ticket 4471
+        constraints:
+          - source: probed
+            text: 'order 8821 is 12 days past its promised arrival (2026-09-11) and the carrier marked it lost_in_transit on 2026-09-17; the customer has received nothing'
+            evidence: record:orders/8821
+            category: scope
+          - source: probed
+            text: 'the account is on the Pro plan with a 30-day delivery guarantee counted from the promised arrival date, so the order qualifies; the goodwill allowance is exhausted (48 USD used of 40 USD), and the account manager noted the next remedy must be concrete — refund or replacement, not a discount or credit'
+            evidence: record:accounts/acme
+            category: scope
+          - source: probed
+            text: 'on the prior ticket 4402 this customer rejected a goodwill credit saying it does not cover their own commitments; the account manager recorded "money back or nothing, next time"'
+            evidence: record:tickets/4402
+            category: approach
+          - source: probed
+            text: 'the returns policy permits both a full refund and a free replacement for a carrier-marked lost order, and the carrier marker alone satisfies the loss requirement — but the two remedies are mutually exclusive once one is issued, and that is not reversible later'
+            evidence: doc:returns-policy#remedy-exclusivity
+            category: approach
+          - source: probed
+            text: 'the SwiftShip lost-parcel claim must be filed within 21 days of the lost marker, i.e. by 2026-10-08, or it is denied without review; the declared value must be cross-checked against the amount paid before filing'
+            evidence: doc:carrier-claims-policy#claim-window
+            category: non_goals_constraints
+          - source: probed
+            text: 'the Q2 claims review recommends working the carrier claim and the customer remedy in parallel, not in sequence — waiting for the claim before answering the customer is what drove the 6.2-day average first-offer time'
+            evidence: notes/claims-review-2026-q2.md#recommendation-carried-forward
+            category: approach
+        unknown:
+          - field: remedy_choice
+            kind: ask
+            category: failure_behavior
+            note: 'ticket 4471 states the customer has not said what they want and warns not to assume a refund or a replacement; the policy makes this choice permanent — a refund closes the case and excludes any later replacement'
+        decision:
+          state: ASK
+          confidence: 0.6
+          question:
+            text: 'For order 8821, should I issue the full refund of 480 USD, or dispatch a free replacement shipment? The two are mutually exclusive under the returns policy — once a refund is issued, no replacement can follow for this order.'
+            why_human: 'The customer has not stated a remedy on ticket 4471, and the policy makes this choice permanent, so it is a preference plus an irreversible decision that cannot be looked up.'
+            recommended: A
+            options:
+              - id: A
+                text: 'Full refund of 480 USD — the account manager''s note on ticket 4402 was "money back or nothing", and the customer rejected a credit last time.'
+              - id: B
+                text: 'Free replacement shipment of the 2 starter kits — keeps the customer supplied if the goods themselves are what their own commitment needs.'
+              - id: C
+                text: 'Ask the customer first before committing — costs a reply cycle on an already-escalating ticket, but puts the permanent choice in their hands.'
+        resolution:
+          unknowns_found: 7
+          resolved_by_probe: 6
+          asked: 0
+          inferred: 0
+          ask_budget: 3
+        trace:
+          - step: parse
+            detail: 'normalised to resolve_customer_complaint; decision-bearing unknowns identified: what_happened, entitlement, prior_handling, allowed_remedies, claim_deadline, claim_parallel_handling, remedy_choice'
+          - step: probe
+            detail: 'read the order record — 12 days late, carrier-marked lost on 2026-09-17, which settles what_happened'
+            evidence: record:orders/8821
+          - step: probe
+            detail: 'read the account record — Pro plan, guarantee from promised arrival, goodwill exhausted, manager requires a concrete remedy, which settles entitlement'
+            evidence: record:accounts/acme
+          - step: probe
+            detail: 'read prior ticket 4402 — credit was rejected, "money back or nothing", which settles prior_handling'
+            evidence: record:tickets/4402
+          - step: probe
+            detail: 'read the returns policy — both remedies permitted, mutually exclusive, marker alone proves loss, which settles allowed_remedies'
+            evidence: doc:returns-policy#remedies
+          - step: probe
+            detail: 'read the carrier-claims policy — 21-day window from 2026-09-17 gives a 2026-10-08 deadline, which settles claim_deadline'
+            evidence: doc:carrier-claims-policy#claim-window
+          - step: probe
+            detail: 'read the Q2 claims review — work the claim and the remedy in parallel, which settles claim_parallel_handling'
+            evidence: notes/claims-review-2026-q2.md#recommendation-carried-forward
+          - step: typecheck
+            detail: 'one unknown remains and it is an irreversible preference only the human can settle; the budget allows a question — ASK, not halt or guess'
+          - step: emit
+            detail: 'emitting the snapshot with one question and waiting; asked stays 0 until an answer arrives'
+        """
+    )
+    outcome = check(cases["support-furious-auto"], record_for(measured), validator)
+    expect(
+        f"the measured support spec satisfies its case: {outcome['failures'] or 'no failures'}",
+        outcome["pass"],
     )
 
     print("report rendering")
