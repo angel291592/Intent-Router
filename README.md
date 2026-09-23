@@ -61,9 +61,9 @@ Manual install, or an agent the installer doesn't know: [Quick start](#quick-sta
 
 - [The problem](#the-problem) · [How it works](#how-it-works) · [The four decision states](#the-four-decision-states)
 - [Two walkthroughs](#two-walkthroughs) — one in a codebase, one in a support queue
-- [The artifact](#the-artifact) · [Where it works](#where-it-works) · [Quick start](#quick-start) · [Evals](#evals)
+- [How it compares](#how-it-compares) · [The artifact](#the-artifact) · [Where it works](#where-it-works) · [Quick start](#quick-start) · [Evals](#evals)
 - [Design principles](#design-principles) · [Limitations](#limitations)
-- [How it compares](#how-it-compares) · [Backends](#backends) · [Prior art](#prior-art) · [Contributing](#contributing)
+- [Backends](#backends) · [Prior art](#prior-art) · [Contributing](#contributing)
 
 ---
 
@@ -221,6 +221,29 @@ record, not an opinion; asking it is the bug this thing exists to remove.
 > [`references/domains.md`](skills/intent-router/references/domains.md) — the skill is built for
 > it and documents it, but no published eval run covers it yet. See
 > [Where it works](#where-it-works).
+
+---
+
+## How it compares
+
+**Intent-Router is the layer four good tools leave empty: deciding whether to look, ask, or act —
+before acting.** grill-me converges beautifully, states the right principle, and keeps nothing.
+spec-kit keeps everything and makes you buy its whole workflow to get it. Routers decide fast and
+can't handle ambiguity at all. Jev returns exactly the typed, calibrated decision you want — *once
+the intent is already clear*, which is the hard part.
+
+<details>
+<summary>The full comparison table — read the row gaps, not the checkmarks</summary>
+
+| | Converges vague input | Doesn't ask what it can look up | Machine-readable artifact | Decidable stop | Fires automatically |
+|---|---|---|---|---|---|
+| **Intent-Router** | ✅ | ✅ `PROBE`, with evidence and a metric | ✅ `IntentSpec` | ✅ predicate | ✅ |
+| [grill-me](https://github.com/mattpocock/skills) | ✅ rounds/frontier | ⚠️ principle, not tracked (no evidence, no metric) | ❌ stateless by design | ⚠️ "frontier empty" | ❌ manual |
+| [spec-kit `/clarify`](https://github.com/github/spec-kit) | ✅ 11-category scan | ❌ asks it | ✅ writes back to `spec.md` | ✅ ≤10 questions | ⚠️ needs `specs/<feature>/` + its workflow |
+| [semantic-router](https://github.com/aurelio-labs/semantic-router) / [RouteLLM](https://github.com/lm-sys/RouteLLM) | ❌ returns `None` | — | ❌ a label | ✅ threshold | ✅ |
+| [Jev](https://www.jevai.org/) (typed decisions) | ❌ needs clear input | — | ✅ typed + calibrated | ✅ confidence | ✅ |
+
+</details>
 
 ---
 
@@ -420,29 +443,6 @@ Stated up front, because you'll hit them.
   `description`; none of them guarantee a match. Invoke it explicitly when it matters.
 - **Don't let it validate itself.** If you ever train a classifier on Intent-Router's own labels,
   you get a system growing confident in its own mistakes. Label from independent evidence.
-
----
-
-## How it compares
-
-**Intent-Router is the layer four good tools leave empty: deciding whether to look, ask, or act —
-before acting.** grill-me converges beautifully, states the right principle, and keeps nothing.
-spec-kit keeps everything and makes you buy its whole workflow to get it. Routers decide fast and
-can't handle ambiguity at all. Jev returns exactly the typed, calibrated decision you want — *once
-the intent is already clear*, which is the hard part.
-
-<details>
-<summary>The full comparison table — read the row gaps, not the checkmarks</summary>
-
-| | Converges vague input | Doesn't ask what it can look up | Machine-readable artifact | Decidable stop | Fires automatically |
-|---|---|---|---|---|---|
-| **Intent-Router** | ✅ | ✅ `PROBE`, with evidence and a metric | ✅ `IntentSpec` | ✅ predicate | ✅ |
-| [grill-me](https://github.com/mattpocock/skills) | ✅ rounds/frontier | ⚠️ principle, not tracked (no evidence, no metric) | ❌ stateless by design | ⚠️ "frontier empty" | ❌ manual |
-| [spec-kit `/clarify`](https://github.com/github/spec-kit) | ✅ 11-category scan | ❌ asks it | ✅ writes back to `spec.md` | ✅ ≤10 questions | ⚠️ needs `specs/<feature>/` + its workflow |
-| [semantic-router](https://github.com/aurelio-labs/semantic-router) / [RouteLLM](https://github.com/lm-sys/RouteLLM) | ❌ returns `None` | — | ❌ a label | ✅ threshold | ✅ |
-| [Jev](https://www.jevai.org/) (typed decisions) | ❌ needs clear input | — | ✅ typed + calibrated | ✅ confidence | ✅ |
-
-</details>
 
 ---
 

@@ -60,9 +60,9 @@ npx skills add angel291592/Intent-Router
 
 - [问题在哪](#问题在哪) · [它怎么工作](#它怎么工作) · [四个决策态](#四个决策态)
 - [两个走通实例](#两个走通实例)——一个在代码仓库里，一个在客服工单里
-- [产物](#产物) · [适用领域](#适用领域) · [快速开始](#快速开始) · [评测（Evals）](#评测evals)
+- [横向对比](#横向对比) · [产物](#产物) · [适用领域](#适用领域) · [快速开始](#快速开始) · [评测（Evals）](#评测evals)
 - [七条设计原则](#七条设计原则) · [局限](#局限)
-- [横向对比](#横向对比) · [后端分层（Backends）](#后端分层backends) · [相关工作（Prior art）](#相关工作prior-art) · [参与贡献](#参与贡献)
+- [后端分层（Backends）](#后端分层backends) · [相关工作（Prior art）](#相关工作prior-art) · [参与贡献](#参与贡献)
 
 ---
 
@@ -201,6 +201,28 @@ ASK    退款还是换货      → 政策两个都允许。发一个就等于否
 > **诚实声明：** 实例 A 是[评测套件](#评测evals)覆盖、也是上面截图对应的那个领域。实例 B 是按
 > [`references/domains.md`](skills/intent-router/references/domains.md) 里已写明的探测面推演出来的
 > ——skill 是为它设计、也为它写了规格，但**目前还没有公开评测跑过这个领域**。见[适用领域](#适用领域)。
+
+---
+
+## 横向对比
+
+**Intent-Router 填的正是四个好工具都留空的那一层：在动手之前，先决定该查、该问、还是该做。**
+grill-me 收敛得很漂亮、原则也说对了，但什么都不留下。spec-kit 什么都留下，但你得把它整套工作流
+一起买。路由器决策很快，但根本处理不了模糊。Jev 返回的正是你想要的那种带类型、已校准的决策——
+*前提是意图已经清楚了*，而那恰恰是难的部分。
+
+<details>
+<summary>完整对比表——要读的是格子里的落差，不是那些勾</summary>
+
+| | 能收敛模糊输入 | 不问自己查得到的 | 机器可读产物 | 可判定的停止 | 自动触发 |
+|---|---|---|---|---|---|
+| **Intent-Router** | ✅ | ✅ `PROBE`，带 evidence 与 metric | ✅ `IntentSpec` | ✅ 谓词 | ✅ |
+| [grill-me](https://github.com/mattpocock/skills) | ✅ 轮次/frontier | ⚠️ 只是原则，未被追踪（无 evidence、无 metric） | ❌ 设计上无状态 | ⚠️ "frontier 空了" | ❌ 手动 |
+| [spec-kit `/clarify`](https://github.com/github/spec-kit) | ✅ 11 类扫描 | ❌ 直接问你 | ✅ 回写进 `spec.md` | ✅ ≤10 个问题 | ⚠️ 需要 `specs/<feature>/` 与它的工作流 |
+| [semantic-router](https://github.com/aurelio-labs/semantic-router) / [RouteLLM](https://github.com/lm-sys/RouteLLM) | ❌ 返回 `None` | —— | ❌ 一个标签 | ✅ 阈值 | ✅ |
+| [Jev](https://www.jevai.org/)（带类型的决策） | ❌ 需要清晰输入 | —— | ✅ 带类型 + 已校准 | ✅ confidence | ✅ |
+
+</details>
 
 ---
 
@@ -379,28 +401,6 @@ Zed、Warp、Kiro CLI、Junie、Augment、Factory Droid
   命中。要紧的时候就显式调用。
 - **别让它自己验证自己。** 一旦你拿 Intent-Router 自己的标注去训分类器，你得到的是一个对自己的错误
   越来越自信的系统。用独立证据来打标。
-
----
-
-## 横向对比
-
-**Intent-Router 填的正是四个好工具都留空的那一层：在动手之前，先决定该查、该问、还是该做。**
-grill-me 收敛得很漂亮、原则也说对了，但什么都不留下。spec-kit 什么都留下，但你得把它整套工作流
-一起买。路由器决策很快，但根本处理不了模糊。Jev 返回的正是你想要的那种带类型、已校准的决策——
-*前提是意图已经清楚了*，而那恰恰是难的部分。
-
-<details>
-<summary>完整对比表——要读的是格子里的落差，不是那些勾</summary>
-
-| | 能收敛模糊输入 | 不问自己查得到的 | 机器可读产物 | 可判定的停止 | 自动触发 |
-|---|---|---|---|---|---|
-| **Intent-Router** | ✅ | ✅ `PROBE`，带 evidence 与 metric | ✅ `IntentSpec` | ✅ 谓词 | ✅ |
-| [grill-me](https://github.com/mattpocock/skills) | ✅ 轮次/frontier | ⚠️ 只是原则，未被追踪（无 evidence、无 metric） | ❌ 设计上无状态 | ⚠️ "frontier 空了" | ❌ 手动 |
-| [spec-kit `/clarify`](https://github.com/github/spec-kit) | ✅ 11 类扫描 | ❌ 直接问你 | ✅ 回写进 `spec.md` | ✅ ≤10 个问题 | ⚠️ 需要 `specs/<feature>/` 与它的工作流 |
-| [semantic-router](https://github.com/aurelio-labs/semantic-router) / [RouteLLM](https://github.com/lm-sys/RouteLLM) | ❌ 返回 `None` | —— | ❌ 一个标签 | ✅ 阈值 | ✅ |
-| [Jev](https://www.jevai.org/)（带类型的决策） | ❌ 需要清晰输入 | —— | ✅ 带类型 + 已校准 | ✅ confidence | ✅ |
-
-</details>
 
 ---
 
