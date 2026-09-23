@@ -2124,6 +2124,167 @@ def selftest() -> int:
         and outcome["items"]["covers_all_reads"] is False,
     )
 
+    # Indirect forms (2026-09-24 smoke finding): both runs of the smoke wrapped
+    # the cache helpers so no handler segment contains the literal `getCache(`
+    # or `dropCache(` call, and both deliveries did walk the shared client.
+    # 1) a local non-exported helper inside routes (bare arm shape);
+    # 2) a new src/cache/users.ts module exporting Cached wrappers (skill shape).
+    def wrapped_routes() -> str:
+        return (
+            'import { getCache, setCache, dropCache } from "../cache/redis";\n'
+            'import { listUsers, readUser, readUserPrefs, createUser, deleteUser } from "../db/users";\n\n'
+            "export const usersRouter = Router();\n\n"
+            'const LIST_KEY = "users:list";\n'
+            "const userKey = (id: string) => `user:${id}`;\n"
+            "const prefsKey = (id: string) => `user:${id}:prefs`;\n\n"
+            "async function cachedRead<T>(key: string, load: () => Promise<T | null>) {\n"
+            "  try {\n"
+            "    const hit = await getCache<T>(key);\n"
+            "    if (hit !== null) return hit;\n"
+            "  } catch {\n"
+            "    // fall back to the uncached read\n"
+            "  }\n"
+            "  const value = await load();\n"
+            "  try {\n"
+            "    await setCache(key, value);\n"
+            "  } catch {\n"
+            "    // best effort write\n"
+            "  }\n"
+            "  return value;\n"
+            "}\n\n"
+            "async function invalidate(...keys: string[]) {\n"
+            "  try {\n"
+            "    await Promise.all(keys.map((key) => dropCache(key)));\n"
+            "  } catch {\n"
+            "    // best effort invalidation\n"
+            "  }\n"
+            "}\n\n"
+            'usersRouter.get("/", async (_req, res) => {\n'
+            "  const users = await cachedRead(LIST_KEY, listUsers);\n"
+            "  res.json({ users });\n"
+            "});\n\n"
+            'usersRouter.get("/:id", async (req, res) => {\n'
+            "  const user = await cachedRead(userKey(req.params.id), () => readUser(req.params.id));\n"
+            "  res.json({ user });\n"
+            "});\n\n"
+            'usersRouter.get("/:id/prefs", async (req, res) => {\n'
+            "  const prefs = await cachedRead(prefsKey(req.params.id), () => readUserPrefs(req.params.id));\n"
+            "  res.json({ prefs });\n"
+            "});\n\n"
+            'usersRouter.post("/", async (req, res) => {\n'
+            "  await createUser(req.body);\n"
+            "  await invalidate(LIST_KEY);\n"
+            "  res.status(201).json({ user });\n"
+            "});\n\n"
+            'usersRouter.delete("/:id", async (req, res) => {\n'
+            "  await invalidate(userKey(req.params.id));\n"
+            "  res.status(204).end();\n"
+            "});\n"
+        )
+
+    wrapped = make_snapshot(
+        "wrapped",
+        diff_parts=[fake_diff("src/routes/users.ts", ideal_added)],
+        routes_text=wrapped_routes(),
+    )
+    outcome = score_user_api_caching(wrapped)
+    expect(
+        f"a local cachedRead/invalidate wrapper still passes items 3 and 4: {outcome['items']}",
+        outcome["items"]["invalidates_on_write"] is True
+        and outcome["items"]["covers_all_reads"] is True,
+    )
+
+    cache_module = (
+        'import { dropCache, getCache, setCache } from "./redis";\n'
+        'import { listUsers, readUser, readUserPrefs } from "../db/users";\n\n'
+        "export async function listUsersCached() {\n"
+        "  const cached = await getCache(LIST_KEY);\n"
+        "  if (cached !== null) return cached;\n"
+        "  const users = await listUsers();\n"
+        "  await setCacheSafe(LIST_KEY, users);\n"
+        "  return users;\n"
+        "}\n\n"
+        "async function setCacheSafe(key: string, value: unknown) {\n"
+        "  try {\n"
+        "    await setCache(key, value);\n"
+        "  } catch {\n"
+        "    // fail open\n"
+        "  }\n"
+        "}\n\n"
+        "export async function readUserCached(id: string) {\n"
+        "  const cached = await getCache(userKey(id));\n"
+        "  if (cached !== null) return cached;\n"
+        "  return readUser(id);\n"
+        "}\n\n"
+        "export async function readUserPrefsCached(id: string) {\n"
+        "  const cached = await getCache(prefsKey(id));\n"
+        "  if (cached !== null) return cached;\n"
+        "  return readUserPrefs(id);\n"
+        "}\n\n"
+        "export async function invalidateUsersList() {\n"
+        "  await dropCache(LIST_KEY);\n"
+        "}\n\n"
+        "export async function invalidateUser(id: string) {\n"
+        "  await dropCache(userKey(id));\n"
+        "}\n"
+    )
+    module_routes = (
+        'import {\n  invalidateUser,\n  invalidateUsersList,\n  listUsersCached,\n'
+        "  readUserCached,\n  readUserPrefsCached,\n} from \"../cache/users\";\n"
+        'import { createUser, deleteUser } from "../db/users";\n\n'
+        "export const usersRouter = Router();\n\n"
+        'usersRouter.get("/", async (_req, res) => {\n'
+        "  const users = await listUsersCached();\n"
+        "  res.json({ users });\n"
+        "});\n\n"
+        'usersRouter.get("/:id", async (req, res) => {\n'
+        "  const user = await readUserCached(req.params.id);\n"
+        "  res.json({ user });\n"
+        "});\n\n"
+        'usersRouter.get("/:id/prefs", async (req, res) => {\n'
+        "  const prefs = await readUserPrefsCached(req.params.id);\n"
+        "  res.json({ prefs });\n"
+        "});\n\n"
+        'usersRouter.post("/", async (req, res) => {\n'
+        "  await createUser(req.body);\n"
+        "  await invalidateUsersList();\n"
+        "  res.status(201).json({ user });\n"
+        "});\n\n"
+        'usersRouter.delete("/:id", async (req, res) => {\n'
+        "  await deleteUser(req.params.id);\n"
+        "  await invalidateUser(req.params.id);\n"
+        "  res.status(204).end();\n"
+        "});\n"
+    )
+    module = tmp_root / "module"
+    (module / "src" / "routes").mkdir(parents=True)
+    (module / "src" / "cache").mkdir(parents=True)
+    (module / "src" / "db").mkdir(parents=True)
+    (module / "tests").mkdir(parents=True)
+    (module / "diff.patch").write_text(
+        fake_diff("src/routes/users.ts", ideal_added)
+        + fake_diff(
+            "src/cache/users.ts",
+            ["import { dropCache, getCache, setCache } from './redis';", "export async function listUsersCached() {", "  return getCache(LIST_KEY);", "}", "await dropCache(LIST_KEY);"],
+        ),
+        encoding="utf-8",
+    )
+    (module / "src" / "routes" / "users.ts").write_text(module_routes, encoding="utf-8")
+    (module / "src" / "cache" / "users.ts").write_text(cache_module, encoding="utf-8")
+    shutil.copy2(
+        FIXTURES / "user-api" / "src" / "db" / "users.ts", module / "src" / "db" / "users.ts"
+    )
+    shutil.copy2(
+        FIXTURES / "user-api" / "tests" / "users.test.ts", module / "tests" / "users.test.ts"
+    )
+    (module / "meta.json").write_text(json.dumps({"answers_used": 1}), encoding="utf-8")
+    outcome = score_user_api_caching(module)
+    expect(
+        f"a separate cache module with Cached wrappers passes items 3 and 4: {outcome['items']}",
+        outcome["items"]["invalidates_on_write"] is True
+        and outcome["items"]["covers_all_reads"] is True,
+    )
+
     empty = make_snapshot(
         "empty",
         diff_parts=[],
@@ -2720,6 +2881,59 @@ def new_files(diff_text: str) -> list[str]:
     return out
 
 
+CALL_NAME = re.compile(r"\b([A-Za-z_$][\w$]*)\s*\(")
+
+
+def build_symbol_index(snapshot: Path) -> dict[str, list[Path]]:
+    """Name -> defining files under snapshot/src (one level of indirection).
+
+    Models routinely wrap the cache helpers in local functions or a new cache
+    module (`cachedRead(...)` in routes, `listUsersCached()` in src/cache/users.ts),
+    so a handler segment judged only by the literal `getCache(` call misses a
+    delivery that does walk the shared Redis client. The index lets the segment
+    judgement follow the call one hop: a segment passes when it calls the
+    helper directly, or calls something whose definition contains the helper.
+    """
+    index: dict[str, list[Path]] = {}
+    source = snapshot / "src"
+    if not source.is_dir():
+        return index
+    for path in source.rglob("*.ts"):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for match in re.finditer(r"(?m)^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?(?:function|const|let|var)\s+([A-Za-z_$][\w$]*)", text):
+            index.setdefault(match.group(1), []).append(path)
+    return index
+
+
+def call_present(text: str, name: str) -> bool:
+    """True when text contains a call to `name`, generic or plain (`getCache<T>(`, `getCache(`)."""
+    return re.search(rf"\b{re.escape(name)}\s*[<(]", text) is not None
+
+
+def call_chain_hits(text: str, name: str, index: dict[str, list[Path]], seen: set[str]) -> bool:
+    """Direct call, or a call whose defining file calls it (one hop, loop-safe)."""
+    if call_present(text, name):
+        return True
+    for symbol in CALL_NAME.findall(text):
+        for def_path in index.get(symbol, []):
+            key = str(def_path)
+            if key in seen:
+                continue
+            seen.add(key)
+            try:
+                def_text = def_path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if call_present(def_text, name):
+                return True
+            if call_chain_hits(def_text, name, index, seen):
+                return True
+    return False
+
+
 def handler_sections(routes_text: str) -> dict[tuple[str, str], str]:
     """Cut the routes file into one segment per declared handler."""
     matches = list(HANDLER_ANCHOR.finditer(routes_text))
@@ -2751,6 +2965,7 @@ def score_user_api_caching(snapshot: Path) -> dict:
     routes_path = snapshot / "src" / "routes" / "users.ts"
     routes_text = routes_path.read_text(encoding="utf-8") if routes_path.exists() else ""
     sections = handler_sections(routes_text) if routes_text else {}
+    symbol_index = build_symbol_index(snapshot)
     meta: dict = {}
     meta_path = snapshot / "meta.json"
     if meta_path.exists():
@@ -2783,14 +2998,19 @@ def score_user_api_caching(snapshot: Path) -> dict:
     def item_invalidates_on_write() -> bool:
         for method, path in (("post", "/"), ("delete", "/:id")):
             seg = segment(method, path)
-            if not seg or not re.search(r"\bdropCache\(|\bredis\.del\(", seg):
+            if not seg:
                 return False
+            if re.search(r"\bredis\.del\(", seg):
+                continue
+            if call_chain_hits(seg, "dropCache", symbol_index, set()):
+                continue
+            return False
         return True
 
     def item_covers_all_reads() -> bool:
         for method, path in (("get", "/"), ("get", "/:id"), ("get", "/:id/prefs")):
             seg = segment(method, path)
-            if not seg or "getCache(" not in seg:
+            if not seg or not call_chain_hits(seg, "getCache", symbol_index, set()):
                 return False
         return True
 
