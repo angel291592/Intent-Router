@@ -7,6 +7,8 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
 
 ## [Unreleased]
 
+## [0.1.2] — 2026-09-23
+
 - Evals: `cases.yaml` now rejects unknown case-level and assertion keys at load time, listing every
   problem at once. A misspelled assertion key used to be silently dropped by the checker, turning
   the case into an empty assertion that could never fail.
@@ -122,6 +124,7 @@ First release. L0 only: a prompt-only skill with no dependencies and no keys. /
 - L1 and L2 backends are declared and not implemented.
 - L1 与 L2 后端只做声明，未实现。
 
-[Unreleased]: https://github.com/angel291592/Intent-Router/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/angel291592/Intent-Router/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/angel291592/Intent-Router/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/angel291592/Intent-Router/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/angel291592/Intent-Router/releases/tag/v0.1.0
