@@ -2315,6 +2315,20 @@ def selftest() -> int:
         and outcome["aux"]["no_delivery"] is True,
     )
 
+    spec_only = make_snapshot(
+        "spec-only",
+        diff_parts=[fake_diff(".intent/add_caching.intent.yaml",
+                              ["spec_version: '0.1'", "request: add caching to the user API"])],
+        routes_text=ideal_routes(),
+        meta={"answers_used": 0},
+    )
+    outcome = score_user_api_caching(spec_only)
+    expect(
+        "a written spec with no code change is no delivery (0/6): the runner pathspec "
+        "excludes .intent/, and the scorer counts only src/ and tests/ additions",
+        outcome["score"] == 0 and outcome["aux"]["no_delivery"] is True,
+    )
+
     print("delivery case validation, prepare() arms and claude tools")
     good = yaml.safe_load(DELIVERY_CASES_PATH.read_text(encoding="utf-8"))
     expect("the real delivery.yaml validates clean", validate_delivery_cases(good) == [])
@@ -2699,8 +2713,12 @@ DELIVERY_CASE_KEYS = frozenset(
 
 # The workspace files that are the runner's own, never the model's delivery.
 # .claude/.agents hold the installed skill copies committed by seed_history();
-# opencode.json is written after seeding and stays untracked.
-RUNNER_PATHS = (":!opencode.json", ":!.claude", ":!.agents")
+# opencode.json is written after seeding and stays untracked. .intent/ holds
+# the skill's own emitted specs: the model may write one there even while
+# asking, so it is excluded too — a spec file is not the delivered work, and
+# counting it as a diff once ended the loop before the implement prompt was
+# ever sent (2026-09-24 skill-arm finding).
+RUNNER_PATHS = (":!opencode.json", ":!.claude", ":!.agents", ":!.intent")
 
 
 def validate_delivery_cases(cases: list[dict]) -> list[str]:
@@ -3055,7 +3073,7 @@ def score_user_api_caching(snapshot: Path) -> dict:
         "states_failure_policy": item_states_failure_policy,
         "contract_preserved": item_contract_preserved,
     }
-    delivered = bool(added_src) or bool(new_files(diff_text))
+    delivered = any(file.startswith(("src/", "tests/")) for file in added)
     if delivered:
         items = {name: judge() for name, judge in judges.items()}
     else:
