@@ -43,38 +43,6 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
   non-code spec (a real glm-5.3-flash output) joins the Tier 0 selftest as a permanent free
   regression test. The runner also pins every session clean: the operator's global Claude-Code
   instruction file is no longer injected into evaluated sessions.
-- Reports and README numbers are unchanged until the paid run lands; the coding domain remains the
-  only one with published numbers.
-
-- Skill：触发面覆盖到代码之外的请求。`description` 保留全部代码动词，新增
-  `handle / triage / sort out / look into / decide`，点名非代码领域（工单队列、调研简报、运维
-  runbook）与非代码探测来源（工单记录、订单记录、权益配置、生效政策）。负向判据从"回答问题"
-  收窄为"解释现状"，"已经完全明确"变得可判定：对象、做法、失败行为三项全部说明。
-- Skill：探测面调度。SKILL.md §4.2 先命名来源再列出六个代码探测面，非代码请求指向
-  `references/domains.md`；`probe-surfaces.md` 反向指回。`domains.md` 新增"未列领域自行推导探测面"
-  的四问程序（权威记录 / 生效政策 / 先前处理 / 名单），以及非代码不可逆清单。
-- Skill：category 表新增 `example outside code` 列，失败路径触发词泛化（缓存写、退款、回填、
-  通知、审批），ungrillable 出口接受任何一次性样例产物（草稿回复、样本记录、示例版式——prototype
-  与 mock 保留），`target` 词汇扩展 `respond`、`escalate`、`prototype`。
-- Skill：为非文件来源新增两个 evidence 命名空间——`record:<system>/<id>` 与
-  `doc:<slug>#<section>`——与文件路径形态、`git:`、`user:delegated` 并列。清单仍然封闭；写错命名
-  空间（`ticket:4402`）现在判形态违规，而不是被当成某个文件的第 4402 行，幻觉指标保持语义。
-- Skill：第五个走通样例 `route-support.yaml`——同一份 spec 结构在客服分流场景、使用
-  `record:`/`doc:` evidence。
-- Skill：首轮付费运行打磨。计分规则改为"发出前清点 constraints 里的 `source:` 标签"（解决了
-  未列入 Pass 1 的探测同样计数）；"已完全明确"收紧为整条路径——精确参数、阈值与回退行为都
-  已说明，只有 happy path 不算；版本历史面必须先实际尝试一次再宣告不可用。全量重测延后。
-- Evals：第二个 fixture `evals/fixtures/support-queue/`（工单、订单记录、账户权益、退款与承运商
-  索赔政策、Q2 索赔复盘笔记——无代码、无 git 历史）与三条非代码用例。`support-furious-auto` 与
-  `research-scope-auto` 测自动触发加非代码探测；`support-delegate-irreversible` 钉死"退款与换货
-  不可得兼"这类取舍不得接受委派回答（已写入，首次运行待做）。
-- Evals：`evidence_must_include` 改为子串匹配，用保留命名空间 `record:`/`doc:` 拼写的指针同样算
-  作引用了来源；一份实测成功的非代码 spec（真实 glm-5.3-flash 输出）进入 Tier 0 selftest，成为
-  永久免费回归。runner 同时钉死会话纯净：评测会话不再注入操作者的全局 Claude-Code 指令文件。
-- 在付费运行落地之前，报告与 README 数字均不变；编码领域仍是唯一有公开数字的领域。
-
-## [Unreleased]
-
 - Skill: the three rules that the first paid runs exposed as declared-but-not-enforced are now
   enforced. Section 1 gains a four-item **silence check** (objects / approach / failure behaviour /
   acceptance) and — for the first time — an explicit no-op exit: a request that passes it gets no
@@ -110,7 +78,9 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
   The new `open_field_regex` key matches the machine-readable half of an open unknown (`field`,
   `category`), making the semantic assertions independent of the language the harness answers in;
   a Tier 0 assertion now also pins that a spec may emit more probed constraints than the unknowns
-  it closed, so the counting rule cannot be re-tightened by mistake.
+  it closed, so the counting rule cannot be re-tightened by mistake. A subset re-run of eight
+  cases on dp/deepseek-flash passes 8/8 — `evals/reports/2026-09-23-opencode-2.md` — and the two
+  READMEs now quote both the full-suite and the subset figures, each labelled.
 - Docs: both READMEs are repositioned from "an intent compiler for coding agents" to "an intent
   compiler for AI agents". The engine is domain-independent — only the probe surfaces change — and
   the old framing hid that behind a repository-shaped narrative. Concretely: a dual-domain opening
@@ -126,7 +96,35 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
 - Docs: the comparison table, the harness compatibility list, the backend tiers and the prior-art
   detail are folded into `<details>` blocks, with the claim each one supports left visible. Nothing
   was removed — the prior-art credits in particular are kept in full.
+- Docs: a three-frame demo now sits above the fold on both READMEs — the auto-triggered probe
+  sequence, the single question it asks, and the emitted spec. Rendered faithfully from the
+  2026-09-23 opencode evaluation transcript.
 
+- Skill：触发面覆盖到代码之外的请求。`description` 保留全部代码动词，新增
+  `handle / triage / sort out / look into / decide`，点名非代码领域（工单队列、调研简报、运维
+  runbook）与非代码探测来源（工单记录、订单记录、权益配置、生效政策）。负向判据从"回答问题"
+  收窄为"解释现状"，"已经完全明确"变得可判定：对象、做法、失败行为三项全部说明。
+- Skill：探测面调度。SKILL.md §4.2 先命名来源再列出六个代码探测面，非代码请求指向
+  `references/domains.md`；`probe-surfaces.md` 反向指回。`domains.md` 新增"未列领域自行推导探测面"
+  的四问程序（权威记录 / 生效政策 / 先前处理 / 名单），以及非代码不可逆清单。
+- Skill：category 表新增 `example outside code` 列，失败路径触发词泛化（缓存写、退款、回填、
+  通知、审批），ungrillable 出口接受任何一次性样例产物（草稿回复、样本记录、示例版式——prototype
+  与 mock 保留），`target` 词汇扩展 `respond`、`escalate`、`prototype`。
+- Skill：为非文件来源新增两个 evidence 命名空间——`record:<system>/<id>` 与
+  `doc:<slug>#<section>`——与文件路径形态、`git:`、`user:delegated` 并列。清单仍然封闭；写错命名
+  空间（`ticket:4402`）现在判形态违规，而不是被当成某个文件的第 4402 行，幻觉指标保持语义。
+- Skill：第五个走通样例 `route-support.yaml`——同一份 spec 结构在客服分流场景、使用
+  `record:`/`doc:` evidence。
+- Skill：首轮付费运行打磨。计分规则改为"发出前清点 constraints 里的 `source:` 标签"（解决了
+  未列入 Pass 1 的探测同样计数）；"已完全明确"收紧为整条路径——精确参数、阈值与回退行为都
+  已说明，只有 happy path 不算；版本历史面必须先实际尝试一次再宣告不可用。全量重测延后。
+- Evals：第二个 fixture `evals/fixtures/support-queue/`（工单、订单记录、账户权益、退款与承运商
+  索赔政策、Q2 索赔复盘笔记——无代码、无 git 历史）与三条非代码用例。`support-furious-auto` 与
+  `research-scope-auto` 测自动触发加非代码探测；`support-delegate-irreversible` 钉死"退款与换货
+  不可得兼"这类取舍不得接受委派回答（已写入，首次运行待做）。
+- Evals：`evidence_must_include` 改为子串匹配，用保留命名空间 `record:`/`doc:` 拼写的指针同样算
+  作引用了来源；一份实测成功的非代码 spec（真实 glm-5.3-flash 输出）进入 Tier 0 selftest，成为
+  永久免费回归。runner 同时钉死会话纯净：评测会话不再注入操作者的全局 Claude-Code 指令文件。
 - Skill：首轮付费运行暴露出的三条"已声明但未落实"的规则，现在被落实为可执行检查。§1 新增四项
   **沉默检查**（objects / approach / 失败行为 / acceptance），并**首次**给出显式 no-op 出口——
   通过检查的请求不产出 spec、不产出围栏、也不宣布考虑过本 skill。失败规则一次陈述即覆盖其子
@@ -153,6 +151,8 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
   只保留仅存在于 commit message 的 `cluster`。新判据键 `open_field_regex` 匹配开放 unknown 的
   机读部分（`field`、`category`），使语义断言与 harness 的作答语言解耦；另新增一条 Tier 0 断言，
   钉住"一份 spec 可以 emit 比它关闭的 unknown 更多的 probed 约束"，防止计数口径被误改回过严。
+  8 用例子集在 dp/deepseek-flash 上重测 **8/8 全过**——`evals/reports/2026-09-23-opencode-2.md`；
+  两版 README 现同时引用全量与子集两个数字，各自标注口径。
 - Docs：双语 README 的定位从"给编码 agent 用的意图编译器"上移为"给 AI agent 用的意图编译器"。
   引擎本身是领域无关的——变的只有探测面——而旧叙事把这一点藏在了一套仓库形状的说法后面。具体动作：
   首屏改为双领域对照图；在 caching 实例之外新增一个客服工单场景的走通实例；把 `编程之外` 从靠底部的
@@ -164,13 +164,10 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
   场景是纯对话、什么都没接。
 - Docs：横向对比表、harness 兼容清单、后端分层表、相关工作细节都折叠进 `<details>`，只把各自支撑的
   那句结论留在外面。没有删除任何内容——尤其相关工作的 credit 全部保留。
-
-- Docs: a three-frame demo now sits above the fold on both READMEs — the auto-triggered probe
-  sequence, the single question it asks, and the emitted spec. Rendered faithfully from the
-  2026-09-23 opencode evaluation transcript.
-
 - Docs：双语 README 首屏新增三帧 demo——自动触发的探测序列、它问的唯一一个问题、产出的 spec。
   画面逐字取自 2026-09-23 opencode 评测的真实 transcript 渲染。
+
+## [Unreleased]
 
 ## [0.1.2] — 2026-09-23
 
@@ -289,7 +286,8 @@ First release. L0 only: a prompt-only skill with no dependencies and no keys. /
 - L1 and L2 backends are declared and not implemented.
 - L1 与 L2 后端只做声明，未实现。
 
-[Unreleased]: https://github.com/angel291592/Intent-Router/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/angel291592/Intent-Router/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/angel291592/Intent-Router/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/angel291592/Intent-Router/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/angel291592/Intent-Router/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/angel291592/Intent-Router/releases/tag/v0.1.0
