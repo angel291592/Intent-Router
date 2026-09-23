@@ -5,6 +5,58 @@ Each entry is given in English and then in Chinese. / 每条目先英文后中�
 This project follows semantic versioning from 1.0 onwards; 0.x releases may change anything. /
 本项目自 1.0 起遵循语义化版本；0.x 阶段任何内容都可能变动。
 
+## [0.2.0] — 2026-09-23
+
+- Skill: the trigger surface now covers requests outside code. The `description` keeps every code
+  verb but adds `handle / triage / sort out / look into / decide`, names non-code domains (a ticket
+  queue, a research brief, an ops runbook) and non-code probe sources (a ticket log, an order
+  record, entitlements, the policy in force). The negative criterion is narrowed from "answering
+  questions" to "explaining existing state", and "already fully specified" becomes decidable: all
+  three of objects, approach and failure behaviour stated.
+- Skill: probe-surface dispatch. SKILL.md §4.2 now names the sources before listing the six code
+  surfaces and points non-code requests at `references/domains.md`; `probe-surfaces.md` points back
+  for non-codebase runs. `domains.md` gains a four-question procedure for deriving probe surfaces in
+  domains that have no table yet (system of record / policy in force / prior handling / inventory),
+  plus an explicit non-code irreversibility list.
+- Skill: category table gains an `example outside code` column, failure-path trigger words are
+  generalized (cache write, refund, backfill, notification, approval), the ungrillable exit accepts
+  any throwaway artifact (draft reply, sample record, example layout — prototype and mock kept), and
+  the `target` vocabulary extends to `respond`, `escalate`, `prototype`.
+- Skill: two new evidence namespaces for non-file sources — `record:<system>/<id>` and
+  `doc:<slug>#<section>` — alongside the file-path forms, `git:` and `user:delegated`. The list stays
+  closed; a mistyped namespace (`ticket:4402`) is now judged a form violation instead of being read
+  as a file's line number, which keeps the hallucinated-evidence metric honest.
+- Skill: a fifth worked example, `route-support.yaml` — the same spec structure in a support triage
+  run with `record:`/`doc:` evidence.
+- Evals: a second fixture, `evals/fixtures/support-queue/` (tickets, order record, account
+  entitlements, returns and carrier-claims policies, a Q2 claims-review note — no code, no git
+  history), and three non-code cases. `support-furious-auto` and `research-scope-auto` measure
+  auto-trigger plus non-code probing; `support-delegate-irreversible` pins the rule that a delegated
+  answer is refused for the refund-vs-replacement trade-off (written, first run pending).
+- Reports and README numbers are unchanged until the paid run lands; the coding domain remains the
+  only one with published numbers.
+
+- Skill：触发面覆盖到代码之外的请求。`description` 保留全部代码动词，新增
+  `handle / triage / sort out / look into / decide`，点名非代码领域（工单队列、调研简报、运维
+  runbook）与非代码探测来源（工单记录、订单记录、权益配置、生效政策）。负向判据从"回答问题"
+  收窄为"解释现状"，"已经完全明确"变得可判定：对象、做法、失败行为三项全部说明。
+- Skill：探测面调度。SKILL.md §4.2 先命名来源再列出六个代码探测面，非代码请求指向
+  `references/domains.md`；`probe-surfaces.md` 反向指回。`domains.md` 新增"未列领域自行推导探测面"
+  的四问程序（权威记录 / 生效政策 / 先前处理 / 名单），以及非代码不可逆清单。
+- Skill：category 表新增 `example outside code` 列，失败路径触发词泛化（缓存写、退款、回填、
+  通知、审批），ungrillable 出口接受任何一次性样例产物（草稿回复、样本记录、示例版式——prototype
+  与 mock 保留），`target` 词汇扩展 `respond`、`escalate`、`prototype`。
+- Skill：为非文件来源新增两个 evidence 命名空间——`record:<system>/<id>` 与
+  `doc:<slug>#<section>`——与文件路径形态、`git:`、`user:delegated` 并列。清单仍然封闭；写错命名
+  空间（`ticket:4402`）现在判形态违规，而不是被当成某个文件的第 4402 行，幻觉指标保持语义。
+- Skill：第五个走通样例 `route-support.yaml`——同一份 spec 结构在客服分流场景、使用
+  `record:`/`doc:` evidence。
+- Evals：第二个 fixture `evals/fixtures/support-queue/`（工单、订单记录、账户权益、退款与承运商
+  索赔政策、Q2 索赔复盘笔记——无代码、无 git 历史）与三条非代码用例。`support-furious-auto` 与
+  `research-scope-auto` 测自动触发加非代码探测；`support-delegate-irreversible` 钉死"退款与换货
+  不可得兼"这类取舍不得接受委派回答（已写入，首次运行待做）。
+- 在付费运行落地之前，报告与 README 数字均不变；编码领域仍是唯一有公开数字的领域。
+
 ## [Unreleased]
 
 - Docs: both READMEs are repositioned from "an intent compiler for coding agents" to "an intent
