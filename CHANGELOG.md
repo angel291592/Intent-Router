@@ -75,6 +75,42 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
 
 ## [Unreleased]
 
+- Skill: the three rules that the first paid runs exposed as declared-but-not-enforced are now
+  enforced. Section 1 gains a four-item **silence check** (objects / approach / failure behaviour /
+  acceptance) and — for the first time — an explicit no-op exit: a request that passes it gets no
+  spec, no fenced block and no announcement. A failure rule stated once covers the cases it
+  subsumes, so re-opening "serve uncached" as a stale-versus-bypass question is now named a defect
+  in both section 3 and the ask protocol. Section 4.2 defines a **dangling reference** — a
+  changelog line, comment or record field carrying a pull-request number, "revert", "pin" or
+  "workaround" with no reason — as an unsettled unknown, and grants it one **reserved history
+  query outside the 3-action probe budget**, because version history is the sixth surface and was
+  arithmetically unreachable for any unknown that spent its budget on the shallower five. Section 6
+  turns the emit-time reconstruction into a three-item check — counts, evidence on every probed and
+  inferred constraint, and question language — and repairs a contradiction inside the counting rule
+  itself: `resolved_by_probe` counts the unknowns a lookup closed, not the number of
+  `source: probed` entries, which is what the cross-field invariant required all along. The two
+  readings coincide only when every unknown maps to exactly one constraint, and a run that records
+  a constraining fact in passing breaks that mapping — so counting constraints made a correct spec
+  look like a broken scorecard. Objects established by probing must now carry the pointer that
+  proves they exist, and an empty workspace is explicitly never `underspecified`. The silence
+  check's fourth item also names a parameter the work must use as not a done condition — a TTL, a
+  limit or a response shape bounds the work without saying when it is done — and section 5 bars
+  inferred values in an ASK snapshot that depend on the pending answer.
+- Runner: transcript extraction no longer treats tool output as a spec candidate. A correct silent
+  run emits no fence, and the reversed scan used to fall back to the SKILL.md text embedded in the
+  tool results the run had just read, scoring the skill's own examples as an emitted spec; the
+  fix is pinned by a Tier 0 assertion and verified against every persisted transcript.
+- Evals: `fully-specified-auto-quiet` now uses a prompt that objectively satisfies all four items
+  of the silence check, so `should_trigger: false` is decidable; the prompt it used before — which
+  states one failure rule and is silent on acceptance — lives on as the new `partially-specified-auto`
+  case, asserting the behaviour that actually matters there: ROUTE with zero questions asked. Two
+  assertion was tightened rather than loosened: `git-only-fact` drops `"420"` from
+  `text_keywords` (it leaks from the fixture changelog, so the check could pass without version
+  history ever being read) and keeps only `cluster`, which exists solely in a commit message.
+  The new `open_field_regex` key matches the machine-readable half of an open unknown (`field`,
+  `category`), making the semantic assertions independent of the language the harness answers in;
+  a Tier 0 assertion now also pins that a spec may emit more probed constraints than the unknowns
+  it closed, so the counting rule cannot be re-tightened by mistake.
 - Docs: both READMEs are repositioned from "an intent compiler for coding agents" to "an intent
   compiler for AI agents". The engine is domain-independent — only the probe surfaces change — and
   the old framing hid that behind a repository-shaped narrative. Concretely: a dual-domain opening
@@ -91,6 +127,32 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
   detail are folded into `<details>` blocks, with the claim each one supports left visible. Nothing
   was removed — the prior-art credits in particular are kept in full.
 
+- Skill：首轮付费运行暴露出的三条"已声明但未落实"的规则，现在被落实为可执行检查。§1 新增四项
+  **沉默检查**（objects / approach / 失败行为 / acceptance），并**首次**给出显式 no-op 出口——
+  通过检查的请求不产出 spec、不产出围栏、也不宣布考虑过本 skill。失败规则一次陈述即覆盖其子
+  情形，因此把已声明的 "serve uncached" 重新读成"返回旧值还是绕过缓存"，现在在 §3 与 ask 协议
+  中同时被判为缺陷。§4.2 定义了**悬空引用**——带 PR 号、"revert"、"pin"、"workaround" 却不给
+  理由的变更日志行、注释或记录字段——判为 unknown 未 settled，并为它开放**一次不计入 3 次探测
+  预算的保留历史查询**：版本历史排在第 6 个探测面，对任何把预算花在前五面的 unknown 而言，
+  它在算术上原本不可达。§6 把 emit 前的重建核对扩成三项（计数、每条 probed/inferred 都带
+  evidence、问题语言），并修正了计数规则内部的矛盾：`resolved_by_probe` 数的是**被查询关闭的
+  unknown 数**，不是 `source: probed` 的条目数——后者才是跨字段不变量一直要求的口径。两种读法
+  只在"每个 unknown 恰好对应一条约束"时才一致，而顺带记录一条约束就会打破这个对应，于是按
+  条目数计数会把一份正确的 spec 判成计数错乱。由探测确定的 objects 现在必须带上证明其存在的
+  指针；空工作区被明确排除在 `underspecified` 之外。沉默检查第四项同时点名"请求要求使用的参数
+  不是完成条件"——TTL、上限或响应形状只约束工作，不说明工作何时算完成；§5 另规定 ASK 快照里的
+  inferred 值不得依赖于未决问题本身。
+- Runner：转录提取不再把工具输出当作 spec 候选。正确的沉默运行不产出围栏，而倒序扫描此前会
+  回退到运行刚读过的 SKILL.md 文本，把 skill 自己的示例当成产出的 spec 打分；修复由 Tier 0
+  断言钉住，并对全部历史转录重放验证。
+- Evals：`fully-specified-auto-quiet` 改用一个客观满足沉默检查全部四项的 prompt，使
+  `should_trigger: false` 成为可判定的断言；它此前使用的 prompt（只声明一条失败规则、对
+  acceptance 沉默）作为新用例 `partially-specified-auto` 保留下来，断言那里真正重要的行为：
+  ROUTE 且零提问。一处判据是**收紧**而非放宽：`git-only-fact` 从 `text_keywords` 中删去
+  `"420"`（它从 fixture 的变更日志就能拿到，导致该断言可以在完全没读版本历史的情况下通过），
+  只保留仅存在于 commit message 的 `cluster`。新判据键 `open_field_regex` 匹配开放 unknown 的
+  机读部分（`field`、`category`），使语义断言与 harness 的作答语言解耦；另新增一条 Tier 0 断言，
+  钉住"一份 spec 可以 emit 比它关闭的 unknown 更多的 probed 约束"，防止计数口径被误改回过严。
 - Docs：双语 README 的定位从"给编码 agent 用的意图编译器"上移为"给 AI agent 用的意图编译器"。
   引擎本身是领域无关的——变的只有探测面——而旧叙事把这一点藏在了一套仓库形状的说法后面。具体动作：
   首屏改为双领域对照图；在 caching 实例之外新增一个客服工单场景的走通实例；把 `编程之外` 从靠底部的

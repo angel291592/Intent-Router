@@ -117,7 +117,9 @@ Assertion keys: `state`, `state_in`, `cause`, `should_trigger`, `asked_eq`, `max
 `min_resolved_by_probe`, `resolved_by_probe_eq`, `probed_constraints_eq`, `max_inferred`,
 `unknown_empty`, `has_source`, `open_fields_min`, `evidence_must_include` (substring match),
 `evidence_regex`, `question_keywords` (any match), `text_keywords` (any match), `output_regex`
-(case-insensitive), `question_lang`, `not_target`.
+(case-insensitive), `question_lang`, `not_target`, `open_field_regex` (matches `field` and
+`category` of each open unknown — the language-independent counterpart of `question_keywords`,
+and only meaningful on a case that expects ASK, since a ROUTE spec has no open unknown).
 
 `triggered`, `schema_valid`, `invariants_ok`, `evidence_valid` and `evidence_form` are always
 checked whenever a spec is expected, so no case needs to list them. Failure names reported for a run

@@ -45,13 +45,32 @@ Do not start when:
 
 - the request asks you to explain existing state ("what does X do", "why is Y slow") rather than
   to find something out and produce a deliverable;
-- every decision-bearing item is already stated by the user — its objects, its approach and its
-  failure behaviour are all stated — then there is nothing to converge. Do not count items the
-  request leaves open as "inferable": if the user had to be trusted with the outcome, or the
-  spec could be wrong without contradicting the request, that item is not stated. A request that
-  names exact parameters, thresholds and fallback behaviour for the whole path is fully
-  specified; one that names the happy path only is not;
+- the silence check below passes — the request already states every decision-bearing item, so
+  there is nothing to converge;
 - the request is trivially scoped and reversible (fix a typo, bump a patch version).
+
+**The silence check.** Run it once, against the request text alone, before probing anything. The
+request is fully specified when all four hold:
+
+1. **Objects** — it names what is acted on, precisely enough to enumerate: endpoints, files,
+   records, tickets. A collective noun ("the user API", "this customer") does not qualify.
+2. **Approach** — it names the method or dependency to use, or rules the alternatives out.
+3. **Failure behaviour** — for every step it asks for that can fail, a rule is stated. **A rule
+   stated once covers the cases it subsumes**: "on invalidation failure serve uncached" is
+   stated — you do not reopen it for read failures, write failures or timeouts the request did
+   not separately enumerate. A step whose failure the request is *silent* about is unstated.
+4. **Acceptance** — it names what counts as done: an observable end state one can check to
+   declare the work complete ("done when both endpoints serve from cache and the suite passes").
+   **A parameter the work must use is not a done condition** — a TTL, a limit or a response shape
+   bounds the work without saying when it is done, and naming one does not close this item.
+
+If all four hold, **do not run**: emit no spec, no fenced block, no announcement that you
+considered this skill — treat the request as ordinary and carry it out directly. A spec emitted
+after a passed silence check is a false positive, costing the user more than this skill saves.
+
+If any one of the four is unstated, run — and do not downgrade an unstated item to "inferable"
+because a plausible default exists: if the user had to be trusted with the outcome, or the
+spec could be wrong without contradicting the request, that item is unstated.
 
 **No-ask mode.** If the user says "no questions", "just do it", "don't ask me anything", keep
 looking things up but never ask: whatever stays open is recorded with `source: inferred` and its
@@ -124,10 +143,14 @@ Produce a draft spec. Do not emit it, do not act on it.
 | `non_goals_constraints` | explicit exclusions, hard limits on time, cost, compliance | no new dependencies | no commitment beyond the policy in force |
 
 When the request touches any step that can fail, be rejected, or half-complete — a cache write, a
-refund, a backfill, a notification, an approval — enumerate the failure path as its own unknown: not just "what should the feature do" but "what should happen
-when the feature's own step fails" — a cache write that errors, an invalidation that misses, a
-dependency that times out. Skipping the failure path while emitting a happy-path spec is the
-guess this pass exists to prevent.
+refund, a backfill, a notification, an approval — **and states no rule for that failure** —
+enumerate the failure path as its own unknown: not just "what should the feature do" but "what
+should happen when the feature's own step fails" — a cache write that errors, an invalidation
+that misses, a dependency that times out. Skipping the failure path while emitting a happy-path
+spec is the guess this pass exists to prevent. The converse is just as much a defect: when the
+request **does** state the failure rule, that is an `explicit` constraint and never an unknown.
+Re-opening a stated rule to distinguish sub-cases the user did not distinguish is the over-asking
+this skill exists to remove.
 
 Unknowns that are **not** decision-bearing do not enter Pass 2. Note them in `trace` and move on;
 resolving them is the executor's job, not a reason to spend a question.
@@ -158,8 +181,8 @@ a records system, a policy archive, a notes collection, a candidate registry —
 `references/domains.md` and use its table for that domain. The order below is the code instance
 of the iron law, not the general rule.
 
-Use whatever file-reading, search, or shell capability your environment provides. If your
-environment exposes version-control history, consult it. If it exposes nothing, see *degraded*
+Use whatever file-reading, search, or shell capability your environment provides; consult
+version-control history if your environment exposes it. If it exposes nothing, see *degraded*
 below — an absent capability is a fact about the environment, never a gap in the request.
 
 Work the probe surfaces in this order, stopping as soon as the unknown is settled:
@@ -178,14 +201,25 @@ Work the probe surfaces in this order, stopping as soon as the unknown is settle
    a current file cannot show. A version history your harness reaches through a shell command is
    still a surface here: attempt the command once before declaring it unavailable, and record the
    attempt in `trace` — never assume the capability away, or a `git:` pointer becomes impossible
-   to emit and a `degraded` cause becomes easy to invent.
+   to emit and a `degraded` cause becomes easy to invent. **If no shell capability answers, the
+   history is still on disk as files** — the log of reference updates, the stored commit message —
+   so read it there before calling the lookup failed. Whichever route reached it, the evidence is
+   the commit or pull-request pointer (`git:<short-sha>`, `git:#<number>`), never a path inside
+   the history store.
 
 Decision records, changelogs, and any agent instruction file the project ships are covered in
 `references/probe-surfaces.md`, together with the surfaces for other ecosystems.
 
-**Budget: at most 3 probe actions per unknown.** Do not read the whole repository. If an unknown
-survives its budget, escalate it: to `ask` if a person could answer it, otherwise leave it in
-`unknown` with `kind: probe` so the halt names it.
+**Budget: at most 3 probe actions per unknown**, plus the one reserved history query below, which
+does not count against it. Do not read the whole repository. If an unknown survives its budget,
+escalate it: to `ask` if a person could answer it, otherwise leave it in `unknown` with
+`kind: probe` so the halt names it.
+
+**A dangling reference is not a settled unknown.** A *what*-only answer — a changelog line,
+comment, config value or record field naming a pull-request number, "revert", "pin" or
+"workaround" with no reason — has not settled the unknown. Follow the reference once: the
+**reserved history query**, outside the 3-action budget, then stop; if the reason is still
+missing, reclassify it `ask` (full rule in `references/probe-surfaces.md`).
 
 **Every probed value carries evidence.** An unsourced claim about a workspace is indistinguishable
 from a guess, so `constraints` entries with `source: probed` or `source: inferred` must have an
@@ -194,6 +228,10 @@ from a guess, so `constraints` entries with `source: probed` or `source: inferre
 its own constraint or its own trace entry. While probing, also record facts you were not looking
 for when they constrain the work — a reverted approach or a pinned version is exactly the
 constraint nobody remembers.
+
+Every entry in `objects` you established by probing rather than by the user naming it carries the
+pointer to where you established it, in a constraint or in a `trace` step. An object nobody can
+trace back to the definition that proves it exists is exactly the guess this pass prevents.
 
 **Degraded.** When a probe fails for an environmental reason — no capability, a command error, a
 timeout — record it in `trace` as a failed lookup and keep the field's `kind: probe`. If the run
@@ -272,19 +310,22 @@ Then exactly one of three outcomes:
 
 - **ROUTE** — sufficient. Emit the complete IntentSpec with `decision.state: ROUTE` and a
   `target`: `implement`, `plan`, `research`, `respond`, `escalate`, `prototype`, or whatever
-  target the user named. Then state which
-  target you hand off to and stop; do not start implementing inside this skill.
+  the user named. State the hand-off and stop; do not start implementing inside this skill.
 - **ASK** — not sufficient and the budget still allows a question. Emit the current spec snapshot
   with `decision.state: ASK` and `decision.question` set to the one question you are asking, then
   the question itself, then wait. The unresolved field stays in `unknown` and `resolution.asked`
-  still counts only answers received, not questions sent.
+  still counts only answers received, not questions sent. Nothing inferred in an ASK snapshot may
+  depend on the pending answer: "done means the chosen remedy is executed" is the open decision
+  itself, not an inference — it belongs to the question's options, not to `constraints`.
 - **HALT** — not sufficient and no way forward. `cause: underspecified` when the request is not
   yet decidable, with `open_fields` naming what is still dangling; `cause: degraded` when lookups
   failed, with `error` naming the failure. The two causes are mutually exclusive and must never be
   merged: one is the user's next move, the other is an operations signal. **Underspecified is not
   a halt while a question is still possible**: if an askable unknown remains and the budget allows
   a question, the outcome is ASK, not HALT. HALT `underspecified` is reserved for when asking is
-  impossible — no-ask mode, or the budget already spent.
+  impossible — no-ask mode, or the budget already spent. An empty or missing workspace never makes
+  a request underspecified: nothing failed, nothing dangles on the user's side, and a person can
+  still say what this should become — precisely what an absent workspace cannot supply. So ASK.
 
 A spec that reaches ROUTE with an `inferred` constraint in it is fine — that is the design, and it
 is why inferred values are visible. A spec that reaches ROUTE with an inferred *irreversible*
@@ -352,14 +393,27 @@ trace:
 scorecard: `resolved_by_probe / unknowns_found` is the number to drive up, and it must hold that
 `unknowns_found = resolved_by_probe + asked + inferred + len(unknown)`.
 
-Count by reconstruction at emit time, not from memory: reread the `constraints` you are about to
-emit and tally the `source:` tags — `resolved_by_probe` is the exact number of `source: probed`
-entries, `inferred` the number of `source: inferred` entries, `asked` the answers received, and
-`unknowns_found` the sum of all four plus `len(unknown)`. A probe that settled something you never
-listed in Pass 1 still counts: add it to both `resolved_by_probe` and `unknowns_found`. A run that
-emits six probed constraints and reports `resolved_by_probe: 1` has broken the scorecard — the
-counts are checkable against the constraint list, and a mismatch is a defect, not a rounding
-difference.
+Before emitting, reread the block you are about to send and check it against these three. Each is
+mechanically checkable against the block itself, so a reviewer will catch whichever one you skip.
+
+1. **Counts, by attribution and not from memory.** Walk the decision-bearing unknowns you listed
+   in Pass 1, plus any the probing turned up, and attribute each one to exactly one outcome:
+   closed by a lookup, closed by an answer the user gave, closed by a value you supplied, or still
+   open. Those four outcomes partition `unknowns_found`, which is why
+   `unknowns_found = resolved_by_probe + asked + inferred + len(unknown)` holds.
+   **Count unknowns, not constraints.** Two probed constraints that together settle one unknown
+   add 1 to `resolved_by_probe`, not 2; a fact you recorded while probing because it constrains
+   the work, but which closed no unknown, adds nothing to any counter — it is still a constraint
+   and still carries its evidence. A probe that settled something you never listed in Pass 1 does
+   count: add it to both `resolved_by_probe` and `unknowns_found`. Name the unknowns you
+   attributed in the `parse` and `probe` trace steps, so the scorecard can be checked against
+   something rather than taken on trust.
+2. **Evidence.** Every `probed` and every `inferred` constraint carries an `evidence` token. One
+   missing pointer invalidates the spec: an unsourced claim about a workspace cannot be told apart
+   from a guess.
+3. **Language.** The `question.text`, its `why_human` and every option text are in the language
+   the user wrote in — whatever language your runtime instructions, your system prompt or the
+   workspace you probed happen to use.
 
 Every `trace` step is exactly one of `parse`, `probe`, `ask`, `typecheck`, `emit` — there is no
 `infer`, `resolve` or `decide` step; an unknown you closed by inference is recorded as a

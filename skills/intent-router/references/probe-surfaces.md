@@ -83,7 +83,30 @@ looks like it has a history.
 - Pull-request or issue numbers in commit subjects.
 - Version pins with a reason in the message ("pin X to 5.x: 6.x breaks cluster mode").
 
-Evidence for history is `git:<short-sha>` or `git:#<pr-number>`.
+**When a shallower surface hands you a dangling reference, this is the surface that resolves it.**
+A changelog line, a comment, a config value or a record field that names a pull-request or issue
+number, or says "revert", "pin", "workaround", "temporary", or "see elsewhere" — without giving a
+reason — has told you *what* and withheld *why*. The why is the decision-bearing half. Following
+that reference is the **reserved history query**: one action, outside the 3-per-unknown budget,
+because this surface is sixth in the order and would otherwise be unreachable for any unknown that
+spent its budget on the surfaces above. One query, then stop. If the reason is still not there,
+the unknown is genuinely open — reclassify it `ask`, and say in the question that the workspace
+records the decision but not the reason for it.
+
+Two failure modes to avoid here, both observed in real runs:
+
+- **Declaring the capability absent without trying it.** Attempt the history query once and record
+  the attempt, whatever you conclude. A `degraded` cause is cheap to invent and expensive to be
+  wrong about — it tells the operator their environment is broken.
+- **Treating "the pin exists" as the answer.** Finding the pin recorded without its reason leaves
+  the unknown open. If the reason is nowhere, reclassify `ask` and say in the question that the
+  decision is recorded but its reason is not — never present the half you found as the whole.
+
+If no shell capability answers, the history is still on disk as files — the log of reference
+updates, the stored commit message — so read it there before concluding the lookup failed.
+
+Evidence for history is `git:<short-sha>` or `git:#<pr-number>`, whichever route reached it.
+A path inside the history store is never evidence, even when reading it is how you got there.
 
 ## 7. Written decisions
 
@@ -120,8 +143,12 @@ evidence pointer is worse than an admitted unknown, because it survives review.
 
 ## Budget
 
-At most **3** probe actions per unknown, and no whole-repository sweeps. One targeted search, one
-file, one history query is the shape of a good probe sequence.
+At most **3** probe actions per unknown, and no whole-repository sweeps. One targeted search and
+one file is the shape of a good probe sequence.
+
+The **reserved history query** of surface 6 is the one exception: when a shallower surface hands
+you a dangling reference, resolving it costs one action that does not count against the 3. It is
+reserved for that case and does not license a general history sweep.
 
 When the budget is spent and the unknown survives:
 

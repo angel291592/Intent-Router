@@ -104,7 +104,9 @@ spec）、`degraded output`（产出了但解析不了）、`timeouts`、`harnes
 `min_resolved_by_probe`、`resolved_by_probe_eq`、`probed_constraints_eq`、`max_inferred`、
 `unknown_empty`、`has_source`、`open_fields_min`、`evidence_must_include`（子串匹配）、
 `evidence_regex`、`question_keywords`（任一命中）、`text_keywords`（任一命中）、`output_regex`
-（不区分大小写）、`question_lang`、`not_target`。
+（不区分大小写）、`question_lang`、`not_target`、`open_field_regex`（匹配每个开放 unknown 的
+`field` 与 `category`，是 `question_keywords` 的语言无关对应物；只在期望 ASK 的用例上有意义，
+因为 ROUTE 的 spec 没有开放 unknown）。
 
 `triggered`、`schema_valid`、`invariants_ok`、`evidence_valid`、`evidence_form` 在"预期应产出
 spec"时恒被检查，用例无需列出。运行上报的失败名还包括 `timeout`、`harness_error`、`turn1_not_ask`

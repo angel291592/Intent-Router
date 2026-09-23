@@ -33,11 +33,18 @@ rather than asking the user to pick a letter again.
 4. **Always recommend one**, with its reason. A question with no default is a question that costs
    the user more than it saves.
 5. **Never ask for something you can look up**, and never ask the user to confirm something you
-   already found — state the probed constraint instead and let them veto it.
+   already found — state the probed constraint instead and let them veto it. The same applies to
+   something the user already told you: a rule they stated is an `explicit` constraint, and
+   re-opening it to distinguish sub-cases they did not distinguish ("you said serve uncached on
+   invalidation failure — did you mean serve stale until the TTL, or bypass the cache?") is the
+   same defect wearing a more diligent-looking hat.
 6. **Do not ask about implementation detail.** Which variable name, which file to put a helper in,
    which loop shape: those belong to whoever executes.
 7. **Ask in the user's language.** Spec keys stay English; the question text and option text use
-   the language the user wrote in.
+   the language the user wrote in — not the language of your runtime instructions, your system
+   prompt, or the workspace you just probed. This is checked again before the spec is emitted
+   (main instructions, section 6), because a question in the wrong language is invisible to the
+   author and obvious to the reader.
 
 ## Budget
 

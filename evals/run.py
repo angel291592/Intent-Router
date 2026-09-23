@@ -92,6 +92,7 @@ EXPECT_KEYS = frozenset(
         "output_regex",
         "question_lang",
         "not_target",
+        "open_field_regex",
     }
 )
 CASE_KEYS = frozenset(
@@ -202,6 +203,7 @@ CASE_COST: dict[str, dict[str, float]] = {
         "add-caching-auto": 80,
         "fully-specified": 140,
         "fully-specified-auto-quiet": 140,
+        "partially-specified-auto": 140,
         "git-only-fact": 171,
         "add-caching-two-turn": 171,
         "add-caching-explicit": 171,
@@ -214,6 +216,7 @@ CASE_COST: dict[str, dict[str, float]] = {
         "git-only-fact": 102,
         "fully-specified": 121,
         "fully-specified-auto-quiet": 121,
+        "partially-specified-auto": 121,
         "vague-no-ask": 187,
         "add-caching-auto": 202,
         "add-caching-explicit": 202,
@@ -327,19 +330,41 @@ def json_strings(node, keys=("result", "text", "content", "message", "output")) 
     return found
 
 
+def is_tool_payload(event) -> bool:
+    """True for a harness event whose payload is tool output, never assistant prose."""
+    if not isinstance(event, dict):
+        return False
+    part = event.get("part")
+    return isinstance(part, dict) and part.get("type") == "tool"
+
+
 def harness_texts(stdout: str) -> list[str]:
-    """Candidate transcript texts for a harness run, in event order, raw stdout last."""
+    """Candidate transcript texts for a harness run, in event order, raw stdout last.
+
+    Tool-use events are excluded from the candidates (opencode JSONL marks them
+    ``part.type == "tool"``): their output embeds the SKILL.md text the run just read,
+    whose own fenced examples would otherwise win the reversed scan whenever the
+    assistant emits no fence of its own — a correct silent run (``should_trigger:
+    false``) must be scored as no_fence, not against the skill's documentation.
+    claude-code transcripts carry only the final text in ``result``, so nothing is
+    excluded there.
+    """
     texts: list[str] = []
     try:
-        texts.extend(json_strings(json.loads(stdout)))
+        single = json.loads(stdout)
+        if not is_tool_payload(single):
+            texts.extend(json_strings(single))
     except (json.JSONDecodeError, TypeError):
         for line in stdout.splitlines():  # JSONL output
             line = line.strip()
             if line.startswith("{"):
                 try:
-                    texts.extend(json_strings(json.loads(line)))
+                    event = json.loads(line)
                 except json.JSONDecodeError:
                     continue
+                if is_tool_payload(event):
+                    continue
+                texts.extend(json_strings(event))
     # Event order preserved (deduped): extract_spec scans from the END, so the final
     # message wins. The raw stdout blob is excluded from that scan: for JSONL harnesses a
     # ```yaml fence opened in one event and closed in a later one makes the regex span
@@ -947,6 +972,21 @@ def check_turn(
         elif key == "evidence_regex":
             if not any(re.search(want, p) for _, p in evidence_items(spec)):
                 fail(key)
+        elif key == "open_field_regex":
+            # Language-independent counterpart of question_keywords. Matches the
+            # machine-readable half of each open unknown: `field` is required by
+            # the schema and is a stable English identifier, `category` is an
+            # English enum. `note` is deliberately excluded — its value may be in
+            # the user's language, which is the exact dependency this key removes.
+            # On a ROUTEd spec `unknown` is empty and the blob is empty, so this
+            # key belongs only on cases that expect ASK.
+            blob = "\n".join(
+                f"{u.get('field', '')} {u.get('category', '')}"
+                for u in spec.get("unknown") or []
+                if isinstance(u, dict)
+            )
+            if not re.search(want, blob, re.IGNORECASE):
+                fail(key)
         elif key == "question_keywords":
             blob = question_blob(spec).lower()
             if not any(str(w).lower() in blob for w in want):
@@ -1472,6 +1512,29 @@ def selftest() -> int:
         "finds a session id",
         session_id_of(json.dumps({"session_id": "abc123", "result": "hi"})) == "abc123",
     )
+    # Regression for the 2026-09-23 Tier 3 finding: a correct silent run emits no
+    # fence, and the reversed scan used to fall back to the SKILL.md text inside the
+    # tool-use output, scoring the skill's own HALT example as an emitted spec.
+    tool_example = {
+        "type": "tool_use",
+        "part": {"type": "tool", "tool": "read", "state": {"output": "doc\n```yaml\ndecision:\n  state: HALT\n```"}},
+    }
+    quiet_reply = {"type": "text", "part": {"type": "text", "text": "passes the silence check; no spec"}}
+    jsonl = "\n".join(json.dumps(e) for e in (tool_example, quiet_reply)) + "\n"
+    spec, status, _ = extract_spec(harness_texts(jsonl))
+    expect(
+        "a tool-use fence is never a spec candidate (silent run stays silent)",
+        spec is None and status == "no_fence",
+    )
+    jsonl_reply = (
+        "\n".join(
+            json.dumps(e)
+            for e in (tool_example, {"type": "text", "part": {"type": "text", "text": "spec\n```yaml\nstate: ASK\n```"}})
+        )
+        + "\n"
+    )
+    spec, status, _ = extract_spec(harness_texts(jsonl_reply))
+    expect("an assistant text fence still wins over the tool example", spec == {"state": "ASK"})
 
     print("evidence pointers")
     expect("path:line", evidence_path("src/cache/redis.ts:12") == "src/cache/redis.ts")
@@ -1581,6 +1644,63 @@ def selftest() -> int:
     expect(
         "the real cases.yaml validates clean",
         validate_cases(load_cases()) == [],
+    )
+
+    print("open_field_regex is language-independent (2026-09-23 case fix)")
+    zh_ask = json.loads(json.dumps(ask))
+    zh_ask["decision"]["question"]["text"] = "缓存失效失败时，应该返回旧值还是绕过缓存？"
+    zh_ask["decision"]["question"]["why_human"] = "这是可用性与正确性之间的偏好取舍"
+    zh_ask["decision"]["question"]["options"] = [
+        {"id": "A", "text": "绕过缓存，直接查库"},
+        {"id": "B", "text": "继续返回旧值直到过期"},
+    ]
+    outcome = check(
+        {"id": "x", "fixture": "user-api", "expect": {"open_field_regex": "invalid|stale|fail"}},
+        record_for(zh_ask),
+        validator,
+    )
+    expect(
+        f"a Chinese question still matches open_field_regex: {outcome['failures']}",
+        outcome["pass"],
+    )
+    outcome = check(
+        {"id": "x", "fixture": "user-api", "expect": {"question_keywords": ["invalidation", "stale", "fail"]}},
+        record_for(zh_ask),
+        validator,
+    )
+    expect(
+        "the same spec fails the English question_keywords check",
+        "question_keywords" in outcome["failures"],
+    )
+    routed = yaml.safe_load((EXAMPLES / "route.yaml").read_text(encoding="utf-8"))
+    outcome = check(
+        {"id": "x", "fixture": "user-api", "expect": {"open_field_regex": "anything"}},
+        record_for(routed),
+        validator,
+    )
+    expect(
+        "open_field_regex cannot match a ROUTEd spec with no open unknown",
+        "open_field_regex" in outcome["failures"],
+    )
+
+    print("attribution counting: probed constraints may outnumber resolved unknowns")
+    # Regression guard for the 2026-09-23 finding. The one git-only-fact run that
+    # PASSED emitted three `source: probed` constraints while reporting
+    # resolved_by_probe: 2 — the third was a fact recorded in passing that closed
+    # no unknown. SKILL.md section 6 counts unknowns, not constraints, so this
+    # shape is correct and must never be scored as a defect. Anyone later tempted
+    # to assert resolved_by_probe == len(probed constraints) fails here first.
+    attributed = json.loads(json.dumps(ask))
+    attributed["resolution"]["unknowns_found"] = 3
+    attributed["resolution"]["resolved_by_probe"] = 2
+    outcome = check(
+        {"id": "x", "fixture": "user-api", "expect": {"state": "ASK"}},
+        record_for(attributed),
+        validator,
+    )
+    expect(
+        f"three probed constraints closing two unknowns is legal: {outcome['failures']}",
+        outcome["pass"],
     )
 
     print("environmental failures are separated from behaviour (R5)")

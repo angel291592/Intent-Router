@@ -11,6 +11,11 @@
 # present, except for triggered / schema_valid / invariants_ok / evidence_valid /
 # evidence_form, which are always checked whenever a spec is expected at all.
 # List-valued keyword checks (question_keywords, text_keywords) pass on ANY match.
+# `open_field_regex` is the language-independent counterpart of question_keywords:
+# it matches against the machine-readable half of each open unknown
+# (`field` plus `category`, never `note`), because those are English by contract
+# while question text is in the user's language. Use it on cases that expect ASK;
+# a ROUTE spec has no open unknown, so the key cannot match there.
 
 - id: add-caching-auto
   prompt: add caching to the user API
@@ -19,6 +24,7 @@
   expect:
     state: ASK
     question_keywords: [invalidation, stale, fail]
+    open_field_regex: "invalid|stale|fail"
     min_resolved_by_probe: 2
     evidence_must_include: [src/cache/redis.ts, src/routes/users.ts]
     max_asked: 1
@@ -31,6 +37,7 @@
   expect_turn1:
     state: ASK
     question_keywords: [invalidation, stale, fail]
+    open_field_regex: "invalid|stale|fail"
     min_resolved_by_probe: 2
     evidence_must_include: [src/cache/redis.ts, src/routes/users.ts]
     max_asked: 1
@@ -58,12 +65,56 @@
 - id: fully-specified-auto-quiet
   prompt: >-
     Add Redis caching with the existing ioredis client to GET /api/users and
+    GET /api/users/:id, TTL 300s via DEFAULT_TTL_SECONDS. Invalidate on writes:
+    POST /api/users drops the list key, DELETE /api/users/:id drops the list key
+    and that user's key. On any cache read, write or invalidation failure, serve
+    the uncached response and let the request succeed. Do not cache 404s. Keep
+    both response shapes unchanged. Done when both endpoints serve from cache
+    inside the 300s window and the existing test suite still passes.
+  mode: auto
+  fixture: user-api
+  # This prompt is constructed to satisfy all four items of the silence check
+  # (SKILL.md section 1) so that should_trigger: false is decidable:
+  #   objects     — both endpoints named, plus the two write handlers that
+  #                 invalidate, so the object set is closed;
+  #   approach    — the existing ioredis client and DEFAULT_TTL_SECONDS;
+  #   failure     — one rule covering read, write AND invalidation failure, so
+  #                 no failing step is left silent, plus the 404 boundary;
+  #   acceptance  — an observable done condition.
+  # The older, shorter prompt was NOT fully specified (silent on acceptance, and
+  # on read/write failure), so the skill was right to run on it — that prompt now
+  # lives on as `partially-specified-auto` below with the expectations its actual
+  # behaviour warrants. Nothing was loosened: this case still demands total
+  # silence, on a request that now objectively deserves it.
+  expect:
+    should_trigger: false
+
+- id: partially-specified-auto
+  prompt: >-
+    Add Redis caching with the existing ioredis client to GET /api/users and
     GET /api/users/:id, TTL 300s via DEFAULT_TTL_SECONDS; on invalidation failure
     serve uncached; keep response shapes unchanged.
   mode: auto
   fixture: user-api
+  # The prompt fully-specified-auto-quiet used before 2026-09-23. It states the
+  # objects, the approach and ONE failure rule, and is silent on acceptance, so
+  # the silence check fails and running is correct. What the skill must NOT do
+  # here is spend a question: everything still open is either probeable (the
+  # cache helpers, ADR 0007, the response contract pinned by tests) or a visible
+  # inference the user can veto in one line.
+  # Measured across the four valid 2026-09-23 runs: ROUTE with asked 0 in three
+  # of them; the fourth re-opened the stated "serve uncached" rule as a
+  # stale-vs-bypass ambiguity, which SKILL.md section 3 and ask-protocol rule 5
+  # now both name as a defect.
+  # min_resolved_by_probe and max_inferred together catch the other failure mode
+  # seen in those runs: one run inferred three scope items it could have probed
+  # (resolved_by_probe 1, inferred 3) while still balancing its counters.
   expect:
-    should_trigger: false
+    state: ROUTE
+    asked_eq: 0
+    unknown_empty: true
+    min_resolved_by_probe: 2
+    max_inferred: 2
 
 - id: vague-no-ask
   prompt: make it better. no questions.
@@ -94,10 +145,20 @@
   prompt: upgrade ioredis to the latest major version
   mode: explicit
   fixture: user-api
+  # The fixture splits this fact in two on purpose (run.py HISTORY): the
+  # CHANGELOG records that a pin EXISTS ("Pin ioredis to 5.x (#420)"), while the
+  # commit message is the only place carrying WHY ("6.x breaks cluster mode in
+  # production"). Reading the CHANGELOG alone therefore yields exactly the
+  # dangling reference SKILL.md section 4.2 now forbids treating as settled.
+  # text_keywords was [cluster, "420"] and the ANY semantics let "420" match
+  # straight off the CHANGELOG, so this assertion could pass with the history
+  # never read — the whole discriminating power sat on evidence_regex alone.
+  # Narrowed to the single token that exists ONLY in version history. This is a
+  # tightening; the case now fails in exactly the situation it was written for.
   expect:
     state_in: [ASK, ROUTE]
     evidence_regex: "git:"
-    text_keywords: [cluster, "420"]
+    text_keywords: [cluster]
     max_asked: 1
 
 - id: chinese-ambiguous
@@ -143,6 +204,7 @@
   expect:
     state: ASK
     question_keywords: [refund, replace, replacement]
+    open_field_regex: "refund|replace|remedy"
     min_resolved_by_probe: 2
     evidence_must_include: [orders/8821, returns]
     max_asked: 1
@@ -172,6 +234,8 @@
   expect_turn1:
     state: ASK
     question_keywords: [refund, replace, replacement]
+    open_field_regex: "refund|replace|remedy"
   expect:
     state: ASK
+    open_field_regex: "refund|replace|remedy"
     max_inferred: 0
