@@ -27,7 +27,16 @@ can't, and refusing to emit when the intent is still underspecified.
       IntentSpec  ──►  your planner / agent / subagent
 ```
 
-<!-- demo:begin --><!-- demo:end -->
+<!-- demo:begin -->
+What a real run looks like — one sentence in, it reads the repo itself and asks only what no
+file can answer:
+
+<p align="center">
+  <img src="docs/assets/demo-1-probe.png" width="760" alt="Intent-Router loads automatically and probes the repo: package.json, src/routes/users.ts, src/cache/redis.ts and more"><br><br>
+  <img src="docs/assets/demo-2-question.png" width="760" alt="The one question it asks — fail open or fail closed — with A/B options and a recommendation"><br><br>
+  <img src="docs/assets/demo-3-spec.png" width="760" alt="The emitted IntentSpec: 6 unknowns found, 4 resolved by probe, every field carrying an evidence pointer">
+</p>
+<!-- demo:end -->
 
 No install, no API key, no dependencies — it's a skill:
 

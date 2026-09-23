@@ -7,6 +7,13 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
 
 ## [Unreleased]
 
+- Docs: a three-frame demo now sits above the fold on both READMEs — the auto-triggered probe
+  sequence, the single question it asks, and the emitted spec. Rendered faithfully from the
+  2026-09-23 opencode evaluation transcript.
+
+- Docs：双语 README 首屏新增三帧 demo——自动触发的探测序列、它问的唯一一个问题、产出的 spec。
+  画面逐字取自 2026-09-23 opencode 评测的真实 transcript 渲染。
+
 ## [0.1.2] — 2026-09-23
 
 - Evals: `cases.yaml` now rejects unknown case-level and assertion keys at load time, listing every

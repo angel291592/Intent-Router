@@ -27,7 +27,15 @@
       IntentSpec  ──►  你的 planner / agent / subagent
 ```
 
-<!-- demo:begin --><!-- demo:end -->
+<!-- demo:begin -->
+一次真实运行的样子——你只说一句话，它自己去读仓库，只问文件回答不了的那一个问题：
+
+<p align="center">
+  <img src="docs/assets/demo-1-probe.png" width="760" alt="Intent-Router 自动加载并探测仓库：package.json、src/routes/users.ts、src/cache/redis.ts 等"><br><br>
+  <img src="docs/assets/demo-2-question.png" width="760" alt="它问的唯一一个问题——fail open 还是 fail closed——带 A/B 选项与推荐值"><br><br>
+  <img src="docs/assets/demo-3-spec.png" width="760" alt="产出的 IntentSpec：6 个未知项，4 个靠探测解决，每个字段都带 evidence 指针">
+</p>
+<!-- demo:end -->
 
 无需安装，无需 API key，零依赖——它就是一个 skill：
 
