@@ -110,6 +110,25 @@ a single pass once a *formed* input exists; neither converges a vague request in
 upstream convergence is the layer Intent-Router occupies, and the `IntentSpec` it emits is the
 shape of input they want.
 
+### What your harness already does — and what this adds
+
+To be fair: a good harness natively prefers looking things up over asking, and offers a
+recommended default when it does ask. That much is not this skill's contribution, and nothing
+else on this page should be read as claiming it is.
+
+What it adds is the part a conversation cannot hold:
+
+- **The contract outlives the session.** Native answers live in the conversation — compress the
+  context, open a new session, switch models, and they are gone. An `IntentSpec` is a
+  file-level contract, so the next agent, session or teammate starts from it rather than zero.
+- **Two failures stay distinct.** Natively, a probe that failed and a request that was
+  underspecified collapse into the same "I need more information". Here `degraded` is an
+  operations signal and `underspecified` is your next step; merging them hides a backend outage
+  behind what looks like a clarifying question.
+- **It refuses to emit past an irreversible guess.** The native bias is "pick a sensible
+  default, mention it, keep going". When an inferred value touches an irreversible boundary, the
+  skill refuses to ROUTE — it HALTs and names the field instead.
+
 ---
 
 ## The problem

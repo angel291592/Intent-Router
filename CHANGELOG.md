@@ -17,6 +17,11 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
 - Docs: `evals/README` (both languages) gains a Delivery-quality comparison section: how to run
   it, what `delivery.yaml` holds, the six scoring items, and why the skill arm is invoked
   explicitly (trigger rate stays with `add-caching-auto`).
+- Docs: the top-level READMEs (both languages) gain a short section under the comparison table
+  stating what a good harness already does natively — looks things up before asking, offers
+  recommended defaults — and the three structural additions this skill makes beyond it: the
+  contract survives across sessions, `degraded` and `underspecified` stay distinct, and an
+  irreversible guess refuses to emit.
 - Evals：新增交付质量对照模式（`--delivery`、`--rescore-delivery`）。同一句弱表达在同一 fixture
   上跑两次——一次裸跑、一次显式调用 skill——权限与"脚本化用户"完全一致，然后以快照上的纯函数
   给最终工作区打分，六个二值项（共享 Redis 客户端、默认 TTL、写时失效、读路径全覆盖、明确的
@@ -24,6 +29,9 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
   spec 形状的测量。
 - Docs：`evals/README`（双语）新增"交付质量对照"一节：怎么跑、`delivery.yaml` 有哪些字段、
   六个评分项是什么，以及 skill 臂为什么显式调用（触发率仍归 `add-caching-auto`）。
+- Docs：两版顶层 README 在对比表下新增一小节：先说清好的 harness 原生已经会做什么——先查后
+  问、问时给推荐默认值——再列出本 skill 在这之上多出的三点：契约跨 session 存活、`degraded`
+  与 `underspecified` 不合并、不可逆的猜测拒绝出产。
 
 ## [0.3.0] — 2026-09-23
 
