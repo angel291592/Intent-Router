@@ -7,7 +7,19 @@ English | [简体中文](README.zh-CN.md)
 Turns a vague request into a typed `IntentSpec` — looking up what it can, asking only what it
 can't, and refusing to emit when the intent is still underspecified.
 
-The compiler has no idea what a repository is. Code is just the domain it has been measured in.
+**What that buys you, in plain language:**
+
+- **Senior-engineer agent interaction, with no prompt-engineering prerequisite.** Say it the way
+  you'd say it to a capable teammate — *"add caching to the user API"*. The skill writes the
+  briefing a senior engineer would have written first, so the quality of what you get no longer
+  depends on how well you've learned to word a prompt.
+- **Less answering, not more.** Before anything reaches you, it looks up what your repo, ticket
+  system or docs already answer — the forty-six-question interview becomes the single question
+  that genuinely needs your judgment.
+- **Better work, carried further.** Every run ends in a machine-readable `IntentSpec` whose probed
+  fields carry evidence pointers — the output rests on what your project actually says instead of
+  an unstated guess, and the next agent, session or teammate picks up from that contract instead
+  of zero.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/angel291592/Intent-Router)](https://github.com/angel291592/Intent-Router/releases)
@@ -59,11 +71,32 @@ Manual install, or an agent the installer doesn't know: [Quick start](#quick-sta
 
 ## Contents
 
+- [How it compares](#how-it-compares)
 - [The problem](#the-problem) · [How it works](#how-it-works) · [The four decision states](#the-four-decision-states)
 - [Two walkthroughs](#two-walkthroughs) — one in a codebase, one in a support queue
-- [How it compares](#how-it-compares) · [The artifact](#the-artifact) · [Where it works](#where-it-works) · [Quick start](#quick-start) · [Evals](#evals)
+- [The artifact](#the-artifact) · [Where it works](#where-it-works) · [Quick start](#quick-start) · [Evals](#evals)
 - [Design principles](#design-principles) · [Limitations](#limitations)
 - [Backends](#backends) · [Prior art](#prior-art) · [Contributing](#contributing)
+
+---
+
+## How it compares
+
+**Intent-Router is the layer four good tools leave empty: deciding whether to look, ask, or act —
+before acting.** grill-me converges beautifully, states the right principle, and keeps nothing.
+spec-kit keeps everything and makes you buy its whole workflow to get it. Routers decide fast and
+can't handle ambiguity at all. Jev returns exactly the typed, calibrated decision you want — *once
+the intent is already clear*, which is the hard part.
+
+Read the row gaps, not the checkmarks:
+
+| | Converges vague input | Doesn't ask what it can look up | Machine-readable artifact | Decidable stop | Fires automatically |
+|---|---|---|---|---|---|
+| **Intent-Router** | ✅ | ✅ `PROBE`, with evidence and a metric | ✅ `IntentSpec` | ✅ predicate | ✅ |
+| [grill-me](https://github.com/mattpocock/skills) | ✅ rounds/frontier | ⚠️ principle, not tracked (no evidence, no metric) | ❌ stateless by design | ⚠️ "frontier empty" | ❌ manual |
+| [spec-kit `/clarify`](https://github.com/github/spec-kit) | ✅ 11-category scan | ❌ asks it | ✅ writes back to `spec.md` | ✅ ≤10 questions | ⚠️ needs `specs/<feature>/` + its workflow |
+| [semantic-router](https://github.com/aurelio-labs/semantic-router) / [RouteLLM](https://github.com/lm-sys/RouteLLM) | ❌ returns `None` | — | ❌ a label | ✅ threshold | ✅ |
+| [Jev](https://www.jevai.org/) (typed decisions) | ❌ needs clear input | — | ✅ typed + calibrated | ✅ confidence | ✅ |
 
 ---
 
@@ -221,29 +254,6 @@ record, not an opinion; asking it is the bug this thing exists to remove.
 > [`references/domains.md`](skills/intent-router/references/domains.md) — the skill is built for
 > it and documents it, but no published eval run covers it yet. See
 > [Where it works](#where-it-works).
-
----
-
-## How it compares
-
-**Intent-Router is the layer four good tools leave empty: deciding whether to look, ask, or act —
-before acting.** grill-me converges beautifully, states the right principle, and keeps nothing.
-spec-kit keeps everything and makes you buy its whole workflow to get it. Routers decide fast and
-can't handle ambiguity at all. Jev returns exactly the typed, calibrated decision you want — *once
-the intent is already clear*, which is the hard part.
-
-<details>
-<summary>The full comparison table — read the row gaps, not the checkmarks</summary>
-
-| | Converges vague input | Doesn't ask what it can look up | Machine-readable artifact | Decidable stop | Fires automatically |
-|---|---|---|---|---|---|
-| **Intent-Router** | ✅ | ✅ `PROBE`, with evidence and a metric | ✅ `IntentSpec` | ✅ predicate | ✅ |
-| [grill-me](https://github.com/mattpocock/skills) | ✅ rounds/frontier | ⚠️ principle, not tracked (no evidence, no metric) | ❌ stateless by design | ⚠️ "frontier empty" | ❌ manual |
-| [spec-kit `/clarify`](https://github.com/github/spec-kit) | ✅ 11-category scan | ❌ asks it | ✅ writes back to `spec.md` | ✅ ≤10 questions | ⚠️ needs `specs/<feature>/` + its workflow |
-| [semantic-router](https://github.com/aurelio-labs/semantic-router) / [RouteLLM](https://github.com/lm-sys/RouteLLM) | ❌ returns `None` | — | ❌ a label | ✅ threshold | ✅ |
-| [Jev](https://www.jevai.org/) (typed decisions) | ❌ needs clear input | — | ✅ typed + calibrated | ✅ confidence | ✅ |
-
-</details>
 
 ---
 
