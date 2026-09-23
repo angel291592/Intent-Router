@@ -116,7 +116,42 @@ spec"时恒被检查，用例无需列出。运行上报的失败名还包括 `t
 一条铁律：**用例失败就改 skill，不改用例。** 为达标而放宽预期会让 README 里所有数字变成装饰。
 改了什么写进报告的迭代记录节。
 
-## 6. 尚未覆盖
+## 6. 交付质量对照
+
+上面那些用例断言的是产出的 `IntentSpec` 的形状；交付模式量的是 spec 的目的本身——仓库里的最终
+工作产物有没有变好。同一句弱表达（`add caching to the user API`）在同一份 fixture 上跑两次：
+一次裸跑（不装 skill）、一次显式调用 skill——权限与"脚本化用户"完全一致——然后按 fixture 自带的
+可机检"正确交付"定义给每个工作区打分。
+
+```bash
+# 冒烟：每臂 1 次，先看快照与得分落盘情况，再决定是否加量
+uv run --with pyyaml --with jsonschema python evals/run.py \
+    --delivery --harness opencode --repeat 1 --jobs 2
+
+# 正式对照：每臂 3 次判定
+uv run --with pyyaml --with jsonschema python evals/run.py \
+    --delivery --harness opencode --repeat 3 --jobs 4
+
+# 离线：用现行评分器复评已落盘快照，零会话
+uv run --with pyyaml --with jsonschema python evals/run.py \
+    --rescore-delivery evals/reports/raw/delivery/opencode
+```
+
+用例放 `delivery.yaml`（与 `cases.yaml` 分开校验）；字段说明见该文件。一个用例包含弱表达
+`prompt`、fixture、"脚本化用户"的 `answer_when_asked`、`max_answers`、一次性发送的
+`implement_prompt`、`max_sessions`，以及快照要用的评分器名字。快照落在
+`reports/raw/delivery/<harness>/<arm>/`（不入库）；报告 `reports/<date>-delivery-<harness>.md`
+入库。
+
+评分是快照（`diff.patch` + 拷贝的 `src/` 与 `tests/`）上的纯函数，六个二值项：
+1 `reuses_shared_redis`（用 fixture 的共享 Redis helper，绝不进程内缓存——ADR 0007 陷阱）、
+2 `uses_default_ttl`（`src/cache/redis.ts` 之外不得硬编码 TTL）、3 `invalidates_on_write`
+（POST 与 DELETE 要失效缓存键）、4 `covers_all_reads`（三个 GET handler 全部走缓存）、
+5 `states_failure_policy`（有明确的缓存失败行为）、6 `contract_preserved`（响应形状与
+`src/db/users.ts` 不被改动）。没有产出 diff 的运行记 0/6。skill 臂是显式调用，因此触发概率
+不在本测量的范围——触发率由 `add-caching-auto` 单独度量。
+
+## 7. 尚未覆盖
 
 - 长到耗尽提问预算的对话（四轮及以上）。
 - 第二个生态的 fixture；现有 fixture 全是 TypeScript/Node。

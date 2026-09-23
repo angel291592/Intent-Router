@@ -7,6 +7,24 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
 
 ## [Unreleased]
 
+- Evals: a delivery-quality comparison mode (`--delivery`, `--rescore-delivery`). The same weak
+  request runs on the same fixture twice — once bare, once with the skill invoked explicitly —
+  under identical permissions and a scripted user, and each resulting workspace is scored by a
+  pure function over the persisted snapshot on six binary items (shared Redis client, default
+  TTL, invalidation on writes, all reads covered, a stated failure policy, untouched response
+  contract). This is the first measurement of "does the skill make the final work product
+  better", as opposed to the shape of the spec it emits.
+- Docs: `evals/README` (both languages) gains a Delivery-quality comparison section: how to run
+  it, what `delivery.yaml` holds, the six scoring items, and why the skill arm is invoked
+  explicitly (trigger rate stays with `add-caching-auto`).
+- Evals：新增交付质量对照模式（`--delivery`、`--rescore-delivery`）。同一句弱表达在同一 fixture
+  上跑两次——一次裸跑、一次显式调用 skill——权限与"脚本化用户"完全一致，然后以快照上的纯函数
+  给最终工作区打分，六个二值项（共享 Redis 客户端、默认 TTL、写时失效、读路径全覆盖、明确的
+  失败策略、响应契约不动）。这是第一份"装了 skill 之后最终交付是否更好"的测量，而不是它产出的
+  spec 形状的测量。
+- Docs：`evals/README`（双语）新增"交付质量对照"一节：怎么跑、`delivery.yaml` 有哪些字段、
+  六个评分项是什么，以及 skill 臂为什么显式调用（触发率仍归 `add-caching-auto`）。
+
 ## [0.3.0] — 2026-09-23
 
 - Schema: `evidence` now carries a `pattern` requiring a single whitespace-free token. The field's

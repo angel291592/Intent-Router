@@ -12,6 +12,12 @@
         --rescore evals/reports/raw/<harness> [--date YYYY-MM-DD]
 
     uv run --with pyyaml --with jsonschema python evals/run.py \
+        --delivery --harness opencode [--repeat 3] [--arm bare|skill|both] [--jobs 4]
+
+    uv run --with pyyaml --with jsonschema python evals/run.py \
+        --rescore-delivery evals/reports/raw/delivery/<harness>
+
+    uv run --with pyyaml --with jsonschema python evals/run.py \
         --check-frontmatter skills/intent-router/SKILL.md
 
     uv run --with pyyaml --with jsonschema python evals/run.py --selftest
@@ -25,6 +31,7 @@ Four layers, cheap to expensive; each is a gate for the next:
   Tier 1  --rescore <raw/dir> offline; re-judge persisted transcripts, 0 sessions
   Tier 2  --smoke             one cheap case; auth, skill visibility, parseability
   Tier 3  --cases <ids> --repeat 2   targeted re-runs after a skill change
+  Tier 3d --delivery ...          paid; bare-vs-skill delivery comparison
   Tier 4  full suite          the numbers that may reach the README
 
 --selftest exercises the parsing and assertion logic offline against the four
@@ -34,6 +41,11 @@ nothing, so it is the right thing to run after editing this file.
 evals/reports/raw/<harness>/*.txt with parse_transcript() and re-renders the
 matching report, so runner changes can be validated against real model output
 for free.
+--delivery runs the same weak request twice on the same fixture — once bare
+(no skill installed) and once with the skill — then scores the resulting
+workspace against the fixture's own machine-checkable "correct delivery". The
+score is a pure function of the persisted snapshot, so --rescore-delivery
+replays it with zero sessions.
 """
 
 from __future__ import annotations
@@ -63,6 +75,7 @@ SCHEMA_PATH = SKILL_DIR / "schema" / "intentspec.schema.json"
 EXAMPLES = SKILL_DIR / "schema" / "examples"
 EVALS = ROOT / "evals"
 CASES_PATH = EVALS / "cases.yaml"
+DELIVERY_CASES_PATH = EVALS / "delivery.yaml"
 FIXTURES = EVALS / "fixtures"
 
 # Assertion keys check_turn() knows how to evaluate. A key outside this set is a
@@ -163,6 +176,22 @@ OPENCODE_CONFIG = {
         "doom_loop": "allow",
     },
 }
+
+# Delivery variant: both arms must be able to edit files to produce a diff, but
+# everything else stays identical to the read-only suite config — bash remains
+# limited to `git log*`/`git show*`, so NEITHER arm can run tests or npm. That
+# is a deliberate equality constraint, recorded in the delivery report §1.
+OPENCODE_DELIVERY_CONFIG = {
+    **OPENCODE_CONFIG,
+    "permission": {**OPENCODE_CONFIG["permission"], "edit": "allow"},
+}
+
+# claude-code tool whitelist: the read-only set the existing 14 cases run with,
+# plus Edit/Write for delivery runs (claude-code permissions are CLI flags, not
+# a workspace config file). build_command() expands `tools or
+# CLAUDE_TOOLS_READONLY`, so the default behaviour is unchanged.
+CLAUDE_TOOLS_READONLY = ("Read", "Grep", "Glob", "Bash(git log:*)", "Bash(git show:*)")
+CLAUDE_TOOLS_DELIVERY = CLAUDE_TOOLS_READONLY + ("Edit", "Write")
 
 CJK = re.compile(r"[㐀-䶿一-鿿豈-﫿]")
 FENCE = re.compile(r"```ya?ml[^\n]*\n(.*?)```", re.DOTALL)
@@ -473,7 +502,20 @@ def seed_history(workspace: Path) -> None:
         )
 
 
-def prepare(case: dict, harness: str) -> Path:
+def prepare(
+    case: dict,
+    harness: str,
+    *,
+    with_skill: bool = True,
+    opencode_config: dict | None = None,
+) -> Path:
+    """Build a fresh workspace from the fixture.
+
+    with_skill=False is the delivery bare arm's only difference from the skill
+    arm (P1: same prompt, same fixture, same harness, same permissions otherwise).
+    The default values keep the existing call sites (run_case_once,
+    workspace_manifest) and the read-only OPENCODE_CONFIG behaviour unchanged.
+    """
     workspace = Path(tempfile.mkdtemp(prefix="intent-router-eval-"))
     fixture = case.get("fixture", "empty")
     if fixture != "empty":
@@ -486,12 +528,13 @@ def prepare(case: dict, harness: str) -> Path:
                 shutil.copytree(item, dest)
             else:
                 shutil.copy2(item, dest)
-    install_skill(workspace)
+    if with_skill:
+        install_skill(workspace)
     if fixture == "user-api":
         seed_history(workspace)
     if harness == "opencode":
         (workspace / "opencode.json").write_text(
-            json.dumps(OPENCODE_CONFIG, indent=2) + "\n", encoding="utf-8"
+            json.dumps(opencode_config or OPENCODE_CONFIG, indent=2) + "\n", encoding="utf-8"
         )
     return workspace
 
@@ -550,7 +593,14 @@ def executable(harness: str) -> str:
 
 
 def build_command(
-    harness: str, exe: str, prompt: str, model: str | None, *, keep_session: bool, resume: str | None
+    harness: str,
+    exe: str,
+    prompt: str,
+    model: str | None,
+    *,
+    keep_session: bool,
+    resume: str | None,
+    tools: tuple[str, ...] | None = None,
 ) -> list[str]:
     if harness == "claude-code":
         cmd = [exe, "-p"]
@@ -563,11 +613,7 @@ def build_command(
             "--permission-mode",
             "dontAsk",
             "--allowedTools",
-            "Read",
-            "Grep",
-            "Glob",
-            "Bash(git log:*)",
-            "Bash(git show:*)",
+            *(tools or CLAUDE_TOOLS_READONLY),
             "--setting-sources",
             "project",
         ]
@@ -1933,6 +1979,234 @@ def selftest() -> int:
         outcome["pass"],
     )
 
+    print("delivery scoring")
+    # The delivery scorer is a pure function over a snapshot directory, so the
+    # offline check builds synthetic snapshots and asserts the 6-item verdicts.
+    tmp_root = Path(tempfile.mkdtemp(prefix="delivery-selftest-"))
+
+    def fake_diff(path: str, added: list[str]) -> str:
+        body = "".join(f"+{ln}\n" for ln in added)
+        return (
+            f"diff --git a/{path} b/{path}\n"
+            f"index 111111..222222 100644\n"
+            f"--- a/{path}\n+++ b/{path}\n"
+            f"@@ -0,0 +1,{len(added)} @@\n{body}"
+        )
+
+    def make_snapshot(name, *, diff_parts, routes_text, meta=None):
+        d = tmp_root / name
+        (d / "src" / "routes").mkdir(parents=True)
+        (d / "src" / "db").mkdir(parents=True)
+        (d / "tests").mkdir(parents=True)
+        (d / "diff.patch").write_text("".join(diff_parts), encoding="utf-8")
+        (d / "src" / "routes" / "users.ts").write_text(routes_text, encoding="utf-8")
+        shutil.copy2(FIXTURES / "user-api" / "src" / "db" / "users.ts", d / "src" / "db" / "users.ts")
+        shutil.copy2(FIXTURES / "user-api" / "tests" / "users.test.ts", d / "tests" / "users.test.ts")
+        (d / "meta.json").write_text(json.dumps(meta or {"answers_used": 1}), encoding="utf-8")
+        return d
+
+    def ideal_routes(prefix: str = "") -> str:
+        return (
+            f'{prefix}import {{ getCache, dropCache }} from "../cache/redis";\n'
+            'import { listUsers, readUser, readUserPrefs, createUser, deleteUser } from "../db/users";\n\n'
+            "export const usersRouter = Router();\n\n"
+            'usersRouter.get("/", async (_req, res) => {\n'
+            '  const users = await getCache("users:list");\n'
+            "  if (users === null) {\n"
+            "    const fresh = await listUsers();\n"
+            "    await setCache(\"users:list\", fresh);\n"  # two-arg: default TTL
+            "    res.json({ users: fresh });\n"
+            "  } else {\n"
+            "    res.json({ users });\n"
+            "  }\n"
+            "});\n\n"
+            'usersRouter.get("/:id", async (req, res) => {\n'
+            '  const user = await getCache(`user:${req.params.id}`);\n'
+            "  if (user === null) {\n"
+            '    res.status(404).json({ error: "not_found" });\n'
+            "    return;\n"
+            "  }\n"
+            "  res.json({ user });\n"
+            "});\n\n"
+            'usersRouter.get("/:id/prefs", async (req, res) => {\n'
+            '  const prefs = await getCache(`prefs:${req.params.id}`);\n'
+            "  if (prefs === null) {\n"
+            '    res.status(404).json({ error: "not_found" });\n'
+            "    return;\n"
+            "  }\n"
+            "  res.json({ prefs });\n"
+            "});\n\n"
+            'usersRouter.post("/", async (req, res) => {\n'
+            "  const user = await createUser(req.body);\n"
+            "  try {\n"
+            '    await dropCache("users:list");\n'
+            "  } catch {\n"
+            "    // fall back to expiry\n"
+            "  }\n"
+            "  res.status(201).json({ user });\n"
+            "});\n\n"
+            'usersRouter.delete("/:id", async (req, res) => {\n'
+            "  const removed = await deleteUser(req.params.id);\n"
+            "  await dropCache(`user:${req.params.id}`);\n"
+            "  res.status(removed ? 204 : 404).end();\n"
+            "});\n"
+        )
+
+    ideal_added = [
+        'import { getCache, setCache, dropCache } from "../cache/redis";',
+        'const users = await getCache("users:list");',
+        'await setCache("users:list", users);',
+        'await dropCache("users:list");',
+        "try {",
+        "} catch {",
+        "  // fall back to expiry",
+    ]
+    ideal = make_snapshot(
+        "ideal",
+        diff_parts=[fake_diff("src/routes/users.ts", ideal_added)],
+        routes_text=ideal_routes(),
+    )
+    outcome = score_user_api_caching(ideal)
+    expect(
+        f"ideal delivery scores 6/6: {outcome['items']}",
+        outcome["score"] == 6 and all(outcome["items"].values()),
+    )
+
+    trap_routes = ideal_routes('const cache = new Map<string, unknown>();\n')
+    trap = make_snapshot(
+        "trap",
+        diff_parts=[fake_diff("src/routes/users.ts", ideal_added
+                              + ["const cache = new Map<string, unknown>();"])],
+        routes_text=trap_routes,
+    )
+    outcome = score_user_api_caching(trap)
+    expect(
+        f"the ADR trap (in-process Map) fails item 1 only: {outcome['items']}",
+        outcome["items"]["reuses_shared_redis"] is False,
+    )
+
+    ttl_added = ideal_added + ['await setCache("user:u_1", user, 300);']
+    ttl = make_snapshot(
+        "ttl",
+        diff_parts=[fake_diff("src/routes/users.ts", ttl_added)],
+        routes_text=ideal_routes(),
+    )
+    outcome = score_user_api_caching(ttl)
+    expect(
+        f"a hardcoded TTL third argument fails item 2: {outcome['items']}",
+        outcome["items"]["uses_default_ttl"] is False,
+    )
+
+    def half_routes() -> str:
+        text = ideal_routes()
+        # strip the cache calls from the two deeper read handlers and from the
+        # write handlers, so only GET / serves from cache and nothing invalidates
+        lines = [
+            ln
+            for ln in text.splitlines()
+            if not (
+                ln.startswith("  const user = await getCache")
+                or ln.startswith("  const prefs = await getCache")
+                or "dropCache(" in ln
+            )
+        ]
+        return "\n".join(lines) + "\n"
+
+    half = make_snapshot(
+        "half",
+        diff_parts=[fake_diff("src/routes/users.ts", ideal_added)],
+        routes_text=half_routes(),
+    )
+    outcome = score_user_api_caching(half)
+    expect(
+        f"covering only GET / fails items 3 and 4: {outcome['items']}",
+        outcome["items"]["invalidates_on_write"] is False
+        and outcome["items"]["covers_all_reads"] is False,
+    )
+
+    empty = make_snapshot(
+        "empty",
+        diff_parts=[],
+        routes_text=ideal_routes(),
+        meta={"answers_used": 0},
+    )
+    outcome = score_user_api_caching(empty)
+    expect(
+        "an empty diff is no delivery: 0/6 and no exception",
+        outcome["score"] == 0 and not any(outcome["items"].values())
+        and outcome["aux"]["no_delivery"] is True,
+    )
+
+    print("delivery case validation, prepare() arms and claude tools")
+    good = yaml.safe_load(DELIVERY_CASES_PATH.read_text(encoding="utf-8"))
+    expect("the real delivery.yaml validates clean", validate_delivery_cases(good) == [])
+    bad = json.loads(json.dumps(good[0]))
+    bad["scoring"] = "no-such-scorer"
+    problems = validate_delivery_cases([bad])
+    expect(
+        "an unknown scoring key is reported at load time",
+        bool(problems) and any("scoring" in p for p in problems),
+    )
+    bad = json.loads(json.dumps(good[0]))
+    bad["bogus_key"] = 1
+    bad["max_sessions"] = 2
+    problems = validate_delivery_cases([bad])
+    expect(
+        "an unknown key and a too-small session budget are both reported",
+        any("bogus_key" in p for p in problems)
+        and any("max_sessions" in p for p in problems),
+    )
+
+    ws = prepare(
+        {"fixture": "user-api"},
+        "opencode",
+        with_skill=False,
+        opencode_config=OPENCODE_DELIVERY_CONFIG,
+    )
+    expect(
+        "bare workspace: no skill dirs, delivery opencode.json, edit allow",
+        not (ws / ".claude").exists()
+        and not (ws / ".agents").exists()
+        and json.loads((ws / "opencode.json").read_text(encoding="utf-8"))["permission"]["edit"] == "allow",
+    )
+    base = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=ws, capture_output=True, text=True
+    ).stdout.strip()
+    expect("a fresh seeded workspace has no diff", workspace_has_diff(ws, base) is False)
+    (ws / "src" / "extra.ts").write_text("// new file\n", encoding="utf-8")
+    expect("a new src file counts as a diff", workspace_has_diff(ws, base) is True)
+    rm_tree(ws)
+    ws = prepare({"fixture": "user-api"}, "opencode")
+    expect(
+        "default prepare still installs the skill and denies edit",
+        (ws / ".claude" / "skills" / "intent-router").is_dir()
+        and (ws / ".agents" / "skills" / "intent-router").is_dir()
+        and json.loads((ws / "opencode.json").read_text(encoding="utf-8"))["permission"]["edit"] == "deny",
+    )
+    rm_tree(ws)
+
+    cmd = build_command("claude-code", "claude", "x", None, keep_session=False, resume=None)
+    index = cmd.index("--allowedTools")
+    expect(
+        "default claude tools are the five read-only entries",
+        tuple(cmd[index + 1:index + 6]) == CLAUDE_TOOLS_READONLY
+        and "Edit" not in cmd and "Write" not in cmd,
+    )
+    cmd = build_command(
+        "claude-code", "claude", "x", None,
+        keep_session=False, resume=None, tools=CLAUDE_TOOLS_DELIVERY,
+    )
+    index = cmd.index("--allowedTools")
+    expect(
+        "delivery claude tools add Edit and Write",
+        "Edit" in cmd[index:] and "Write" in cmd[index:],
+    )
+
+    print("looks_like_question")
+    expect("a trailing question is a question", looks_like_question("Sure.\n\nWhich strategy should I use?"))
+    expect("an option list is a question", looks_like_question("Options:\n\n- A) stale\n- B) uncached\n- C) hybrid"))
+    expect("a plain statement is not", not looks_like_question("Done. The cache is in place."))
+
     print("report rendering")
     results = [
         {
@@ -2227,6 +2501,893 @@ def rescore(raw_dir: Path, out_dir: Path, date_str: str | None) -> int:
     return 0
 
 
+# --------------------------------------------------------------------------- #
+# delivery mode: bare-vs-skill comparison on one fixture
+
+
+DELIVERY_CASE_KEYS = frozenset(
+    {
+        "id",
+        "prompt",
+        "fixture",
+        "answer_when_asked",
+        "max_answers",
+        "implement_prompt",
+        "max_sessions",
+        "scoring",
+    }
+)
+
+# The workspace files that are the runner's own, never the model's delivery.
+# .claude/.agents hold the installed skill copies committed by seed_history();
+# opencode.json is written after seeding and stays untracked.
+RUNNER_PATHS = (":!opencode.json", ":!.claude", ":!.agents")
+
+
+def validate_delivery_cases(cases: list[dict]) -> list[str]:
+    """Problems with the delivery cases, in the same list style as validate_cases."""
+    problems: list[str] = []
+    seen: set[str] = set()
+    for case in cases:
+        extra = set(case) - DELIVERY_CASE_KEYS
+        if extra:
+            problems.append(f"{case.get('id', '?')}: unknown delivery key(s): {sorted(extra)}")
+        case_id = case.get("id")
+        if not case_id:
+            problems.append("delivery case has no id")
+            continue
+        case_id = str(case_id)
+        if case_id in seen:
+            problems.append(f"{case_id}: duplicate id")
+        seen.add(case_id)
+        if not str(case.get("prompt", "")).strip():
+            problems.append(f"{case_id}: prompt is empty")
+        fixture = case.get("fixture")
+        if not fixture or not (FIXTURES / str(fixture)).is_dir():
+            problems.append(f"{case_id}: fixture not found: {fixture}")
+        if not isinstance(case.get("answer_when_asked"), str):
+            problems.append(f"{case_id}: answer_when_asked must be a string")
+        if not str(case.get("implement_prompt", "")).strip():
+            problems.append(f"{case_id}: implement_prompt is empty")
+        for key in ("max_answers", "max_sessions"):
+            value = case.get(key)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                problems.append(f"{case_id}: {key} must be a positive integer")
+        if (
+            isinstance(case.get("max_answers"), int)
+            and isinstance(case.get("max_sessions"), int)
+            and case["max_sessions"] < case["max_answers"] + 2
+        ):
+            problems.append(
+                f"{case_id}: max_sessions must be >= max_answers + 2 "
+                f"({case['max_sessions']} < {case['max_answers'] + 2})"
+            )
+        if case.get("scoring") not in DELIVERY_SCORERS:
+            problems.append(f"{case_id}: scoring {case.get('scoring')!r} is not in DELIVERY_SCORERS")
+    return problems
+
+
+def load_delivery_cases() -> list[dict]:
+    cases = yaml.safe_load(DELIVERY_CASES_PATH.read_text(encoding="utf-8"))
+    problems = validate_delivery_cases(cases)
+    if problems:
+        raise SystemExit("delivery.yaml:\n  " + "\n  ".join(problems))
+    return cases
+
+
+def workspace_has_diff(workspace: Path, base_sha: str) -> bool:
+    """True when anything but the runner's own files changed since base_sha.
+
+    `git add -A` stages new files too, so a delivery that only creates files
+    still registers; re-adding on every call is harmless.
+    """
+    subprocess.run(
+        ["git", *GIT_ID, "add", "-A", "--", ".", *RUNNER_PATHS],
+        cwd=workspace,
+        check=True,
+        capture_output=True,
+    )
+    done = subprocess.run(
+        ["git", *GIT_ID, "diff", "--cached", "--quiet", base_sha],
+        cwd=workspace,
+        capture_output=True,
+    )
+    return done.returncode != 0
+
+
+def looks_like_question(text: str) -> bool:
+    """Heuristic for a bare-arm reply that ends by asking the user something.
+
+    Only used when the reply carries no spec (state is None); the skill arm is
+    judged by its ASK state alone.
+    """
+    paragraphs = [p.strip() for p in (text or "").split("\n\n") if p.strip()]
+    if not paragraphs:
+        return False
+    tail = paragraphs[-1]
+    if "?" in tail or "？" in tail:
+        return True
+    return any(
+        re.match(r"^\s*[-*]?\s*[A-C][\.\):]", line)
+        for line in tail.splitlines()
+        if line.strip()
+    )
+
+
+def harness_run_metrics(stdout: str) -> tuple[int | None, int | None]:
+    """(duration_ms, num_turns) when the harness event stream carries them.
+
+    claude-code's result JSON has both fields; opencode's event stream may
+    carry neither (delivery plan §12.1) — then both are None and the report
+    compares arms by wall-clock only.
+    """
+    found: dict[str, int] = {}
+
+    def walk(node) -> None:
+        if isinstance(node, dict):
+            for key, child in node.items():
+                if key in ("duration_ms", "num_turns") and isinstance(child, (int, float)) and not isinstance(child, bool):
+                    found[key] = int(child)
+                else:
+                    walk(child)
+        elif isinstance(node, list):
+            for child in node:
+                walk(child)
+
+    try:
+        walk(json.loads(stdout))
+    except (json.JSONDecodeError, TypeError):
+        for line in stdout.splitlines():
+            line = line.strip()
+            if line.startswith("{"):
+                try:
+                    walk(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+    return found.get("duration_ms"), found.get("num_turns")
+
+
+# The five handlers the fixture routes file must still contain. Scoring cuts
+# the routes text into per-handler segments at these anchors.
+DELIVERY_HANDLERS = (
+    ("get", "/"),
+    ("get", "/:id"),
+    ("get", "/:id/prefs"),
+    ("post", "/"),
+    ("delete", "/:id"),
+)
+HANDLER_ANCHOR = re.compile(r'usersRouter\.(get|post|delete)\(\s*["\']([^"\']+)["\']')
+REDIS_IMPORT = re.compile(r'from\s+["\'](?:\.\.?/)+(?:cache/)?redis["\']')
+HELPER_CALL = re.compile(r"\b(getCache|setCache|dropCache)\(")
+INPROC_CACHE = re.compile(
+    r"new Redis\(|new Map<|new Map\(|lru-cache|node-cache|memory-cache|new LRU"
+)
+# Three-argument setCache with a numeric literal third argument; each argument
+# may contain one level of nesting (e.g. JSON.stringify(users)).
+SET_CACHE_HARDCODED = re.compile(
+    r"setCache\s*\("
+    r"[^,()]*(?:\([^()]*\)[^,()]*)*,"  # arg 1
+    r"[^,()]*(?:\([^()]*\)[^,()]*)*,"  # arg 2
+    r"\s*\d+\s*\)"  # arg 3: numeric literal
+)
+TWO_ARG_SET_CACHE = re.compile(
+    r"setCache\s*\("
+    r"[^,()]*(?:\([^()]*\)[^,()]*)*,"
+    r"[^,()]*(?:\([^()]*\)[^,()]*)*\)"
+)
+EXPIRES_LITERAL = re.compile(r'"EX",\s*\d+')
+TTL_VARIABLE = re.compile(r"\b(?:ttl|TTL|expire|expires|maxAge)\w*\s*[:=]\s*\d{2,}")
+FAILURE_POLICY = re.compile(
+    r"try\s*\{|\.catch\(|fall\s*back|fallthrough|best[- ]effort|fail[- ]fast|uncached|stale",
+    re.IGNORECASE,
+)
+RES_JSON = {
+    "users": re.compile(r"res\.json\(\{\s*users\s*\}\)"),
+    "user": re.compile(r"res\.json\(\{\s*user\s*\}\)"),
+    "prefs": re.compile(r"res\.json\(\{\s*prefs\s*\}\)"),
+}
+
+
+def added_lines_by_file(diff_text: str) -> dict[str, list[str]]:
+    """Added lines of a unified diff, grouped by target file path.
+
+    An added line starts with `+` and is not the `+++` header. Grouping by the
+    `diff --git a/<p> b/<p>` header keeps the "except src/cache/redis.ts"
+    exclusions per item well-defined.
+    """
+    by_file: dict[str, list[str]] = {}
+    current: str | None = None
+    for line in diff_text.splitlines():
+        if line.startswith("diff --git "):
+            match = re.match(r"diff --git a/(.*) b/(.*)$", line)
+            current = match.group(2) if match else None
+            continue
+        if current is None or line.startswith(("+++", "---")):
+            continue
+        if line.startswith("+"):
+            by_file.setdefault(current, []).append(line[1:])
+    return by_file
+
+
+def new_files(diff_text: str) -> list[str]:
+    """Target paths of `new file mode` chunks in a unified diff."""
+    out: list[str] = []
+    for chunk in diff_text.split("diff --git ")[1:]:
+        head = chunk.split("\n", 1)[0]
+        match = re.match(r"a/(.*) b/(.*)$", head)
+        if match and re.search(r"(?m)^new file mode", chunk):
+            out.append(match.group(2))
+    return out
+
+
+def handler_sections(routes_text: str) -> dict[tuple[str, str], str]:
+    """Cut the routes file into one segment per declared handler."""
+    matches = list(HANDLER_ANCHOR.finditer(routes_text))
+    sections: dict[tuple[str, str], str] = {}
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(routes_text)
+        sections[(match.group(1), match.group(2))] = routes_text[match.start():end]
+    return sections
+
+
+def score_user_api_caching(snapshot: Path) -> dict:
+    """Score one delivery snapshot for the user-api fixture. Pure function.
+
+    Reads only snapshot files (diff.patch, src/**, tests/**, meta.json) — no
+    network, no npm, no transcript (the one exception is the aux `adr_read`
+    flag). A snapshot with no added lines at all is a run that delivered
+    nothing (§5.3: no_delivery counts into N as 0/6), so every item is False.
+    """
+    diff_path = snapshot / "diff.patch"
+    diff_text = diff_path.read_text(encoding="utf-8") if diff_path.exists() else ""
+    added = added_lines_by_file(diff_text)
+    added_src = [ln for file, lines in added.items() if file.startswith("src/") for ln in lines]
+    added_non_cache = [
+        ln
+        for file, lines in added.items()
+        if file.startswith("src/") and file != "src/cache/redis.ts"
+        for ln in lines
+    ]
+    routes_path = snapshot / "src" / "routes" / "users.ts"
+    routes_text = routes_path.read_text(encoding="utf-8") if routes_path.exists() else ""
+    sections = handler_sections(routes_text) if routes_text else {}
+    meta: dict = {}
+    meta_path = snapshot / "meta.json"
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            meta = {}
+
+    def segment(method: str, path: str) -> str:
+        return sections.get((method, path), "")
+
+    def item_reuses_shared_redis() -> bool:
+        imported = any(REDIS_IMPORT.search(ln) for ln in added_src)
+        helper = any(HELPER_CALL.search(ln) for ln in added_src)
+        if not (imported or helper):
+            return False
+        return not any(INPROC_CACHE.search(ln) for ln in added_non_cache)
+
+    def item_uses_default_ttl() -> bool:
+        hardcoded = any(
+            SET_CACHE_HARDCODED.search(ln) or EXPIRES_LITERAL.search(ln) or TTL_VARIABLE.search(ln)
+            for ln in added_non_cache
+        )
+        if hardcoded:
+            return False
+        explicit_default = any("DEFAULT_TTL_SECONDS" in ln for ln in added_src)
+        two_arg = any(TWO_ARG_SET_CACHE.search(ln) for ln in added_src)
+        return explicit_default or two_arg
+
+    def item_invalidates_on_write() -> bool:
+        for method, path in (("post", "/"), ("delete", "/:id")):
+            seg = segment(method, path)
+            if not seg or not re.search(r"\bdropCache\(|\bredis\.del\(", seg):
+                return False
+        return True
+
+    def item_covers_all_reads() -> bool:
+        for method, path in (("get", "/"), ("get", "/:id"), ("get", "/:id/prefs")):
+            seg = segment(method, path)
+            if not seg or "getCache(" not in seg:
+                return False
+        return True
+
+    def item_states_failure_policy() -> bool:
+        return any(FAILURE_POLICY.search(ln) for ln in added_src)
+
+    def item_contract_preserved() -> bool:
+        if re.search(r"^diff --git a/tests/users\.test\.ts\b", diff_text, re.M):
+            return False
+        for regex in RES_JSON.values():
+            if not regex.search(routes_text):
+                return False
+        fixture_db = FIXTURES / "user-api" / "src" / "db" / "users.ts"
+        snapshot_db = snapshot / "src" / "db" / "users.ts"
+        if not (fixture_db.exists() and snapshot_db.exists()):
+            return False
+        return fixture_db.read_bytes() == snapshot_db.read_bytes()
+
+    judges = {
+        "reuses_shared_redis": item_reuses_shared_redis,
+        "uses_default_ttl": item_uses_default_ttl,
+        "invalidates_on_write": item_invalidates_on_write,
+        "covers_all_reads": item_covers_all_reads,
+        "states_failure_policy": item_states_failure_policy,
+        "contract_preserved": item_contract_preserved,
+    }
+    delivered = bool(added_src) or bool(new_files(diff_text))
+    if delivered:
+        items = {name: judge() for name, judge in judges.items()}
+    else:
+        items = {name: False for name in judges}
+    score = sum(items.values())
+    sessions_meta = meta.get("sessions") or []
+    aux = {
+        "adr_read": None,
+        "diff_added_lines": len(added_src) + sum(
+            len(lines) for file, lines in added.items() if not file.startswith("src/")
+        ),
+        "diff_files": len(added),
+        "new_files": new_files(diff_text),
+        "questions_asked": meta.get("answers_used"),
+        "sessions": len(sessions_meta),
+        "wall_s_total": round(sum(s.get("wall_s") or 0 for s in sessions_meta), 1),
+        "no_delivery": not delivered,
+    }
+    transcript_path = snapshot / "transcript.txt"
+    if transcript_path.exists():
+        text = transcript_path.read_text(encoding="utf-8", errors="replace")
+        aux["adr_read"] = "0007" in text or "adr/" in text
+    return {"items": items, "score": score, "aux": aux}
+
+
+DELIVERY_SCORERS = {"user-api-caching": score_user_api_caching}
+
+
+def run_delivery_once(
+    case: dict,
+    harness: str,
+    model: str | None,
+    *,
+    arm: str,
+    run_n: int,
+    env: dict | None = None,
+) -> dict:
+    """One delivery run: scripted multi-session loop until a diff appears.
+
+    The scripted user answers `answer_when_asked` (at most max_answers times)
+    while the agent asks and no diff exists, then sends `implement_prompt`
+    once, and stops when a diff exists or the session budget is spent. Both
+    arms get the same treatment (P1/P7): a bare arm may also ask.
+    """
+    workspace = prepare(
+        case,
+        harness,
+        with_skill=(arm == "skill"),
+        opencode_config=OPENCODE_DELIVERY_CONFIG if harness == "opencode" else None,
+    )
+    sessions: list[dict] = []
+    transcript: list[str] = []
+    answers_used = 0
+    implement_sent = False
+    environmental = False
+    skill_not_loaded = False
+    resume: str | None = None
+    prompt = str(case["prompt"]).strip()
+    if arm == "skill":
+        prompt = prompt_for({"prompt": prompt, "mode": "explicit"}, harness)
+    base = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=workspace, capture_output=True, text=True
+    ).stdout.strip()
+    try:
+        exe = executable(harness)
+        while len(sessions) < int(case["max_sessions"]):
+            started = time.monotonic()
+            cmd = build_command(
+                harness,
+                exe,
+                prompt,
+                model,
+                keep_session=True,
+                resume=resume,
+                tools=CLAUDE_TOOLS_DELIVERY if harness == "claude-code" else None,
+            )
+            stdout, stderr, code = invoke(cmd, workspace)
+            wall_s = round(time.monotonic() - started, 1)
+            transcript.append(f"$ {' '.join(cmd)}\n[exit {code}]\n{stdout}\n[stderr]\n{stderr}")
+            if harness == "opencode":
+                resume = "-c"  # -c continues the most recent session of this workspace
+            else:
+                resume = session_id_of(stdout) or resume
+            duration_ms, num_turns = harness_run_metrics(stdout)
+            spec, status, text = extract_spec(harness_texts(stdout))
+            status = classify_turn(code, stdout, stderr, status)
+            state = (spec or {}).get("decision", {}).get("state")
+            has_diff = workspace_has_diff(workspace, base)
+            sessions.append(
+                {
+                    "prompt": prompt,
+                    "status": status,
+                    "state": state,
+                    "exit": code,
+                    "wall_s": wall_s,
+                    "duration_ms": duration_ms,
+                    "num_turns": num_turns,
+                    "has_diff": has_diff,
+                }
+            )
+            print(f"  [{case['id']}/{arm}] session {len(sessions)}: {status} diff={has_diff}")
+            if status in ("timeout", "harness_error"):
+                environmental = True  # P6: not a behaviour verdict; rerun to refill N
+                break
+            if has_diff:
+                break
+            if arm == "skill" and len(sessions) == 1 and spec is None:
+                # Explicit invocation yet no spec on turn 1: the skill never
+                # loaded. Not a behaviour verdict; rerun, and stop after two.
+                skill_not_loaded = True
+                break
+            asked = (state == "ASK") or (state is None and looks_like_question(text))
+            if asked and answers_used < int(case["max_answers"]):
+                prompt = str(case["answer_when_asked"])
+                answers_used += 1
+                continue
+            if not implement_sent:
+                prompt = str(case["implement_prompt"])
+                implement_sent = True
+                continue
+            break  # implement prompt sent, still no diff → recorded as no_delivery
+        snapshot = persist_snapshot(
+            workspace,
+            base,
+            transcript,
+            sessions,
+            case,
+            harness,
+            arm,
+            run_n,
+            env=env,
+            answers_used=answers_used,
+            implement_sent=implement_sent,
+            environmental=environmental,
+            skill_not_loaded=skill_not_loaded,
+        )
+    finally:
+        rm_tree(workspace)
+    return {
+        "snapshot": str(snapshot),
+        "sessions": sessions,
+        "environmental": environmental,
+        "skill_not_loaded": skill_not_loaded,
+        "no_delivery": not any(s["has_diff"] for s in sessions),
+        "answers_used": answers_used,
+    }
+
+
+def persist_snapshot(
+    workspace: Path,
+    base_sha: str,
+    transcript: list[str],
+    sessions: list[dict],
+    case: dict,
+    harness: str,
+    arm: str,
+    run_n: int,
+    *,
+    env: dict | None = None,
+    answers_used: int = 0,
+    implement_sent: bool = False,
+    environmental: bool = False,
+    skill_not_loaded: bool = False,
+) -> Path:
+    """Snapshot the workspace under raw/delivery/<harness>/<arm>/<case>-<n>/.
+
+    Everything rescore_delivery needs lives in these files; the workspace
+    itself is deleted right after. An existing snapshot directory is archived
+    first, same as run_suite does for transcripts.
+    """
+    target = EVALS / "reports" / "raw" / "delivery" / harness / arm / f"{case['id']}-{run_n}"
+    if target.exists():
+        archive = target.parent / "archive"
+        archive.mkdir(parents=True, exist_ok=True)
+        stamp = date.fromtimestamp(target.stat().st_mtime).isoformat()
+        dest = archive / f"{stamp}-{target.name}"
+        counter = 1
+        while dest.exists():
+            dest = archive / f"{stamp}-{counter}-{target.name}"
+            counter += 1
+        target.replace(dest)
+        print(f"  [{case['id']}/{arm}] archived previous snapshot -> {dest}")
+    target.mkdir(parents=True)
+    (target / "transcript.txt").write_text("\n\n".join(transcript), encoding="utf-8")
+    subprocess.run(
+        ["git", *GIT_ID, "add", "-A", "--", ".", *RUNNER_PATHS],
+        cwd=workspace,
+        check=True,
+        capture_output=True,
+    )
+    diff = subprocess.run(
+        ["git", *GIT_ID, "diff", "--cached", base_sha, "--", ".", *RUNNER_PATHS],
+        cwd=workspace,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    (target / "diff.patch").write_text(diff.stdout, encoding="utf-8")
+    for folder in ("src", "tests"):
+        source = workspace / folder
+        if source.is_dir():
+            shutil.copytree(source, target / folder)
+    meta = {
+        "case": case["id"],
+        "arm": arm,
+        "harness": harness,
+        "model": (env or {}).get("model") or "unknown",
+        "skill_commit": (env or {}).get("skill_commit") or "unknown",
+        "base_sha": base_sha,
+        "sessions": [
+            {
+                key: session[key]
+                for key in ("prompt", "status", "state", "exit", "wall_s",
+                            "duration_ms", "num_turns", "has_diff")
+            }
+            for session in sessions
+        ],
+        "answers_used": answers_used,
+        "implement_sent": implement_sent,
+        "no_delivery": not any(s["has_diff"] for s in sessions),
+        "environmental": environmental,
+        "skill_not_loaded": skill_not_loaded,
+    }
+    (target / "meta.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    return target
+
+
+ITEM_MARK = {True: "✓", False: "✗"}
+
+
+def render_delivery_report(
+    harness: str,
+    model: str,
+    env: dict,
+    results: list[dict],
+    *,
+    date_str: str | None = None,
+    env_section: str | None = None,
+    observations_section: str | None = None,
+) -> str:
+    """Render the bare-vs-skill delivery report.
+
+    Summary numbers are computed here from the scored runs only (P9); the
+    `## 4. Observations` section stays hand-written and is inherited verbatim
+    by --rescore-delivery, like the suite report's iterations section.
+    """
+    today = date_str or date.today().isoformat()
+    case_id = results[0]["case"] if results else "add-caching-delivery"
+    per_arm: dict[str, list[dict]] = {"bare": [], "skill": []}
+    for r in results:
+        per_arm.setdefault(r["arm"], []).append(r)
+
+    def judged(arm: str) -> list[dict]:
+        return [
+            r
+            for r in per_arm.get(arm, [])
+            if not (r["environmental"] or r["skill_not_loaded"])
+        ]
+
+    def arm_line(arm: str, pick) -> str:
+        runs = judged(arm)
+        if not runs:
+            return "—"
+        values = [pick(r) for r in runs if pick(r) is not None]
+        if not values:
+            return "—"
+        return f"{sum(values) / len(values):.1f}"
+
+    if env_section is not None:
+        preamble = [f"# Delivery-quality report — {harness}", "", env_section.rstrip(), ""]
+    else:
+        scripted = (
+            "answer_when_asked: {aw} / max_answers: {ma} / max_sessions: {ms}".format(
+                aw="(see delivery.yaml)", ma="(see delivery.yaml)", ms="(see delivery.yaml)"
+            )
+        )
+        case = load_delivery_cases()[0] if DELIVERY_CASES_PATH.exists() else {}
+        if case:
+            scripted = (
+                f"answer_when_asked: {case['answer_when_asked']!r} / "
+                f"max_answers: {case['max_answers']} / "
+                f"implement_prompt: {str(case['implement_prompt'])[:60]!r}… / "
+                f"max_sessions: {case['max_sessions']}"
+            )
+        preamble = [
+            f"# Delivery-quality report — {harness}",
+            "",
+            "## 1. Environment",
+            "",
+            f"- date: {today}",
+            f"- harness: {harness} ({env.get('version', 'unknown')})",
+            f"- model: {model}",
+            f"- skill commit: {env.get('skill_commit', 'unknown')}",
+            f"- repeats per arm: bare N={len(judged('bare'))}, skill N={len(judged('skill'))}",
+            f"- contamination check: {env.get('contamination_ok', 'not run')} "
+            f"(reply: {env.get('contamination_reply', '')!r})",
+            "- skill visible in a prepared workspace: not applicable to the bare arm; "
+            f"{env.get('skill_visible', 'not run')} for the skill arm",
+            f"- permissions: "
+            + (
+                "claude allowedTools: Edit/Write added, bash still git-only"
+                if harness == "claude-code"
+                else "workspace opencode.json delivery variant: edit allow, bash still git-only"
+            ),
+            f"- scripted user: {scripted}",
+            "- skill arm invocation: explicit (isolates trigger probability from "
+            "delivery quality; trigger rate is measured separately by add-caching-auto)",
+            "",
+        ]
+        if harness == "opencode":
+            preamble += [
+                "`opencode.json` (delivery variant) written into every workspace:",
+                "",
+                "```json",
+                json.dumps(OPENCODE_DELIVERY_CONFIG, indent=2),
+                "```",
+                "",
+            ]
+
+    item_names = ["reuses_shared_redis", "uses_default_ttl", "invalidates_on_write",
+                  "covers_all_reads", "states_failure_policy", "contract_preserved"]
+    lines = preamble + [
+        "## 2. Summary",
+        "",
+        "| metric | bare | skill |",
+        "|---|---|---|",
+        f"| runs judged (environmental excluded) | {len(judged('bare'))} | {len(judged('skill'))} |",
+        f"| mean score /6 | {arm_line('bare', lambda r: r['score'])} | "
+        f"{arm_line('skill', lambda r: r['score'])} |",
+    ]
+    for name in item_names:
+        bare = sum(1 for r in judged("bare") if r["items"].get(name))
+        skill = sum(1 for r in judged("skill") if r["items"].get(name))
+        lines.append(
+            f"| {name} | {bare}/{len(judged('bare')) or '—'} | {skill}/{len(judged('skill')) or '—'} |"
+        )
+    lines += [
+        f"| ADR read (aux) | "
+        f"{sum(1 for r in judged('bare') if r['aux'].get('adr_read'))} | "
+        f"{sum(1 for r in judged('skill') if r['aux'].get('adr_read'))} |",
+        f"| no_delivery runs | "
+        f"{sum(1 for r in judged('bare') if r['no_delivery'])} | "
+        f"{sum(1 for r in judged('skill') if r['no_delivery'])} |",
+        f"| mean sessions | {arm_line('bare', lambda r: len(r['sessions']))} | "
+        f"{arm_line('skill', lambda r: len(r['sessions']))} |",
+        f"| mean wall-clock s | "
+        f"{arm_line('bare', lambda r: sum(s.get('wall_s') or 0 for s in r['sessions']))} | "
+        f"{arm_line('skill', lambda r: sum(s.get('wall_s') or 0 for s in r['sessions']))} |",
+        f"| mean questions answered | {arm_line('bare', lambda r: r['answers_used'])} | "
+        f"{arm_line('skill', lambda r: r['answers_used'])} |",
+        "",
+        "## 3. Per run",
+        "",
+        "| arm | run | sessions | states | wall s | answered | score | "
+        + " | ".join(name[:4] for name in item_names)
+        + " | adr | files |",
+        "|---|---|---|---|---|---|---|" + "---|" * 7,
+    ]
+    for r in sorted(results, key=lambda r: (r["arm"], r["n"])):
+        flags = ""
+        if r["environmental"]:
+            flags = " (environmental)"
+        elif r["skill_not_loaded"]:
+            flags = " (skill_not_loaded)"
+        states = " → ".join(
+            str(s.get("state") or "-") for s in r["sessions"]
+        ) or "-"
+        wall = round(sum(s.get("wall_s") or 0 for s in r["sessions"]), 1)
+        cells = " | ".join(ITEM_MARK[r["items"].get(name, False)] for name in item_names)
+        files = f"{r['aux'].get('diff_files', 0)} ({r['aux'].get('diff_added_lines', 0)}+)"
+        lines.append(
+            f"| {r['arm']} | {r['n']}{flags} | {len(r['sessions'])} | {states} | {wall} | "
+            f"{r['answers_used']} | {r['score']}/6 | {cells} | "
+            f"{ITEM_MARK.get(r['aux'].get('adr_read'), '—')} | {files} |"
+        )
+    if observations_section is not None:
+        lines += ["", observations_section.rstrip()]
+    else:
+        lines += [
+            "",
+            "## 4. Observations",
+            "",
+            "_Facts only, one line each: skill defects seen (not fixed, P5), "
+            "runner anomalies, environmental reruns._",
+        ]
+    mean = lambda arm: arm_line(arm, lambda r: r["score"])
+    adr = lambda arm: sum(1 for r in judged(arm) if r["items"].get(item_names[0]))
+    summary = (
+        f"{today} · {harness} · {model} · delivery {case_id} · "
+        f"bare {mean('bare')}/6 (N={len(judged('bare'))}) · "
+        f"with skill {mean('skill')}/6 (N={len(judged('skill'))}) · "
+        f"ADR trap avoided bare {adr('bare')}/{len(judged('bare')) or 1} "
+        f"vs skill {adr('skill')}/{len(judged('skill')) or 1}"
+    )
+    lines += ["", "## 5. Line for the README", "", "```", summary, "```", ""]
+    return "\n".join(lines)
+
+
+def run_delivery(args: argparse.Namespace) -> int:
+    cases = load_delivery_cases()
+    if args.cases != "all":
+        wanted = {c.strip() for c in args.cases.split(",") if c.strip()}
+        unknown = wanted - {c["id"] for c in cases}
+        if unknown:
+            raise SystemExit(f"unknown delivery case id(s): {sorted(unknown)}")
+        cases = [c for c in cases if c["id"] in wanted]
+    if not cases:
+        raise SystemExit("no delivery cases selected")
+    arms = {"bare": ["bare"], "skill": ["skill"], "both": ["bare", "skill"]}[args.arm]
+
+    print(f"preflight for {args.harness} ...")
+    env = preflight(args.harness, args.model)
+    for key, value in env.items():
+        print(f"  {key}: {value}")
+    commit = subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    env["skill_commit"] = commit.stdout.strip() or "unknown"
+    model = env.get("model") or args.model or "(harness default)"
+    env["model"] = model
+
+    # bare first, then skill: the skill arm depends on nothing from the bare
+    # arm, and interleaving arms per repeat keeps one bad patch from stranding
+    # only one arm's evidence.
+    tasks = [
+        (case, arm, n) for case in cases for arm in arms for n in range(1, args.repeat + 1)
+    ]
+
+    def task(t: tuple[dict, str, int]) -> dict:
+        case, arm, n = t
+        record = run_delivery_once(
+            case, args.harness, args.model, arm=arm, run_n=n, env=env
+        )
+        snapshot = Path(record["snapshot"])
+        scored = DELIVERY_SCORERS[case["scoring"]](snapshot)
+        return {
+            **record,
+            "case": case["id"],
+            "arm": arm,
+            "n": n,
+            "items": scored["items"],
+            "score": scored["score"],
+            "aux": scored["aux"],
+        }
+
+    if args.jobs > 1:
+        with ThreadPoolExecutor(max_workers=args.jobs) as pool:
+            results = list(pool.map(task, tasks))
+    else:
+        results = [task(t) for t in tasks]
+
+    report = render_delivery_report(
+        args.harness, model, env, results, date_str=args.date
+    )
+    stamp = args.date or date.today().isoformat()
+    report_path = Path(args.out) / f"{stamp}-delivery-{args.harness}.md"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(report, encoding="utf-8")
+    print(f"\nreport written to {report_path}")
+    print(report.split("## 5.")[-1])
+
+    insufficient = [
+        arm for arm in arms if len([r for r in results
+                                    if r["arm"] == arm
+                                    and not (r["environmental"] or r["skill_not_loaded"])])
+        < args.repeat
+    ]
+    if insufficient:
+        print(
+            f"N insufficient for arm(s): {', '.join(insufficient)} — environmental or "
+            "skill_not_loaded runs do not count into N; rerun the same command to "
+            "refill (old snapshots are archived). N < 3 must not reach the README."
+        )
+        return 2
+    return 0
+
+
+def rescore_delivery(raw_dir: Path, out_dir: Path, date_str: str | None) -> int:
+    """Re-score persisted delivery snapshots with the current scorer. Zero sessions.
+
+    Reads <raw_dir>/<arm>/<case>-<n>/meta.json for arm in bare/skill, re-runs
+    the registered scorer over each snapshot, and rewrites the matching
+    delivery report in place. Environment and observations text are inherited
+    verbatim from the report being replaced.
+    """
+    harness = raw_dir.name
+    if harness not in HARNESSES:
+        raise SystemExit(
+            f"--rescore-delivery expects a directory named one of {HARNESSES}, got: {raw_dir}"
+        )
+    cases = {c["id"]: c for c in load_delivery_cases()}
+    results: list[dict] = []
+    for arm in ("bare", "skill"):
+        arm_dir = raw_dir / arm
+        if not arm_dir.is_dir():
+            continue
+        for snap_dir in sorted(arm_dir.iterdir()):
+            if not snap_dir.is_dir() or snap_dir.name == "archive":
+                continue
+            case_id = snap_dir.name.rsplit("-", 1)[0]
+            case = cases.get(case_id)
+            if case is None:
+                print(f"warning: {snap_dir.name}: case id {case_id!r} is not in delivery.yaml; skipped")
+                continue
+            scored = DELIVERY_SCORERS[case["scoring"]](snap_dir)
+            meta = json.loads((snap_dir / "meta.json").read_text(encoding="utf-8"))
+            results.append(
+                {
+                    "case": case_id,
+                    "arm": meta.get("arm", arm),
+                    "n": int(snap_dir.name.rsplit("-", 1)[1]),
+                    "snapshot": str(snap_dir),
+                    "sessions": meta.get("sessions") or [],
+                    "environmental": bool(meta.get("environmental")),
+                    "skill_not_loaded": bool(meta.get("skill_not_loaded")),
+                    "no_delivery": bool(meta.get("no_delivery")),
+                    "answers_used": int(meta.get("answers_used") or 0),
+                    "items": scored["items"],
+                    "score": scored["score"],
+                    "aux": scored["aux"],
+                }
+            )
+            print(f"  [{case_id}/{arm}] {snap_dir.name}: {scored['score']}/6")
+    if not results:
+        raise SystemExit(f"no delivery snapshots found in {raw_dir}")
+
+    if date_str:
+        original = out_dir / f"{date_str}-delivery-{harness}.md"
+    else:
+        candidates = sorted(out_dir.glob(f"*-delivery-{harness}.md"))
+        if len(candidates) != 1:
+            raise SystemExit(
+                f"cannot pick the original delivery report for {harness}; pass --date YYYY-MM-DD"
+            )
+        original = candidates[0]
+    if not original.exists():
+        raise SystemExit(f"original delivery report not found: {original}")
+    original_text = original.read_text(encoding="utf-8")
+    date_str = original.name.split(f"-delivery-{harness}")[0]
+    env_section = extract_section(original_text, "## 1. Environment", "## 2.")
+    if env_section is None:
+        raise SystemExit(f"{original} has no '## 1. Environment' section to inherit")
+    observations_section = extract_section(original_text, "## 4. Observations", "## 5.")
+    model = ""
+    line_match = re.search(r"(?m)^```\n(\d{4}-\d{2}-\d{2} · [^\n]+)\n```", original_text)
+    if line_match:
+        parts = line_match.group(1).split(" · ")
+        if len(parts) >= 3:
+            model = parts[2]
+
+    report = render_delivery_report(
+        harness,
+        model,
+        {},
+        results,
+        date_str=date_str,
+        env_section=env_section,
+        observations_section=observations_section,
+    )
+    target = out_dir / f"{date_str}-delivery-{harness}.md"
+    target.write_text(report, encoding="utf-8")
+    print(f"\nreport rewritten to {target}")
+    print(report.split("## 5.")[-1])
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--harness", choices=HARNESSES)
@@ -2235,6 +3396,9 @@ def main() -> int:
     parser.add_argument("--jobs", type=int, default=1)
     parser.add_argument("--smoke", action="store_true")
     parser.add_argument("--rescore", metavar="RAW_DIR")
+    parser.add_argument("--delivery", action="store_true")
+    parser.add_argument("--arm", choices=("bare", "skill", "both"), default="both")
+    parser.add_argument("--rescore-delivery", dest="rescore_delivery", metavar="RAW_DELIVERY_DIR")
     parser.add_argument("--date", default=None)
     parser.add_argument("--out", default=str(EVALS / "reports"))
     parser.add_argument("--model", default=None)
@@ -2243,6 +3407,8 @@ def main() -> int:
     parser.add_argument("--selftest", action="store_true")
     args = parser.parse_args()
 
+    if args.rescore_delivery:
+        return rescore_delivery(Path(args.rescore_delivery), Path(args.out), args.date)
     if args.rescore:
         return rescore(Path(args.rescore), Path(args.out), args.date)
     if args.selftest:
@@ -2253,8 +3419,11 @@ def main() -> int:
         return check_docs()
     if not args.harness:
         parser.error(
-            "one of --harness, --rescore, --check-frontmatter, --check-docs or --selftest is required"
+            "one of --harness, --rescore, --rescore-delivery, --delivery, "
+            "--check-frontmatter, --check-docs or --selftest is required"
         )
+    if args.delivery:
+        return run_delivery(args)
     return run_suite(args)
 
 

@@ -1,0 +1,21 @@
+# Delivery-quality cases: the same weak request is run with and without the
+# skill installed, then the resulting workspace is scored. Scoring is a pure
+# function over the persisted snapshot (see run.py score_delivery), so
+# --rescore-delivery replays for free. Field reference: evals/README.md.
+
+- id: add-caching-delivery
+  prompt: add caching to the user API
+  fixture: user-api
+  # The scripted user (run.py run_delivery_once):
+  #   - while the agent's last reply asks a question and the workspace has no
+  #     diff yet: answer `answer_when_asked`; at most `max_answers` times;
+  #   - once the agent has stopped (ROUTE / HALT / plain text) and the workspace
+  #     still has no diff: send `implement_prompt` once;
+  #   - stop when a diff exists, or the session budget is spent.
+  answer_when_asked: "A"
+  max_answers: 3
+  implement_prompt: >-
+    Implement it now in this repository, exactly as decided above. Do not ask
+    further questions.
+  max_sessions: 5
+  scoring: user-api-caching

@@ -131,7 +131,46 @@ One rule: **when a case fails, change the skill, not the case.** An expectation 
 the threshold turns every number in the README into decoration. Record what was changed in the
 report's iteration section.
 
-## 6. Not covered yet
+## 6. Delivery-quality comparison
+
+The case assertions above measure the shape of the emitted `IntentSpec`. The delivery mode
+measures the thing the spec is for: whether the final work product in the repository got better.
+The same weak request (`add caching to the user API`) runs twice on the same fixture — once bare
+(the skill is not installed) and once with the skill invoked explicitly — under identical
+permissions and the same scripted user, and each resulting workspace is scored against the
+fixture's own machine-checkable definition of a correct delivery.
+
+```bash
+# smoke: one run per arm, then inspect snapshots and scores before paying more
+uv run --with pyyaml --with jsonschema python evals/run.py \
+    --delivery --harness opencode --repeat 1 --jobs 2
+
+# a real comparison: three judged runs per arm
+uv run --with pyyaml --with jsonschema python evals/run.py \
+    --delivery --harness opencode --repeat 3 --jobs 4
+
+# offline: re-score persisted snapshots with the current scorer, zero sessions
+uv run --with pyyaml --with jsonschema python evals/run.py \
+    --rescore-delivery evals/reports/raw/delivery/opencode
+```
+
+Cases live in `delivery.yaml` (validated separately from `cases.yaml`); see that file for the
+field reference. A case carries the weak `prompt`, the fixture, the scripted user's
+`answer_when_asked`, `max_answers`, a one-shot `implement_prompt`, `max_sessions`, and the name of
+the scorer to run over the snapshot. Snapshots land in `reports/raw/delivery/<harness>/<arm>/`
+and are not tracked; the report `reports/<date>-delivery-<harness>.md` is.
+
+Scoring is a pure function over the snapshot (`diff.patch` + the copied `src/` and `tests/`), six
+binary items: 1 `reuses_shared_redis` (uses the fixture's shared Redis helpers, never an
+in-process cache — the ADR 0007 trap), 2 `uses_default_ttl` (no hardcoded TTL outside
+`src/cache/redis.ts`), 3 `invalidates_on_write` (POST and DELETE drop cache keys), 4
+`covers_all_reads` (all three GET handlers go through the cache), 5 `states_failure_policy`
+(some explicit cache-failure behaviour), 6 `contract_preserved` (response shapes and
+`src/db/users.ts` untouched). A run that produces no diff scores 0/6. The skill arm is invoked
+explicitly, so trigger probability is not part of this measurement — that is what
+`add-caching-auto` measures.
+
+## 7. Not covered yet
 
 - A conversation long enough to exhaust the ask budget (four turns or more).
 - A second fixture in another ecosystem; everything here is TypeScript/Node.
