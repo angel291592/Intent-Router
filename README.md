@@ -10,10 +10,11 @@ it can, asks only what it can't, and refuses to emit while the intent is still u
 
 What that buys you:
 
-- You get the interaction of a senior engineer without having to learn prompt engineering. Say it
-  the way you'd say it to a capable teammate, *"add caching to the user API"*, and the skill writes
-  the briefing a senior engineer would have written first. What comes back stops depending on how
-  well you've learned to word a prompt.
+- **Prompt equity.** You get the interaction of a senior engineer without having to learn prompt
+  engineering — the gap between the top 1% of prompt writers and everyone else stops deciding what
+  you get back. Say it the way you'd say it to a capable teammate, *"add caching to the user API"*,
+  and the skill writes the briefing a senior engineer would have written first. You stop coaxing
+  the model and start putting it to work.
 - You answer less, not more. Before anything reaches you it reads what your repo, ticket system or
   docs already answer, so the forty-six-question interview becomes the one question that genuinely
   needs your judgment.
@@ -84,6 +85,8 @@ Manual install, or an agent the installer doesn't know: [Quick start](#quick-sta
 
 **Intent-Router is the layer five good tools leave empty: deciding whether to look, ask, or act —
 before acting.** grill-me converges beautifully, states the right principle, and keeps nothing.
+Intent-Router generalizes that principle into *grill anything*: before it grills you, it grills
+the repo, the ticket queue, the runbook — everything that can answer for itself.
 spec-kit keeps everything and makes you buy its whole workflow to get it. Routers decide fast and
 can't handle ambiguity at all. Jev and Laya return exactly the typed, calibrated decision you
 want — *once the input is already clear*: Jev needs a well-formed question, Laya needs a formed
