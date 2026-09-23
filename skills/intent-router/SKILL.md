@@ -46,7 +46,11 @@ Do not start when:
 - the request asks you to explain existing state ("what does X do", "why is Y slow") rather than
   to find something out and produce a deliverable;
 - every decision-bearing item is already stated by the user — its objects, its approach and its
-  failure behaviour are all stated — then there is nothing to converge;
+  failure behaviour are all stated — then there is nothing to converge. Do not count items the
+  request leaves open as "inferable": if the user had to be trusted with the outcome, or the
+  spec could be wrong without contradicting the request, that item is not stated. A request that
+  names exact parameters, thresholds and fallback behaviour for the whole path is fully
+  specified; one that names the happy path only is not;
 - the request is trivially scoped and reversible (fix a typo, bump a patch version).
 
 **No-ask mode.** If the user says "no questions", "just do it", "don't ask me anything", keep
@@ -170,8 +174,11 @@ Work the probe surfaces in this order, stopping as soon as the unknown is settle
 4. **Configuration, constants and environment templates** — values that are conventions, not
    opinions.
 5. **Tests and CI configuration** — the contract that is already enforced.
-6. **Version history** — recent commits, reverts and pull-request numbers, which carry the
-   reasons a current file cannot show.
+6. **Version history** — recent commits, reverts and pull-request numbers, which carry the reasons
+   a current file cannot show. A version history your harness reaches through a shell command is
+   still a surface here: attempt the command once before declaring it unavailable, and record the
+   attempt in `trace` — never assume the capability away, or a `git:` pointer becomes impossible
+   to emit and a `degraded` cause becomes easy to invent.
 
 Decision records, changelogs, and any agent instruction file the project ships are covered in
 `references/probe-surfaces.md`, together with the surfaces for other ecosystems.
@@ -345,11 +352,14 @@ trace:
 scorecard: `resolved_by_probe / unknowns_found` is the number to drive up, and it must hold that
 `unknowns_found = resolved_by_probe + asked + inferred + len(unknown)`.
 
-Count by reconstruction at emit time, not from memory: `resolved_by_probe` = number of
-`constraints` with `source: probed` that answered an unknown you listed in Pass 1; `inferred` =
-number with `source: inferred`; `asked` = answers received; `unknowns_found` = the sum of all
-four. A run that probed four workspace facts but reports `resolved_by_probe: 0` has broken the
-scorecard — the probes are visible in `constraints`, so the counts must agree with them.
+Count by reconstruction at emit time, not from memory: reread the `constraints` you are about to
+emit and tally the `source:` tags — `resolved_by_probe` is the exact number of `source: probed`
+entries, `inferred` the number of `source: inferred` entries, `asked` the answers received, and
+`unknowns_found` the sum of all four plus `len(unknown)`. A probe that settled something you never
+listed in Pass 1 still counts: add it to both `resolved_by_probe` and `unknowns_found`. A run that
+emits six probed constraints and reports `resolved_by_probe: 1` has broken the scorecard — the
+counts are checkable against the constraint list, and a mismatch is a defect, not a rounding
+difference.
 
 Every `trace` step is exactly one of `parse`, `probe`, `ask`, `typecheck`, `emit` — there is no
 `infer`, `resolve` or `decide` step; an unknown you closed by inference is recorded as a

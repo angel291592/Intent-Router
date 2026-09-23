@@ -28,11 +28,21 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
   as a file's line number, which keeps the hallucinated-evidence metric honest.
 - Skill: a fifth worked example, `route-support.yaml` — the same spec structure in a support triage
   run with `record:`/`doc:` evidence.
+- Skill: sharpened by the first paid runs. The scorecard rule now says to count by tallying the
+  `source:` tags in the constraints about to be emitted (a probe that settled an unlisted unknown
+  still counts); "fully specified" now means the whole path — exact parameters, thresholds and
+  fallback behaviour, not the happy path alone; and the version-history surface must be attempted
+  once before being declared unavailable. A full re-measurement is deferred.
 - Evals: a second fixture, `evals/fixtures/support-queue/` (tickets, order record, account
   entitlements, returns and carrier-claims policies, a Q2 claims-review note — no code, no git
   history), and three non-code cases. `support-furious-auto` and `research-scope-auto` measure
   auto-trigger plus non-code probing; `support-delegate-irreversible` pins the rule that a delegated
   answer is refused for the refund-vs-replacement trade-off (written, first run pending).
+- Evals: `evidence_must_include` now matches by substring, so a pointer spelled with the reserved
+  `record:`/`doc:` namespaces still counts as citing its source; and a replayed, measured
+  non-code spec (a real glm-5.3-flash output) joins the Tier 0 selftest as a permanent free
+  regression test. The runner also pins every session clean: the operator's global Claude-Code
+  instruction file is no longer injected into evaluated sessions.
 - Reports and README numbers are unchanged until the paid run lands; the coding domain remains the
   only one with published numbers.
 
@@ -51,10 +61,16 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
   空间（`ticket:4402`）现在判形态违规，而不是被当成某个文件的第 4402 行，幻觉指标保持语义。
 - Skill：第五个走通样例 `route-support.yaml`——同一份 spec 结构在客服分流场景、使用
   `record:`/`doc:` evidence。
+- Skill：首轮付费运行打磨。计分规则改为"发出前清点 constraints 里的 `source:` 标签"（解决了
+  未列入 Pass 1 的探测同样计数）；"已完全明确"收紧为整条路径——精确参数、阈值与回退行为都
+  已说明，只有 happy path 不算；版本历史面必须先实际尝试一次再宣告不可用。全量重测延后。
 - Evals：第二个 fixture `evals/fixtures/support-queue/`（工单、订单记录、账户权益、退款与承运商
   索赔政策、Q2 索赔复盘笔记——无代码、无 git 历史）与三条非代码用例。`support-furious-auto` 与
   `research-scope-auto` 测自动触发加非代码探测；`support-delegate-irreversible` 钉死"退款与换货
   不可得兼"这类取舍不得接受委派回答（已写入，首次运行待做）。
+- Evals：`evidence_must_include` 改为子串匹配，用保留命名空间 `record:`/`doc:` 拼写的指针同样算
+  作引用了来源；一份实测成功的非代码 spec（真实 glm-5.3-flash 输出）进入 Tier 0 selftest，成为
+  永久免费回归。runner 同时钉死会话纯净：评测会话不再注入操作者的全局 Claude-Code 指令文件。
 - 在付费运行落地之前，报告与 README 数字均不变；编码领域仍是唯一有公开数字的领域。
 
 ## [Unreleased]

@@ -22,8 +22,12 @@ constraints:
     category: scope
   - source: probed
     text: 'both a refund and a replacement are allowed under the returns policy; a refund closes the case and excludes a later replacement'
-    evidence: doc:returns-policy#remedies
+    evidence: doc:returns-policy#remedy-exclusivity
     category: approach
+  - source: probed
+    text: 'the carrier claim must be filed within 21 days of the lost marker — the deadline is a constraint on the parallel handling, not on the remedy'
+    evidence: doc:carrier-claims-policy#claim-window
+    category: non_goals_constraints
   - source: asked
     text: 'issue a full refund rather than a replacement — the customer wanted the problem gone, not the product'
     irreversible: true
@@ -34,14 +38,14 @@ decision:
   confidence: 0.84
   target: respond
 resolution:
-  unknowns_found: 4
-  resolved_by_probe: 3
+  unknowns_found: 5
+  resolved_by_probe: 4
   asked: 1
   inferred: 0
   ask_budget: 3
 trace:
   - step: parse
-    detail: normalised the request to resolve_customer_complaint; four decision-bearing unknowns (what_happened, entitlement, allowed_remedies, remedy_choice)
+    detail: normalised the request to resolve_customer_complaint; five decision-bearing unknowns (what_happened, entitlement, allowed_remedies, claim_deadline, remedy_choice)
   - step: probe
     detail: read the order record — 12 days late, carrier-marked lost, which settles what_happened
     evidence: record:orders/8821
@@ -50,7 +54,10 @@ trace:
     evidence: record:accounts/acme
   - step: probe
     detail: read the returns policy in force — both remedies permitted, refund forecloses replacement, which settles allowed_remedies
-    evidence: doc:returns-policy#remedies
+    evidence: doc:returns-policy#remedy-exclusivity
+  - step: probe
+    detail: read the carrier-claims policy — the 21-day window sets the parallel deadline, which settles claim_deadline
+    evidence: doc:carrier-claims-policy#claim-window
   - step: ask
     detail: asked the one remaining unknown, an irreversible trade-off the customer's preference decides; the human chose refund
   - step: typecheck
