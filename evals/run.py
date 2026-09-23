@@ -65,6 +65,48 @@ EVALS = ROOT / "evals"
 CASES_PATH = EVALS / "cases.yaml"
 FIXTURES = EVALS / "fixtures"
 
+# Assertion keys check_turn() knows how to evaluate. A key outside this set is a
+# typo, and a typo used to be silently dropped by the if/elif chain in
+# check_turn() — which turned the case into an empty assertion that could never
+# fail. The README's numbers rest on these keys, so an unknown one is a hard
+# error, reported by validate_cases() at load time.
+EXPECT_KEYS = frozenset(
+    {
+        "should_trigger",
+        "state",
+        "state_in",
+        "cause",
+        "asked_eq",
+        "max_asked",
+        "min_resolved_by_probe",
+        "resolved_by_probe_eq",
+        "probed_constraints_eq",
+        "max_inferred",
+        "unknown_empty",
+        "has_source",
+        "open_fields_min",
+        "evidence_must_include",
+        "evidence_regex",
+        "question_keywords",
+        "text_keywords",
+        "output_regex",
+        "question_lang",
+        "not_target",
+    }
+)
+CASE_KEYS = frozenset(
+    {
+        "id",
+        "prompt",
+        "mode",
+        "fixture",
+        "turns",
+        "expect",
+        "expect_turn1",
+        "metrics",
+    }
+)
+
 TIMEOUT = 480
 HARNESSES = ("claude-code", "opencode")
 
@@ -203,8 +245,37 @@ def load_schema_validator() -> Draft202012Validator:
     return Draft202012Validator(json.loads(SCHEMA_PATH.read_text(encoding="utf-8")))
 
 
+def validate_cases(cases: list[dict]) -> list[str]:
+    """Return every unknown case/assertion key found, so a typo cannot silently
+    turn a case into an empty assertion that always passes. Pure: no I/O, no
+    exit — load_cases() turns a non-empty result into a fail-fast."""
+    problems: list[str] = []
+    for index, case in enumerate(cases):
+        case_id = case.get("id")
+        if case_id is None:
+            problems.append(f"case #{index + 1}: case has no id")
+            continue
+        label = str(case_id)
+        for key in case:
+            if key not in CASE_KEYS:
+                problems.append(f"{label}: unknown case key {key!r}")
+        for block in ("expect", "expect_turn1"):
+            block_value = case.get(block) or {}
+            if not isinstance(block_value, dict):
+                problems.append(f"{label}.{block}: must be a mapping of assertion keys")
+                continue
+            for key in block_value:
+                if key not in EXPECT_KEYS:
+                    problems.append(f"{label}.{block}: unknown assertion key {key!r}")
+    return problems
+
+
 def load_cases() -> list[dict]:
-    return yaml.safe_load(CASES_PATH.read_text(encoding="utf-8"))
+    cases = yaml.safe_load(CASES_PATH.read_text(encoding="utf-8"))
+    problems = validate_cases(cases)
+    if problems:
+        raise SystemExit("cases.yaml:\n  " + "\n  ".join(problems))
+    return cases
 
 
 def extract_spec(candidates: list[str]) -> tuple[dict | None, str, str]:
@@ -1293,6 +1364,25 @@ def selftest() -> int:
     expect(
         "repo evidence against the empty fixture is flagged",
         "evidence_valid" in outcome["failures"] and "probed_constraints_eq" in outcome["failures"],
+    )
+
+    print("unknown assertion keys are rejected at load time")
+    problems = validate_cases(
+        [{"id": "x", "expect": {"asked_equals": 0, "max_ask": 0, "totally_bogus_key": 123}}]
+    )
+    expect(
+        "an unknown expect key is reported",
+        bool(problems) and all(name in "\n".join(problems) for name in ("asked_equals", "max_ask", "totally_bogus_key")),
+    )
+    problems = validate_cases([{"id": "x", "bogus_top": 1}])
+    expect(
+        "an unknown case-level key and a missing id are both reported",
+        bool(validate_cases([{"bogus_top": 1}])[0].endswith("case has no id"))
+        and "bogus_top" in "\n".join(problems),
+    )
+    expect(
+        "the real cases.yaml validates clean",
+        validate_cases(load_cases()) == [],
     )
 
     print("environmental failures are separated from behaviour (R5)")
