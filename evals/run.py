@@ -3629,6 +3629,18 @@ def rescore_delivery(raw_dir: Path, out_dir: Path, date_str: str | None) -> int:
     if env_section is None:
         raise SystemExit(f"{original} has no '## 1. Environment' section to inherit")
     observations_section = extract_section(original_text, "## 4. Observations", "## 5.")
+    # The inherited environment text may name per-arm repeat counts from the
+    # run that produced it (a bare-only rerun, say); recompute from the actual
+    # snapshots, the way rescore() recomputes its repeats line.
+    env_section = re.sub(
+        r"(?m)^- repeats per arm:.*$",
+        "- repeats per arm: "
+        + ", ".join(
+            f"{arm} N={sum(1 for r in results if r['arm'] == arm and not (r['environmental'] or r['skill_not_loaded']))}"
+            for arm in ("bare", "skill")
+        ),
+        env_section,
+    )
     model = ""
     line_match = re.search(r"(?m)^```\n(\d{4}-\d{2}-\d{2} · [^\n]+)\n```", original_text)
     if line_match:
