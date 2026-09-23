@@ -35,6 +35,14 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
   contents and CI/release/stars badges to both READMEs, and expand the repository topics.
 - 文档：发布安全政策与行为准则的简体中文版，为两个 README 增加目录与 CI / Release / Stars 徽章，
   并扩充仓库 topics。
+- Evals: the ungrillable case's expectation was corrected to match SKILL.md §7 — a ROUTE with
+  `target: prototype` is sanctioned there — and the correction is recorded in the 2026-09-23
+  opencode report. Docs: the failed claude-code subset is now labelled in both READMEs' eval
+  blocks, the Chinese SKILL.md walkthrough is linked from both READMEs, its line-count reference
+  was corrected to 419, and the smoke tier's session count was corrected to 1 case + 2 preflight.
+- 评测：修正 ungrillable 用例的期望以对齐 SKILL.md §7（该节允许 ROUTE→prototype），修正已在
+  2026-09-23 opencode 报告留痕。文档：两个 README 的 eval 块标注 claude-code 子集未通过、从两个
+  README 接入中文导读链接、其行数引用更正为 419、smoke 档会话数更正为 1 用例 + 2 预检。
 
 ## [0.1.0] — 2026-09-22
 
