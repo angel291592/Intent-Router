@@ -186,6 +186,23 @@ OPENCODE_DELIVERY_CONFIG = {
     "permission": {**OPENCODE_CONFIG["permission"], "edit": "allow"},
 }
 
+# Bare-arm variant of the delivery config. opencode loads skills not only from
+# the workspace but also from the user-level ~/.config/opencode/skills — and
+# this machine has an intent-router copy there from an installer test, so a
+# bare workspace silently saw the skill and the bare arm was no longer bare
+# (its first turn emitted the IntentSpec format verbatim). Denying the skill
+# permission on the bare arm is the faithful permission-level encoding of "the
+# skill is not installed"; the skill arm keeps skill allow. Recorded in the
+# delivery report §1.
+OPENCODE_DELIVERY_BARE_CONFIG = {
+    **OPENCODE_CONFIG,
+    "permission": {
+        **OPENCODE_CONFIG["permission"],
+        "edit": "allow",
+        "skill": "deny",
+    },
+}
+
 # claude-code tool whitelist: the read-only set the existing 14 cases run with,
 # plus Edit/Write for delivery runs (claude-code permissions are CLI flags, not
 # a workspace config file). build_command() expands `tools or
@@ -2322,13 +2339,14 @@ def selftest() -> int:
         {"fixture": "user-api"},
         "opencode",
         with_skill=False,
-        opencode_config=OPENCODE_DELIVERY_CONFIG,
+        opencode_config=OPENCODE_DELIVERY_BARE_CONFIG,
     )
     expect(
-        "bare workspace: no skill dirs, delivery opencode.json, edit allow",
+        "bare workspace: no skill dirs, bare delivery opencode.json, edit allow, skill deny",
         not (ws / ".claude").exists()
         and not (ws / ".agents").exists()
-        and json.loads((ws / "opencode.json").read_text(encoding="utf-8"))["permission"]["edit"] == "allow",
+        and json.loads((ws / "opencode.json").read_text(encoding="utf-8"))["permission"]["edit"] == "allow"
+        and json.loads((ws / "opencode.json").read_text(encoding="utf-8"))["permission"]["skill"] == "deny",
     )
     base = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=ws, capture_output=True, text=True
@@ -3086,7 +3104,11 @@ def run_delivery_once(
         case,
         harness,
         with_skill=(arm == "skill"),
-        opencode_config=OPENCODE_DELIVERY_CONFIG if harness == "opencode" else None,
+        opencode_config=(
+            (OPENCODE_DELIVERY_BARE_CONFIG if arm == "bare" else OPENCODE_DELIVERY_CONFIG)
+            if harness == "opencode"
+            else None
+        ),
     )
     sessions: list[dict] = []
     transcript: list[str] = []
@@ -3341,7 +3363,11 @@ def render_delivery_report(
             + (
                 "claude allowedTools: Edit/Write added, bash still git-only"
                 if harness == "claude-code"
-                else "workspace opencode.json delivery variant: edit allow, bash still git-only"
+                else "workspace opencode.json delivery variant: edit allow, bash still git-only; "
+                "the bare arm additionally denies the skill permission because opencode also "
+                "loads user-level skills from ~/.config/opencode/skills, where an installer "
+                "test left an intent-router copy — without that deny the bare arm silently "
+                "used the skill (its first turn emitted the IntentSpec format verbatim)"
             ),
             f"- scripted user: {scripted}",
             "- skill arm invocation: explicit (isolates trigger probability from "
