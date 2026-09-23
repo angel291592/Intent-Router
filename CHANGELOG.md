@@ -7,6 +7,11 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-09-24
+
+First stable release; the owner promoted 0.x to 1.0. No skill-behaviour change in this round —
+everything below is evaluation infrastructure and documentation.
+
 - Evals: a delivery-quality comparison mode (`--delivery`, `--rescore-delivery`). The same weak
   request runs on the same fixture twice — once bare, once with the skill invoked explicitly —
   under identical permissions and a scripted user, and each resulting workspace is scored by a
@@ -344,7 +349,8 @@ First release. L0 only: a prompt-only skill with no dependencies and no keys. /
 - L1 and L2 backends are declared and not implemented.
 - L1 与 L2 后端只做声明，未实现。
 
-[Unreleased]: https://github.com/angel291592/Intent-Router/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/angel291592/Intent-Router/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/angel291592/Intent-Router/compare/v0.3.0...v1.0.0
 [0.3.0]: https://github.com/angel291592/Intent-Router/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/angel291592/Intent-Router/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/angel291592/Intent-Router/compare/v0.1.1...v0.1.2
