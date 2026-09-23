@@ -12,7 +12,7 @@ description: >-
   answering questions, explaining code, or tasks that are already fully specified.
 license: MIT
 metadata:
-  version: "0.1.1"
+  version: "0.1.2"
   author: angel291592
   homepage: https://github.com/angel291592/Intent-Router
 ---
