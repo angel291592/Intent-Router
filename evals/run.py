@@ -169,11 +169,16 @@ FENCE = re.compile(r"```ya?ml[^\n]*\n(.*?)```", re.DOTALL)
 # Decision 7: evidence is legal by whitelist, never by blacklist. A legal value
 # is a single whitespace-free token — a workspace pointer
 # (`path[:line[-line]][#anchor]`) or one of the reserved non-pointer forms
-# `git:<short-sha>`, `git:#<pr-number>`, `user:delegated`. Verified against all
-# 40 distinct evidence values in the 2026-09-22 corpus: every real pointer is
-# whitespace-free, and every observed violation contains whitespace.
+# `git:<short-sha>`, `git:#<pr-number>`, `user:delegated`, `record:<system>/<id>`
+# (requires a `/` so it never swallows a `path:line`), and `doc:<slug>[#section]`.
+# The original three reserved forms were verified against all 40 distinct evidence
+# values in the 2026-09-22 corpus; record:/doc: were added in the 2026-09-23
+# generalization round for non-code domains (plan P3.1).
 EVIDENCE_TOKEN_OK = re.compile(
-    r"^(?:git:(?:#\d+|[0-9a-f]{7,40})|user:delegated|[^\s:#]+(?::\d+(?:-\d+)?)?(?:#[^\s]+)?)$"
+    r"^(?:git:(?:#\d+|[0-9a-f]{7,40})|user:delegated"
+    r"|record:[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)+"
+    r"|doc:[A-Za-z0-9._-]+(?:#[^\s]+)?"
+    r"|[^\s:#]+(?::\d+(?:-\d+)?)?(?:#[^\s]+)?)$"
 )
 # Tokens that parse as a token but are not workspace pointers: the repo root,
 # git internals, the installed skill copies, and the harness config file. The
@@ -689,9 +694,13 @@ def evidence_items(spec: dict) -> list[tuple[str, str]]:
 def evidence_path(pointer: str) -> str | None:
     """Filesystem part of an evidence pointer; None for reserved non-pointer forms.
 
-    `git:` and `user:delegated` (decision 6) do not point at the filesystem.
+    `git:`, `user:delegated`, `record:` and `doc:` (decision 6) do not point at
+    the filesystem.
     """
-    if pointer.startswith("git:") or pointer == "user:delegated":
+    if (
+        pointer.startswith(("git:", "record:", "doc:"))
+        or pointer == "user:delegated"
+    ):
         return None
     path = pointer.split("#", 1)[0]
     path = re.sub(r":\d+(?:-\d+)?\s*$", "", path)
@@ -787,10 +796,14 @@ def check_turn(
         failures.append("invariants_ok")
         measured["invariants"] = broken
 
-    # R4/decision 7: three-way evidence judgement. Reserved non-pointer forms
-    # (git:, user:delegated) are legal; anything with whitespace or a
-    # non-pointer prefix is a form violation; a well-formed path missing from
-    # the real workspace manifest is a fabrication.
+    # R4/decision 7: four-way evidence judgement. Reserved non-pointer forms
+    # (git:, user:delegated, record:, doc:) are legal; anything with whitespace
+    # or a non-pointer prefix is a form violation; an <ns>:<rest> shape with a
+    # non-numeric rest and an unknown namespace is a form violation; a
+    # <ns>:<digits> shape is resolved against the workspace manifest — a real
+    # file makes it a path pointer, a missing file makes the namespace a form
+    # violation, and neither is ever a hallucination; a well-formed path missing
+    # from the manifest is a fabrication.
     form_violations: list[str] = []
     hallucinated: list[str] = []
     for _source, pointer in evidence_items(spec):
@@ -802,8 +815,35 @@ def check_turn(
         ):
             form_violations.append(pointer)
             continue
-        if pointer.startswith("git:") or pointer == "user:delegated":
+        if pointer.startswith(("git:", "record:", "doc:")) or pointer == "user:delegated":
             continue
+        namespace_shape = re.match(r"^([A-Za-z0-9._-]+):(.+)$", pointer)
+        if (
+            namespace_shape
+            and "/" not in namespace_shape.group(1)
+            and "." not in namespace_shape.group(1)
+        ):
+            namespace, rest = namespace_shape.group(1), namespace_shape.group(2)
+            if re.fullmatch(r"\d+(?:-\d+)?", rest):
+                # <ns>:<digits> is ambiguous with a file:line pointer. A file
+                # with that name in the workspace settles it as a path pointer;
+                # a missing file means the namespace is mistyped — a form
+                # violation, never a hallucination (the fabrication metric must
+                # not absorb namespace typos like ticket:4402).
+                target = namespace
+            else:
+                target = None
+            if target is not None:
+                if manifest is not None:
+                    known = target in manifest
+                else:
+                    known = (FIXTURES / case.get("fixture", "empty") / target).exists()
+                if not known:
+                    form_violations.append(pointer)
+                    continue
+            else:
+                form_violations.append(pointer)
+                continue
         path = evidence_path(pointer)
         if path is None:
             continue
@@ -1431,6 +1471,7 @@ def selftest() -> int:
         "ask.yaml": "add-caching-auto",
         "halt-underspecified.yaml": "vague-no-ask",
         "halt-degraded.yaml": None,
+        "route-support.yaml": None,
     }
     for filename, case_id in fixture_specs.items():
         doc = yaml.safe_load((EXAMPLES / filename).read_text(encoding="utf-8"))
@@ -1583,6 +1624,34 @@ def selftest() -> int:
         doc = json.loads(json.dumps(route))
         doc["constraints"][0]["evidence"] = pointer
         outcome = check(cases["add-caching-two-turn"], record_for(doc), validator, manifest=manifest)
+        evidence_failures = [f for f in outcome["failures"] if f in ("evidence_form", "evidence_valid")]
+        expect(
+            f"{label}: {evidence_failures or 'no evidence failure'}",
+            (expected is None and not evidence_failures) or (expected in evidence_failures),
+        )
+
+    # Plan P3.1: the record:/doc: namespaces and the unknown-namespace rule.
+    for label, pointer, expected, with_manifest in (
+        ("a record pointer is legal and skips the path check", "record:orders/8821", None, False),
+        ("a doc pointer with a section is legal and skips the path check", "doc:returns-policy#eu", None, False),
+        ("an unknown namespace is a form violation, never a hallucination", "ticket:4402", "evidence_form", True),
+        (
+            "a namespace cannot host a reasoning sentence",
+            "record:orders/8821 because the carrier lost it",
+            "evidence_form",
+            False,
+        ),
+        ("path:line is not swallowed by the namespace rule when the file exists", "src/app.ts:24", None, True),
+    ):
+        doc = json.loads(json.dumps(route))
+        doc["constraints"][0]["evidence"] = pointer
+        # with_manifest=True adds src/app.ts to the manifest so a mistyped
+        # namespace resolves as "missing file -> form violation" and a real
+        # path resolves as known — both against a manifest that holds it.
+        use_manifest = manifest | {"src/app.ts"} if with_manifest else manifest
+        outcome = check(
+            cases["add-caching-two-turn"], record_for(doc), validator, manifest=use_manifest
+        )
         evidence_failures = [f for f in outcome["failures"] if f in ("evidence_form", "evidence_valid")]
         expect(
             f"{label}: {evidence_failures or 'no evidence failure'}",

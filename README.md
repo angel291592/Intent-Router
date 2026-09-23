@@ -288,8 +288,8 @@ trace: [...]                  # replayable
 ```
 
 Outside code the fields don't change — only what an `evidence` pointer names. A file path becomes
-a record identifier or a document section (`ticket:4402`, `policy:returns#eu`); the requirement
-that everything probed carries one does not relax.
+a record identifier or a document section (`record:tickets/4402`, `doc:returns-policy#eu`); the
+requirement that everything probed carries one does not relax.
 
 The full field list is fixed by
 [`intentspec.schema.json`](skills/intent-router/schema/intentspec.schema.json) (JSON Schema draft

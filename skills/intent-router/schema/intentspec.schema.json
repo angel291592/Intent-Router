@@ -122,7 +122,7 @@
         "evidence": {
           "type": "string",
           "minLength": 1,
-          "description": "Where the constraint comes from: path, path:line, path#heading, git:<short-sha> or git:#<pr-number>, or the reserved user:delegated when the user handed the decision back. Always a single whitespace-free token; a reasoning sentence is not evidence and belongs in text. Required for probed and inferred constraints — an unsourced claim about a repository is indistinguishable from a guess."
+          "description": "Where the constraint comes from: path, path:line, path#heading, git:<short-sha> or git:#<pr-number>, the reserved user:delegated when the user handed the decision back, record:<system>/<id> for a record in a system of record, or doc:<slug>#<section> for a document section without a path. Always a single whitespace-free token; a reasoning sentence is not evidence and belongs in text. Required for probed and inferred constraints — an unsourced claim about a repository is indistinguishable from a guess."
         },
         "irreversible": {
           "type": "boolean",
@@ -187,7 +187,7 @@
         "target": {
           "type": "string",
           "minLength": 1,
-          "description": "ROUTE only: who the spec is handed to, e.g. implement, plan, research, or a target the requester named."
+          "description": "ROUTE only: who the spec is handed to, e.g. implement, plan, research, respond, escalate, prototype, or a target the requester named."
         },
         "question": {
           "$ref": "#/$defs/question"
@@ -394,7 +394,7 @@
         "evidence": {
           "type": "string",
           "minLength": 1,
-          "description": "Same format as constraint evidence."
+          "description": "Same format as constraint evidence, including the record: and doc: reserved namespaces."
         }
       }
     }

@@ -264,7 +264,8 @@ trace: [...]                  # 可重放
 ```
 
 出了代码领域，字段一个都不变——变的只有 `evidence` 指针指向什么。文件路径换成一个记录标识或文档
-小节（`ticket:4402`、`policy:returns#eu`）；"凡探测过的都必须带指针"这条要求不放松，只是格式变了。
+小节（`record:tickets/4402`、`doc:returns-policy#eu`）；"凡探测过的都必须带指针"这条要求不放松，
+只是格式变了。
 
 完整字段清单由 [`intentspec.schema.json`](skills/intent-router/schema/intentspec.schema.json)
 （JSON Schema draft 2020-12）固定，四个状态各有一个走通样例在
