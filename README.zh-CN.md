@@ -27,6 +27,14 @@
       IntentSpec  ──►  你的 planner / agent / subagent
 ```
 
+无需安装，无需 API key，零依赖——它就是一个 skill：
+
+```bash
+npx skills add angel291592/Intent-Router
+```
+
+手动安装，或安装器不认识的 agent：[快速开始](#快速开始)。
+
 ---
 
 ## 目录
@@ -137,6 +145,8 @@ Intent-Router 把它变成一个**状态**：每次探测都留下一个 `eviden
 ---
 
 ## 快速开始
+
+本页顶部的一行命令就是全部安装过程；这里是完整形态。
 
 无需安装，无需 API key，零依赖。它就是一个 skill。
 

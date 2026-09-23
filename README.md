@@ -27,6 +27,14 @@ can't, and refusing to emit when the intent is still underspecified.
       IntentSpec  ──►  your planner / agent / subagent
 ```
 
+No install, no API key, no dependencies — it's a skill:
+
+```bash
+npx skills add angel291592/Intent-Router
+```
+
+Manual install, or an agent the installer doesn't know: [Quick start](#quick-start).
+
 ---
 
 ## Contents
@@ -147,6 +155,8 @@ feeling.
 ---
 
 ## Quick start
+
+The one-liner at the top of this page is the whole install; here is the full form.
 
 No install, no API key, no dependencies. It's a skill.
 
