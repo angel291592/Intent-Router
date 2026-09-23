@@ -4,8 +4,9 @@ English | [简体中文](README.zh-CN.md)
 
 **An intent compiler for AI agents.**
 
-Turns a vague request into a typed `IntentSpec`: it looks up what it can, asks only what it can't,
-and refuses to emit while the intent is still underspecified.
+Turns a vague request into a typed `IntentSpec` — the clear, machine-readable input that typed
+decision models (Jev, Laya) and every router downstream assume already exists: it looks up what
+it can, asks only what it can't, and refuses to emit while the intent is still underspecified.
 
 What that buys you:
 
@@ -81,11 +82,13 @@ Manual install, or an agent the installer doesn't know: [Quick start](#quick-sta
 
 ## How it compares
 
-**Intent-Router is the layer four good tools leave empty: deciding whether to look, ask, or act —
+**Intent-Router is the layer five good tools leave empty: deciding whether to look, ask, or act —
 before acting.** grill-me converges beautifully, states the right principle, and keeps nothing.
 spec-kit keeps everything and makes you buy its whole workflow to get it. Routers decide fast and
-can't handle ambiguity at all. Jev returns exactly the typed, calibrated decision you want — *once
-the intent is already clear*, which is the hard part.
+can't handle ambiguity at all. Jev and Laya return exactly the typed, calibrated decision you
+want — *once the input is already clear*: Jev needs a well-formed question, Laya needs a formed
+state to classify. Producing that clear input from a vague request is the hard part, and it's
+the part neither of them does.
 
 Read the row gaps, not the checkmarks:
 
@@ -96,6 +99,13 @@ Read the row gaps, not the checkmarks:
 | [spec-kit `/clarify`](https://github.com/github/spec-kit) | ✅ 11-category scan | ❌ asks it | ✅ writes back to `spec.md` | ✅ ≤10 questions | ⚠️ needs `specs/<feature>/` + its workflow |
 | [semantic-router](https://github.com/aurelio-labs/semantic-router) / [RouteLLM](https://github.com/lm-sys/RouteLLM) | ❌ returns `None` | — | ❌ a label | ✅ threshold | ✅ |
 | [Jev](https://www.jevai.org/) (typed decisions) | ❌ needs clear input | — | ✅ typed + calibrated | ✅ confidence | ✅ |
+| [Laya](https://github.com/NandhaKishorM/laya) (open-source System 1) | ❌ needs a formed state / question set | — | ✅ typed `choice`/`score`/`noul` | ✅ calibrated probability | ✅ |
+
+Jev and Laya are the same tier — the System 1 decision layer. Jev is a closed API; Laya is the
+open-weights, Jev-wire-compatible alternative you can run locally. Both answer typed questions in
+a single pass once a *formed* input exists; neither converges a vague request into one. That
+upstream convergence is the layer Intent-Router occupies, and the `IntentSpec` it emits is the
+shape of input they want.
 
 ---
 
@@ -141,8 +151,8 @@ normalized action, its objects, explicit constraints, and a list of `unknown` fi
 invented; anything the model had to fill in itself is tagged `source: inferred` so you can veto it
 in one glance.
 
-**2. Resolve — the part everyone skips.** Every `unknown` is classified *before* anything reaches
-you:
+**2. Resolve — the part everyone skips.** This is context engineering as a routing decision: every
+`unknown` is classified *before* anything reaches you:
 
 | State | When | What happens |
 |---|---|---|
@@ -471,12 +481,15 @@ v0.1 ships: **L0, prompt-only.** Two paid tiers are planned and optional.
 |---|---|---|---|
 | **L0** *(default, shipped)* | Prompt-only. No deps, no keys. | $0 | Always start here |
 | **L1** *(planned)* | Any OpenAI-compatible endpoint + JSON schema | ~$0.0001/decision | Production, bounded latency |
-| **L2** *(planned, optional)* | [Jev](https://www.jevai.org/) or a local classifier | ~$0.0004/decision | You need calibrated confidence and audit trails |
+| **L2** *(planned, optional)* | [Jev](https://www.jevai.org/), [Laya](https://github.com/NandhaKishorM/laya) (open-source, local), or a local classifier | ~$0.0004/decision | You need calibrated confidence and audit trails |
 
 L2 is the division of labor the Jev community landed on — *LLMs create and repair semantic
 structure; a System One model repeatedly decides among known structures* — with Intent-Router
 supplying the structure. It's optional on purpose: Jev is closed-weights, waitlisted, and its
-benchmarks are vendor-reported. L0 must always be enough to try.
+benchmarks are vendor-reported; [Laya](https://github.com/NandhaKishorM/laya) is the
+open-weights alternative (Jev-wire-compatible, runs locally, ships a fine-tuned
+typed-decisions checkpoint — its zero-shot base is near chance, per its own benchmarks). L0 must
+always be enough to try.
 
 </details>
 
@@ -484,10 +497,12 @@ benchmarks are vendor-reported. L0 must always be enough to try.
 
 ## Prior art
 
-This is a synthesis, not a clean-room invention. Four projects shaped it:
+This is a synthesis, not a clean-room invention. Five projects shaped it:
 [grill-me](https://github.com/mattpocock/skills) (the grilling primitive and the principle this is
 built on), [spec-kit](https://github.com/github/spec-kit) (`/clarify`'s bounded budget),
-[Jev](https://www.jevai.org/) (typed decisions, the LLM→IR→decider split) and
+[Jev](https://www.jevai.org/) (typed decisions, the LLM→IR→decider split),
+[Laya](https://github.com/NandhaKishorM/laya) (the open-weights, Jev-wire-compatible System 1
+model — proof the decision tier can be local) and
 [Camunda #63664](https://github.com/camunda/camunda/issues/63664) (the clearest statement of the
 problem). They deserve the credit for the parts they named.
 
@@ -507,6 +522,11 @@ problem). They deserve the credit for the parts they named.
 - **[TypeSafe Jev](https://www.jevai.org/)** and the
   [unofficial toolkit](https://github.com/HiQS-Labs/Jev-unofficial-toolkit) — typed, calibrated
   decisions instead of prose, and the LLM→IR→decider split that shapes `IntentSpec`.
+- **[Laya](https://github.com/NandhaKishorM/laya)** and its ecosystem
+  ([laya-mlx](https://github.com/mizorewww/laya-mlx),
+  [jevbench](https://github.com/dhruvmehra/jevbench)) — the open-weights, Jev-wire-compatible
+  System 1 tier: the same typed `choice`/`score`/`noul` answers, runnable locally. The natural
+  L2 target when you don't want a closed API in the loop.
 - **[semantic-router](https://github.com/aurelio-labs/semantic-router)**,
   **[RouteLLM](https://github.com/lm-sys/RouteLLM)**,
   **[vLLM Semantic Router](https://github.com/vllm-project/semantic-router)** — the routing tier

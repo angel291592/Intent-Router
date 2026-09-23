@@ -4,7 +4,8 @@
 
 **给 AI agent 用的意图编译器（intent compiler）。**
 
-把一句含糊的请求变成一份带类型的 `IntentSpec`：能自己查到的就去查，只问查不到的，意图仍不充分时
+把一句含糊的请求变成一份带类型的 `IntentSpec`——带类型的决策模型（Jev、Laya）和下游所有路由器
+都默认它已经存在的那份清晰、机器可读的输入：能自己查到的就去查，只问查不到的，意图仍不充分时
 拒绝产出。
 
 这给你带来的是：
@@ -78,10 +79,11 @@ npx skills add angel291592/Intent-Router
 
 ## 横向对比
 
-**Intent-Router 填的正是四个好工具都留空的那一层：在动手之前，先决定该查、该问、还是该做。**
+**Intent-Router 填的正是五个好工具都留空的那一层：在动手之前，先决定该查、该问、还是该做。**
 grill-me 收敛得很漂亮、原则也说对了，但什么都不留下。spec-kit 什么都留下，但你得把它整套工作流
-一起买。路由器决策很快，但根本处理不了模糊。Jev 返回的正是你想要的那种带类型、已校准的决策——
-*前提是意图已经清楚了*，而那恰恰是难的部分。
+一起买。路由器决策很快，但根本处理不了模糊。Jev 和 Laya 返回的正是你想要的那种带类型、已校准的
+决策——*前提是输入已经成型了*：Jev 需要一个组织好的问题，Laya 需要一份成型的待分类状态。把含糊
+请求变成那份成型输入，恰恰是难的部分——而它俩都不做这一步。
 
 要读的是格子里的落差，不是那些勾：
 
@@ -92,6 +94,12 @@ grill-me 收敛得很漂亮、原则也说对了，但什么都不留下。spec-
 | [spec-kit `/clarify`](https://github.com/github/spec-kit) | ✅ 11 类扫描 | ❌ 直接问你 | ✅ 回写进 `spec.md` | ✅ ≤10 个问题 | ⚠️ 需要 `specs/<feature>/` 与它的工作流 |
 | [semantic-router](https://github.com/aurelio-labs/semantic-router) / [RouteLLM](https://github.com/lm-sys/RouteLLM) | ❌ 返回 `None` | —— | ❌ 一个标签 | ✅ 阈值 | ✅ |
 | [Jev](https://www.jevai.org/)（带类型的决策） | ❌ 需要清晰输入 | —— | ✅ 带类型 + 已校准 | ✅ confidence | ✅ |
+| [Laya](https://github.com/NandhaKishorM/laya)（开源 System 1） | ❌ 需要成型的状态/问题集 | —— | ✅ 带类型的 `choice`/`score`/`noul` | ✅ 校准概率 | ✅ |
+
+Jev 和 Laya 在同一层——System 1 决策层。Jev 是闭源 API；Laya 是权重开放、与 Jev 线级兼容、可在
+本地跑的替代品。两者都是拿到*成型*输入后单次前向回答带类型的问题；两者都不会把含糊请求收敛成
+成型输入。上游这个收敛层正是 Intent-Router 所在的位置，而它产出的 `IntentSpec` 正是它们想要的
+输入形状。
 
 ---
 
@@ -130,7 +138,8 @@ grill-me 自己的文档把 **"四轮四十六个问题"** 称作*一次普通 s
 用户明确说出的约束，以及一张 `unknown` 字段清单。不发明任何东西；凡是模型自己填进去的都打上
 `source: inferred`，让你一眼就能否掉。
 
-**2. Resolve——所有人都跳过的那一步。** 每个 `unknown` 在到达你之前先被分类：
+**2. Resolve——所有人都跳过的那一步。** 这就是把上下文工程（context engineering）做成一次路由
+决策：每个 `unknown` 在到达你之前先被分类：
 
 | 状态 | 什么时候 | 会发生什么 |
 |---|---|---|
@@ -427,11 +436,13 @@ Zed、Warp、Kiro CLI、Junie、Augment、Factory Droid
 |---|---|---|---|
 | **L0** *(默认，已发布)* | 纯 prompt。零依赖、零密钥。 | $0 | 永远先从这里开始 |
 | **L1** *(计划中)* | 任何 OpenAI 兼容端点 + JSON schema | ~$0.0001/次决策 | 生产环境，需要延迟可控 |
-| **L2** *(计划中，可选)* | [Jev](https://www.jevai.org/) 或本地分类器 | ~$0.0004/次决策 | 你需要校准过的 confidence 与审计轨迹 |
+| **L2** *(计划中，可选)* | [Jev](https://www.jevai.org/)、[Laya](https://github.com/NandhaKishorM/laya)（开源、本地）或本地分类器 | ~$0.0004/次决策 | 你需要校准过的 confidence 与审计轨迹 |
 
 L2 是 Jev 社区最终达成的那种分工——*LLM 创建并修复语义结构；一个 System One 模型在已知结构之间
 反复做决策*——由 Intent-Router 来提供那个结构。它被刻意设计成可选：Jev 是闭权重、需要排队申请，
-基准数据也是厂商自报的。L0 必须永远足以让人先试起来。
+基准数据也是厂商自报的；[Laya](https://github.com/NandhaKishorM/laya) 是权重开放的替代品（与
+Jev 线级兼容、可本地运行、带一个在 typed-decisions 上微调过的 checkpoint——按它自己的基准，
+zero-shot 底子接近随机）。L0 必须永远足以让人先试起来。
 
 </details>
 
@@ -439,10 +450,12 @@ L2 是 Jev 社区最终达成的那种分工——*LLM 创建并修复语义结�
 
 ## 相关工作（Prior art）
 
-这是一次综合，不是无菌室里的发明。有四个项目塑造了它：
+这是一次综合，不是无菌室里的发明。有五个项目塑造了它：
 [grill-me](https://github.com/mattpocock/skills)（grilling 原语，以及本项目立足的那条原则）、
 [spec-kit](https://github.com/github/spec-kit)（`/clarify` 的有界问题预算）、
 [Jev](https://www.jevai.org/)（带类型的决策，以及 LLM→IR→decider 分层）、
+[Laya](https://github.com/NandhaKishorM/laya)（权重开放、与 Jev 线级兼容的 System 1 模型——证明
+决策层可以放在本地）、
 [Camunda #63664](https://github.com/camunda/camunda/issues/63664)（对这个问题最清晰的一次陈述）。
 它们命名的那些东西，功劳归它们。
 
@@ -460,6 +473,11 @@ L2 是 Jev 社区最终达成的那种分工——*LLM 创建并修复语义结�
 - **[TypeSafe Jev](https://www.jevai.org/)** 与
   [非官方工具包](https://github.com/HiQS-Labs/Jev-unofficial-toolkit)——用带类型、已校准的决策
   取代散文，以及塑造了 `IntentSpec` 的那个 LLM→IR→decider 分层。
+- **[Laya](https://github.com/NandhaKishorM/laya)** 及其生态
+  ([laya-mlx](https://github.com/mizorewww/laya-mlx)、
+  [jevbench](https://github.com/dhruvmehra/jevbench))——权重开放、与 Jev 线级兼容的 System 1 层：
+  同样的带类型 `choice`/`score`/`noul` 回答，可在本地跑。不想在链路里放一个闭源 API 时，它就是
+  自然的 L2 目标。
 - **[semantic-router](https://github.com/aurelio-labs/semantic-router)**、
   **[RouteLLM](https://github.com/lm-sys/RouteLLM)**、
   **[vLLM Semantic Router](https://github.com/vllm-project/semantic-router)**——Intent-Router
