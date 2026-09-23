@@ -27,6 +27,8 @@
       IntentSpec  ──►  你的 planner / agent / subagent
 ```
 
+<!-- demo:begin --><!-- demo:end -->
+
 无需安装，无需 API key，零依赖——它就是一个 skill：
 
 ```bash

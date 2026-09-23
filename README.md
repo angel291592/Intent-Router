@@ -27,6 +27,8 @@ can't, and refusing to emit when the intent is still underspecified.
       IntentSpec  ──►  your planner / agent / subagent
 ```
 
+<!-- demo:begin --><!-- demo:end -->
+
 No install, no API key, no dependencies — it's a skill:
 
 ```bash
