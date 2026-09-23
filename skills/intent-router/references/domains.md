@@ -97,14 +97,44 @@ Typical question **not** worth asking: whether a source has already been read. C
 Typical question worth asking: whether a backfill may rewrite historical rows. That is
 irreversible and usually not written down anywhere.
 
+## A domain not listed here: derive its probe surfaces
+
+The six surfaces in the main instructions are the code instance of a general procedure. To work a
+domain that has no table above, ask four questions of it — each maps onto the code surfaces and
+onto the parse categories:
+
+1. **System of record** — what actually happened here, and which system holds the authoritative
+   record of it? (the code surfaces' manifests and entry points; maps to `scope` and
+   `data_compatibility`)
+2. **Policy in force** — what is allowed and what is forbidden, and what version or effective date
+   does that policy carry? (maps to `non_goals_constraints` and `approach`)
+3. **Prior handling** — how was this handled last time, and was it ever reversed or rejected?
+   (the code domain's version history; maps to `approach`)
+4. **Inventory** — where is the authoritative list of the objects this request can act on? (the
+   code domain's route and command definitions; maps to `scope`)
+
+A domain table is nothing more than these four questions answered with concrete places. Write the
+places down, and the domain compiles like code does.
+
+## Irreversibility outside code
+
+Outside code, irreversible actions are the norm rather than the exception: money has moved, a
+message or a commitment has already reached a third party, quota or capacity has been consumed,
+data or records have been deleted, an external system has already placed an order or scheduled
+work. Mark such constraints `irreversible: true` — which means `ask-protocol.md`'s rule against
+accepting a delegated answer for irreversible decisions fires far more often here than it does in
+a codebase.
+
 ## What stays the same in every domain
 
 1. The iron law: if an objective answer exists and you can reach it, look it up.
 2. The predicate: `unknown` empty, and no inferred constraint that is irreversible.
 3. Two halt causes, never merged: `underspecified` is the requester's next move, `degraded` is an
    operations signal.
-4. Evidence on everything probed or inferred. In a non-code domain the evidence pointer is a
-   record identifier or a document section rather than a file path — the requirement does not
-   relax, only its format does.
+4. Evidence on everything probed or inferred. Outside the filesystem use the two reserved
+   namespaces: `record:<system>/<id>` for a record in a system of record,
+   `doc:<slug>#<section>` for a document section that has no path. No file check can verify
+   either form, so fabricating one is worse than fabricating a path — point only at records or
+   sections you actually read.
 5. The emitted artifact is the same `IntentSpec`, with the same fields, so downstream consumers do
    not need to know which domain produced it.

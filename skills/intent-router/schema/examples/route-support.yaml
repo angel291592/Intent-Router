@@ -1,0 +1,59 @@
+# ROUTE — the same spec structure outside code, against evals/fixtures/support-queue.
+# A furious customer, no stated remedy: what happened is a record lookup (order,
+# account entitlement, policy), and the only thing worth asking is the one
+# irreversible trade-off — refund or replacement, where the policy says issuing
+# one forecloses the other. Three unknowns probed, one asked. Evidence points at
+# records and a policy section, not files: record:<system>/<id> and
+# doc:<slug>#<section> are the reserved non-file namespaces.
+spec_version: "0.1"
+request: this customer is furious about order 8821 — sort it out
+intent: resolve_customer_complaint
+objects:
+  - order 8821
+  - acme account ticket 4471
+constraints:
+  - source: probed
+    text: 'order 8821 arrived 12 days late and the carrier marked it lost; the customer has received nothing'
+    evidence: record:orders/8821
+    category: scope
+  - source: probed
+    text: 'the account is on the Pro plan with a 30-day guarantee, 9 days remaining, and has consumed 20 USD of its historical goodwill allowance'
+    evidence: record:accounts/acme
+    category: scope
+  - source: probed
+    text: 'both a refund and a replacement are allowed under the returns policy; a refund closes the case and excludes a later replacement'
+    evidence: doc:returns-policy#remedies
+    category: approach
+  - source: asked
+    text: 'issue a full refund rather than a replacement — the customer wanted the problem gone, not the product'
+    irreversible: true
+    category: failure_behavior
+unknown: []
+decision:
+  state: ROUTE
+  confidence: 0.84
+  target: respond
+resolution:
+  unknowns_found: 4
+  resolved_by_probe: 3
+  asked: 1
+  inferred: 0
+  ask_budget: 3
+trace:
+  - step: parse
+    detail: normalised the request to resolve_customer_complaint; four decision-bearing unknowns (what_happened, entitlement, allowed_remedies, remedy_choice)
+  - step: probe
+    detail: read the order record — 12 days late, carrier-marked lost, which settles what_happened
+    evidence: record:orders/8821
+  - step: probe
+    detail: read the account record — Pro plan, 9 days of guarantee left, goodwill history, which settles entitlement
+    evidence: record:accounts/acme
+  - step: probe
+    detail: read the returns policy in force — both remedies permitted, refund forecloses replacement, which settles allowed_remedies
+    evidence: doc:returns-policy#remedies
+  - step: ask
+    detail: asked the one remaining unknown, an irreversible trade-off the customer's preference decides; the human chose refund
+  - step: typecheck
+    detail: unknown is empty and no inferred constraint touches an irreversible boundary — sufficient
+  - step: emit
+    detail: handing the spec to respond; no message is sent inside this pass

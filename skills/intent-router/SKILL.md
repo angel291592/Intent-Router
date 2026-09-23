@@ -69,8 +69,12 @@ treat the text after the name as the request.
   cheap for the user to veto in one line.
 - **evidence** — a pointer to where a value came from. It is always a **single token with no
   whitespace**, in one of these forms only: `path`, `path:line`, `path:line-line`,
-  `path#heading`, `git:<short-sha>`, `git:#<pr-number>`, or the reserved `user:delegated` used
-  when the user handed a decision back. Nothing else is evidence. In particular the repository
+  `path#heading`, `git:<short-sha>`, `git:#<pr-number>`, the reserved `user:delegated` used
+  when the user handed a decision back, `record:<system>/<id>`, or `doc:<slug>#<section>`.
+  Nothing else is evidence. Sources that are not files use the reserved namespaces:
+  `record:<system>/<id>` for a record in a system of record, `doc:<slug>#<section>` for a
+  document section that has no path. They are pointers, not prose: still one token, still no
+  whitespace, and still naming something you actually opened. In particular the repository
   root (`.`), any path under `.git/`, `.claude/` or `.agents/`, the harness config file, and — most
   of all — a reasoning sentence ("correctness requirement…", "delegated by symmetry with…") are
   **not** evidence: they are not pointers, they contain spaces, and they must not be put in the
@@ -100,17 +104,17 @@ Produce a draft spec. Do not emit it, do not act on it.
    free-form `detail`, or any other key; the judgement itself is expressed by keeping the item out
    of `unknown` when it is not decision-bearing.
 
-| category | the question it asks | example in a code workspace |
-|---|---|---|
-| `scope` | what is acted on, and what is explicitly out | which endpoints get cached |
-| `approach` | which method or dependency; what is mandatory or forbidden | existing Redis client or a new in-process cache |
-| `data_compatibility` | data shape, interface contract, backward compatibility | may the response shape change |
-| `failure_behavior` | behaviour on error, degradation or empty state | on invalidation failure, serve stale or uncached |
-| `acceptance` | what counts as done, measurably | which TTL matches the repository's convention |
-| `non_goals_constraints` | explicit exclusions, hard limits on time, cost, compliance | no new dependencies |
+| category | the question it asks | example in code | example outside code |
+|---|---|---|---|
+| `scope` | what is acted on, and what is explicitly out | which endpoints get cached | which orders in this account are in scope |
+| `approach` | which method or dependency; what is mandatory or forbidden | existing Redis client or a new in-process cache | goodwill credit, or a carrier claim |
+| `data_compatibility` | data shape, interface contract, backward compatibility | may the response shape change | may the reply change the date already promised |
+| `failure_behavior` | behaviour on error, degradation or empty state | on invalidation failure, serve stale or uncached | if the refund is declined, hold the ticket or escalate |
+| `acceptance` | what counts as done, measurably | which TTL matches the repository's convention | what closes the ticket — customer confirmation, or the SLA timer |
+| `non_goals_constraints` | explicit exclusions, hard limits on time, cost, compliance | no new dependencies | no commitment beyond the policy in force |
 
-When the request touches caching, writes, retries or any state that can fail, enumerate the
-failure path as its own unknown: not just "what should the feature do" but "what should happen
+When the request touches any step that can fail, be rejected, or half-complete — a cache write, a
+refund, a backfill, a notification, an approval — enumerate the failure path as its own unknown: not just "what should the feature do" but "what should happen
 when the feature's own step fails" — a cache write that errors, an invalidation that misses, a
 dependency that times out. Skipping the failure path while emitting a happy-path spec is the
 guess this pass exists to prevent.
@@ -138,6 +142,11 @@ Classify every decision-bearing unknown as `probe` or `ask` **before** saying an
 user. A question whose answer was sitting in the workspace is a defect, not a courtesy.
 
 ### 4.2 PROBE
+
+Name the sources first. A code workspace → the surfaces below. Anything else — a ticket queue,
+a records system, a policy archive, a notes collection, a candidate registry — load
+`references/domains.md` and use its table for that domain. The order below is the code instance
+of the iron law, not the general rule.
 
 Use whatever file-reading, search, or shell capability your environment provides. If your
 environment exposes version-control history, consult it. If it exposes nothing, see *degraded*
@@ -249,7 +258,8 @@ The stopping condition is computed, not felt:
 Then exactly one of three outcomes:
 
 - **ROUTE** — sufficient. Emit the complete IntentSpec with `decision.state: ROUTE` and a
-  `target`: `implement`, `plan`, `research`, or whatever target the user named. Then state which
+  `target`: `implement`, `plan`, `research`, `respond`, `escalate`, `prototype`, or whatever
+  target the user named. Then state which
   target you hand off to and stop; do not start implementing inside this skill.
 - **ASK** — not sufficient and the budget still allows a question. Emit the current spec snapshot
   with `decision.state: ASK` and `decision.question` set to the one question you are asking, then
@@ -386,8 +396,9 @@ is checkable in one pass: if no conceivable file in the workspace could name an 
 criterion for the goal, the goal is ungrillable.
 
 Do not spend questions on these. Name the ungrillable field, say that it needs something to react
-to rather than another round of discussion, and hand off to a throwaway prototype or mock as the
-`target` — or halt with the field listed in `open_fields`. Either way, never quietly pick a
+to rather than another round of discussion, and hand off to a throwaway artifact the requester can
+react to — a prototype or mock in code, a draft reply, one sample record, a single example layout —
+as the `target` — or halt with the field listed in `open_fields`. Either way, never quietly pick a
 direction and present it as the user's intent.
 
 ## 8. Anti-patterns
@@ -411,7 +422,7 @@ Load on demand; each is self-contained.
   budget and degraded examples.
 - `references/ask-protocol.md` — question templates, good versus bad questions, delegation,
   budget overrides, language rules.
-- `references/intentspec.md` — every field explained, the cross-field invariants, the four
+- `references/intentspec.md` — every field explained, the cross-field invariants, the five
   worked examples, the `.intent/` file convention.
 - `references/domains.md` — probe surfaces and typical questions outside code, plus the negative
   criteria pattern for routing registries.

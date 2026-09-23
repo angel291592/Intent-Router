@@ -2,7 +2,7 @@
 
 The machine-checkable contract is `../schema/intentspec.schema.json` (JSON Schema draft 2020-12).
 This file explains what the fields mean, the invariants the schema cannot express, and how to read
-the four worked examples. Load it when writing a spec that is more complicated than the skeleton
+the five worked examples. Load it when writing a spec that is more complicated than the skeleton
 in the main instructions.
 
 Field order in a spec is the order below. It is not cosmetic: a reviewer reads top to bottom and
@@ -28,7 +28,7 @@ should meet the request before the conclusions.
 |---|---|---|
 | `source` | yes | `explicit` \| `probed` \| `asked` \| `inferred`. |
 | `text` | yes | The requirement, actionable without this document's context. |
-| `evidence` | when `probed` or `inferred` | Pointer in one of the evidence formats. Always a single whitespace-free token: `path`, `path:line`, `path:line-line`, `path#heading`, `git:<short-sha>`, `git:#<pr-number>`, or the reserved `user:delegated`. The schema enforces this. |
+| `evidence` | when `probed` or `inferred` | Pointer in one of the evidence formats. Always a single whitespace-free token: `path`, `path:line`, `path:line-line`, `path#heading`, `git:<short-sha>`, `git:#<pr-number>`, the reserved `user:delegated`, `record:<system>/<id>`, or `doc:<slug>#<section>`. The schema enforces this. |
 | `irreversible` | no, default `false` | Cannot be walked back once shipped. |
 | `category` | no | One of the six categories from the parse taxonomy. |
 
@@ -89,14 +89,15 @@ The schema cannot express these. They hold for every emitted spec:
 4. `state == ROUTE` ⟹ no constraint has both `source: inferred` and `irreversible: true`.
    This is the second half of the sufficiency predicate, restated as a check.
 5. Every `evidence` path component points at something that exists in the workspace as reached, or
-   uses the `git:` form. A fabricated pointer is a defect of the worst kind: it survives review.
-   `git:` and `user:delegated` are reserved forms that do not point at the filesystem, so this
-   invariant does not apply to them — but every other evidence value must be a real path, and any
-   value containing whitespace (a reasoning sentence) is not evidence at all.
+   uses one of the reserved forms: `git:`, `user:delegated`, `record:<system>/<id>`, or
+   `doc:<slug>#<section>`. A fabricated pointer is a defect of the worst kind: it survives review.
+   The reserved forms do not point at the filesystem, so this invariant does not apply to them —
+   but every other evidence value must be a real path, and any value containing whitespace (a
+   reasoning sentence) is not evidence at all.
 
-## The four worked examples
+## The five worked examples
 
-In `../schema/examples/`, all four validating against the schema:
+In `../schema/examples/`, all five validating against the schema:
 
 | file | what it shows |
 |---|---|
@@ -104,6 +105,7 @@ In `../schema/examples/`, all four validating against the schema:
 | `ask.yaml` | The same run one step earlier. Note `asked: 0` while the question is outstanding, and the unknown still listed. |
 | `halt-underspecified.yaml` | "make it better. no questions." Budget `0`, nothing to look up, three fields named instead of a guessed scope. |
 | `halt-degraded.yaml` | Same request as `route.yaml` with no file-reading capability. Every unknown stays `kind: probe`; the cause is the environment, not the request. |
+| `route-support.yaml` | The same spec structure in a non-code domain: a support triage run whose evidence points at records (`record:orders/8821`) and a policy section (`doc:returns-policy#remedies`) instead of files. |
 
 Reading them in that order is the fastest way to see what changes between states and what does
 not.

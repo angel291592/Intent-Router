@@ -7,6 +7,10 @@ The rule this file serves: if an objective answer exists and you have any means 
 it up. Use whatever file-reading, search, or shell capability your environment provides — this
 file names *places*, never tools.
 
+Not a codebase? This file is the code instance of the surface list; the surfaces for ticket
+queues, records systems, policy archives, notes collections and candidate registries are in
+`domains.md`.
+
 ## 1. Ecosystem manifests
 
 The fastest way to rule an approach in or out: what is already a dependency, what was pinned, and
