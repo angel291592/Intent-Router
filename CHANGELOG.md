@@ -20,6 +20,14 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
   换更具体的 `intent`，不覆盖别的请求的契约。`.intent/` 下的旧 spec 不得作为 evidence 引用（它
   记录的是上一轮的推断，不能当已核实事实）。schema 与输出字段不变。
 
+- Evals: release verification for the write-on-emit change — 4 affected-path cases (asking,
+  empty workspace, underspecified halt, silence) pass 4/4 with writing tools absent, and the
+  delivery skill arm satisfies all four write assertions (ASK then ROUTE saved to `.intent/`,
+  written before the reply, state sequence intact). Report: `evals/reports/2026-09-24-opencode.md`.
+- Evals：写盘默认化的发版核验——4 条受影响路径用例（ASK、空工作区、underspecified HALT、静默）在
+  无写工具的工作区下 4/4 通过；交付 skill 臂四条写盘断言全部成立（ASK 与 ROUTE 两个 spec 依次落
+  到 `.intent/`、先写盘再回复、state 序列完整）。报告：`evals/reports/2026-09-24-opencode.md`。
+
 - Evals: the runner refuses to start when an intent-router copy sits in a user-level skills
   directory (`~/.config/opencode/skills`, `~/.claude/skills`, `~/.agents/skills`): such a copy is
   loaded alongside the workspace one and the run would measure whichever happens to win. Also:
