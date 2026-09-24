@@ -20,6 +20,14 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
   换更具体的 `intent`，不覆盖别的请求的契约。`.intent/` 下的旧 spec 不得作为 evidence 引用（它
   记录的是上一轮的推断，不能当已核实事实）。schema 与输出字段不变。
 
+- Docs: both `SECURITY` versions scope the skill's single write (its own `.intent/` spec, which can
+  quote request text and probed record values, so the commit-or-ignore call is the project's),
+  cover both fixtures under `evals/fixtures/`, and state "latest released version only" instead of
+  the pre-1.0 phrasing.
+- Docs：两版 `SECURITY` 写明 skill 唯一的写操作（`.intent/` 下它自己的 spec，可能引用请求原文与探测
+  到的记录值，提交还是忽略由项目决定）；范围外条目覆盖 `evals/fixtures/` 下的两个 fixture；支持
+  版本表述改为"只支持最新发布版本"。
+
 - Docs: the Chinese walkthrough (`docs/zh-CN/skill-guide.md`) catches up with the skill as it now
   stands — 500-line budget spent, five worked examples, and five new "why" passages: the silence
   exit, the `record:`/`doc:` namespaces, per-domain probe surfaces, dangling references vs

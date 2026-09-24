@@ -21,15 +21,18 @@ issue classes are:
 - A prompt-injection path where the skill's instructions cause an agent to take a harmful action
   (for example, reading or exfiltrating something the user did not intend).
 - Instructions that cause an agent to write outside the workspace, or to act on an irreversible
-  boundary without asking.
+  boundary without asking. The skill's only write is its own spec file under `.intent/` — a saved
+  spec quotes the original request and the record values it probed, so in non-code domains it can
+  carry customer data; whether `.intent/` is committed or ignored is the project's own decision.
 - A weakness in the evaluation runner (`evals/run.py`) when pointed at untrusted fixtures.
 
 ## What is not in scope
 
 - The behaviour of a specific harness or model. Report those as regular bugs, or upstream.
-- The `evals/fixtures/user-api/` directory: it is a deliberately small fixture used as a probe
-  target, not a shipped application.
+- The fixtures under `evals/fixtures/` (both of them): deliberately small probe targets, not
+  shipped applications.
 
 ## Supported versions
 
-The project is pre-1.0. Fixes land on `main`; there are no maintained release branches yet.
+Only the latest released version is supported. Fixes land on `main`; there are no maintained
+release branches yet.
