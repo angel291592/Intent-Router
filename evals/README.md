@@ -26,8 +26,8 @@ repository with the skill installed into it.
 
 Requires `python` 3.13+, [`uv`](https://docs.astral.sh/uv/), and the harness on `PATH`.
 
-Four layers, cheapest first. Each is a gate for the next: do not spend a session before the free
-layer above it is green.
+Five tiers, cheapest first. Each is a gate for the next: do not spend a session before the free
+tier above it is green.
 
 ```bash
 # Tier 0 — offline: assertion logic, no sessions, no cost. Run after every edit to run.py.
@@ -86,7 +86,7 @@ minutes with `--jobs 4`, so budget roughly 20 minutes for fourteen. The same run
 preflight). Tier 0 and Tier 1 cost nothing. Iterate on `--cases <id> --repeat 2` and keep a full
 suite for the moment you need numbers.
 
-A fifth tier, **release verification**: after a change to the skill, run each affected-path case
+One more tier, **release verification**: after a change to the skill, run each affected-path case
 once — not to iterate, but to confirm the change did not break behaviour that already passed.
 It does not replace Tier 3's two repeats when iterating; the two are documented separately so
 the "Two repeats, never one" rule stays intact. v1.1.0's release verification spent 11 sessions

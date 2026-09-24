@@ -267,15 +267,19 @@ HALT），二是每条 evidence 是否合法（形态 + 指向真实存在的东
 
 ## 12. 跨字段不变量为什么不进 schema
 
-有三条约束 schema 表达不了或不该表达，写在 `references/intentspec.md` 里并由评测断言：
+有五条约束写在 `references/intentspec.md` 里并由评测断言：
 
 1. `unknowns_found = resolved_by_probe + asked + inferred + len(unknown)`
 2. `state == ROUTE ⟹ unknown == []`
 3. `state == ASK ⟹ asked < ask_budget`
+4. `state == ROUTE ⟹ 不存在同时 source: inferred 且 irreversible: true 的约束`
+5. 每条 evidence 指针要么指向工作区里真实存在的东西，要么用保留形式（`git:`、`user:delegated`、
+   `record:`、`doc:`）
 
-第 1 条是真的表达不了（JSON Schema 不做算术）。第 2、3 条**技术上可以**写进 schema，但刻意没写：
+第 1 条是真的表达不了（JSON Schema 不做算术）。第 2–4 条**技术上可以**写进 schema，但刻意没写：
 分开之后，违反它们时评测报的是 `invariants_ok` 失败而不是 `schema_valid` 失败，**诊断信息更精确**
-——一个是"逻辑算错了"，一个是"结构不对"，修法完全不同。
+——一个是"逻辑算错了"，一个是"结构不对"，修法完全不同。第 4 条就是充分性谓词的另一半，重述成
+检查项；第 5 条的"路径是否存在"由 runner 对着 fixture 清单核，schema 只强制单 token 形状。
 
 另外一个容易误解的点：`resolution.asked` 的语义是"**已被人回答掉**的 unknown 数"，不是"已抛出的
 问题数"。ASK 态输出时问题还没被回答，所以该 unknown 仍留在 `unknown[]` 里、`asked` 仍是 0——否则
