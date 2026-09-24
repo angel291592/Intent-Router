@@ -17,10 +17,15 @@ What that buys you:
   the model and start putting it to work.
 - You answer less, not more. Before anything reaches you it reads what your repo, ticket system or
   docs already answer, so the forty-six-question interview becomes the one question that genuinely
-  needs your judgment.
-- The work carries further. Every run ends in a machine-readable `IntentSpec` whose probed fields
-  carry evidence pointers, so the output rests on what your project actually says rather than on an
-  unstated guess, and the next agent, session or teammate starts from that contract instead of zero.
+  needs your judgment — and that one answer lands in the delivered code: in the delivery
+  comparison, every run with the skill asks exactly one question and 3 of 3 delivered caches state
+  their failure policy, while none of the 5 bare deliveries do
+  ([report](evals/reports/2026-09-24-delivery-opencode.md)).
+- The work carries further. Every run ends in a machine-readable `IntentSpec`, saved to
+  `.intent/<intent>.intent.yaml` before the reply that carries it, whose probed fields carry
+  evidence pointers — so the output rests on what your project actually says rather than on an
+  unstated guess, and the next agent, session or teammate starts from that contract file instead
+  of zero.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/angel291592/Intent-Router)](https://github.com/angel291592/Intent-Router/releases)
@@ -50,8 +55,8 @@ Same three passes. Same stopping predicate. Only the places it looks change.
 
 <!-- demo:begin -->
 What a real run looks like — one sentence in, it reads the repo itself and asks only what no
-file can answer. From the measured run behind the numbers below: 8 of the 10 cases the suite held
-that day, 0 hallucinated evidence.
+file can answer. From the measured run of 2026-09-23 behind the numbers below: 8 of the 10 cases
+the suite held that day, 0 hallucinated evidence.
 
 <p align="center">
   <img src="docs/assets/demo-1-probe.png" width="760" alt="Intent-Router loads automatically and probes the repo: package.json, src/routes/users.ts, src/cache/redis.ts and more"><br><br>
@@ -228,9 +233,9 @@ feeling.
 
 ## Two walkthroughs
 
-Same engine, same artifact, two different worlds. The first is the one with published eval runs
-and the screenshots above; the second shows what changes when there is no repository in sight —
-which is: the probe surfaces, and nothing else.
+Same engine, same artifact, two different worlds. The first is the domain the full-suite eval
+numbers belong to; the second shows what changes when there is no repository in sight — which
+is: the probe surfaces, and nothing else.
 
 ### A. In a codebase — *"add caching to the user API"*
 
@@ -281,10 +286,9 @@ happened, because the ticket already said. "Is the purchase inside the warranty 
 record, not an opinion; asking it is the bug this thing exists to remove.
 
 > **Honesty note:** walkthrough A is the domain covered by the [eval suite](#evals) and the
-> screenshots above. Walkthrough B is worked through from the probe surfaces specified in
-> [`references/domains.md`](skills/intent-router/references/domains.md) — the skill is built for
-> it and documents it, but no published eval run covers it yet. See
-> [Where it works](#where-it-works).
+> screenshots above. Walkthrough B's domain is measured on its own terms —
+> `support-delegate-irreversible` passed in the [2026-09-23 subset run](evals/reports/2026-09-23-opencode-2.md) —
+> while the full-suite numbers still belong to coding. See [Where it works](#where-it-works).
 
 ---
 
@@ -327,11 +331,13 @@ The full field list is fixed by
 2020-12), with a worked example of each state in
 [`schema/examples/`](skills/intent-router/schema/examples/).
 
-By default the spec is printed in the reply and nothing is written. It is saved to
-`.intent/<intent>.intent.yaml` only if you ask for it, or if your project already has an
-`.intent/` directory. Check that file into git next to the diff it produced, and "what was this PR
-actually trying to do" has an answer that isn't archaeology — while
-`resolved_by_probe / unknowns_found` gives you something to hold the tool to.
+Every spec is also saved to `.intent/<intent>.intent.yaml` before the reply that carries it — the
+next agent, session or teammate starts from that file, and it sits next to the diff it produced,
+so "what was this PR actually trying to do" has an answer that isn't archaeology. Only that one
+file is written, nothing is committed, and nothing is written at all when the request is fully
+specified and the skill stays silent; whether `.intent/` belongs in version control is your
+project's decision. Meanwhile `resolved_by_probe / unknowns_found` still gives you something to
+hold the tool to.
 
 ---
 
@@ -344,16 +350,16 @@ way this project states harness compatibility — measured, specified, or neithe
 | Domain | PROBE reaches | The question worth asking | Status |
 |---|---|---|---|
 | **Coding agents** | repo, deps, version history, tests, CI, ADRs | irreversible technical trade-offs | ✅ **measured** — [eval suite](#evals), 14 cases |
-| **Support & service triage** | ticket history, order and event logs, entitlements, the policy in force | refund vs. replace, when both are allowed and one forecloses the other | 📋 **specified** in [`domains.md`](skills/intent-router/references/domains.md) |
+| **Support & service triage** | ticket history, order and event logs, entitlements, the policy in force | refund vs. replace, when both are allowed and one forecloses the other | ✅ **measured** — 1 case (`support-delegate-irreversible`), [subset run](evals/reports/2026-09-23-opencode-2.md) |
 | **Research & analysis** | prior notes, previous reports, the source allow-list, cached retrievals | depth vs. breadth, when the deliverable changes shape | 📋 **specified** |
 | **Ops & data work** | schema, dashboards, last run's output, deploy and incident history, retention policy | may a backfill rewrite historical rows | 📋 **specified** |
 | **Multi-role assistants** | the candidate registry, attachment metadata, conversation history, user tier and locale | which of two genuinely overlapping specialists | 📋 **specified** |
 | Your domain | whatever you've given it access to | — | write the probe surfaces, it compiles |
 
-**measured** = a published run in [`evals/reports/`](evals/reports/). **specified** = probe
+**measured** = at least one case from that domain passed in a published report in
+[`evals/reports/`](evals/reports/); each row states how many cases that is. **specified** = probe
 surfaces, worth-asking and not-worth-asking examples written into the skill's reference files and
-loaded on demand; no published run yet. Nothing here is marked as working because it sounds
-plausible.
+loaded on demand. Nothing here is marked as working because it sounds plausible.
 
 One extra rule earns its place in the multi-role case: **a route must declare what it is not.**
 `"route to me when X"` alone lets overlapping specialists absorb each other's requests;
@@ -436,13 +442,19 @@ that exists — a single invented citation fails the suite regardless of everyth
 <!-- evals:begin -->
 2026-09-23 · opencode · dp/deepseek-flash · 8/10 cases · probe ratio 0.56 · 0 over-asks · 0 hallucinated evidence
 2026-09-23 · opencode · dp/deepseek-flash · 8/8 subset cases · probe ratio 1.00 · 0 over-asks · 0 hallucinated evidence
+2026-09-24 · opencode · dp/deepseek-flash · delivery add-caching-delivery · bare 5.0/6 (N=5) · with skill 6.0/6 (N=3) · ADR trap avoided bare 5/5 vs skill 3/3
+2026-09-24 · opencode · (harness default) · 4/4 subset cases · probe ratio 0.25 · 0 over-asks · 0 hallucinated evidence
 <!-- evals:end -->
 
-Line one is a full-suite run of the suite as it stood that day, which was ten cases; line two is a
-single-run re-test of an 8-case subset after the 2026-09-23 prompt hardening — a subset result,
-kept separate from the full-suite figure. The suite has since grown to fourteen cases, which puts
-its threshold at 12 of 14 with zero hallucinated evidence; no full-suite run at that size has been
-published yet. Every published report is in [`evals/reports/`](evals/reports/).
+Line by line: line 1 is a full-suite run of the suite as it stood on 2026-09-23, which was ten
+cases; line 2 is a single-run re-test of an 8-case subset after that day's prompt hardening — a
+subset result, kept separate from the full-suite figure; line 3 is the delivery comparison, this
+project's result metric — the skill arm delivered 6/6 on all three runs and every one stated a
+cache failure policy, where none of the 5 bare runs did; line 4 is the v1.1.0 release
+verification, a 4-case subset run. Probe ratio is a diagnostic metric, never judged. The suite
+is fourteen cases, which puts the full-suite threshold at 12 of 14 with zero hallucinated
+evidence; no full-suite run at that size has been published yet. Every published report is in
+[`evals/reports/`](evals/reports/).
 
 How to run it yourself, and what each case checks: [`evals/README.md`](evals/README.md).
 
@@ -459,7 +471,7 @@ How to run it yourself, and what each case checks: [`evals/README.md`](evals/REA
 4. **Two failures, two signals.** `underspecified` is the user's move; `degraded` pages an
    operator. Merging them hides outages.
 5. **Emit a contract, not a conversation.** If it isn't machine-readable, the next session starts
-   from zero.
+   from zero — and every spec is saved to `.intent/`, so the contract outlives the session.
 6. **Routes declare what they are not.** Negative criteria are what keep overlapping targets from
    bleeding.
 7. **Refuse rather than guess.** Not sufficient and out of budget? Halt with a named open field.
@@ -479,9 +491,11 @@ Stated up front, because you'll hit them.
   probing or asking — it needs something to react to. Intent-Router flags these and tells you to
   prototype instead of burning rounds on them. This limitation is inherited honestly from
   grill-me, which names it too.
-- **Only the coding domain has numbers.** Everything in [Where it works](#where-it-works) marked
-  *specified* is design and documentation, not measurement. Believe the ✅ row; treat the 📋 rows
-  as a starting point you should verify in your own setting.
+- **Full-suite numbers are coding-only.** The full-suite figures in [Evals](#evals) belong to the
+  coding suite. Support triage now has a measured case of its own (`support-delegate-irreversible`,
+  subset run), and every other domain marked *specified* is design and documentation, not
+  measurement. Believe the ✅ rows; treat the 📋 rows as a starting point you should verify in your
+  own setting.
 - **Confidence at L0 is a model's self-report.** Treat it as ordinal, not calibrated. Want real
   calibration (ECE, Brier)? That's L2.
 - **Automatic firing is probabilistic.** Every harness matches your request against the skill's
@@ -493,8 +507,8 @@ Stated up front, because you'll hit them.
 
 ## Backends
 
-Same decision semantics at every tier. The default costs nothing, needs no key, and is what
-v0.1 ships: **L0, prompt-only.** Two paid tiers are planned and optional.
+Same decision semantics at every tier. The default costs nothing, needs no key, and is the layer
+that ships today: **L0, prompt-only.** Two paid tiers are planned and optional.
 
 <details>
 <summary>The tier table, and why L2 is optional on purpose</summary>

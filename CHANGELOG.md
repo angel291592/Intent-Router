@@ -20,6 +20,15 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
   换更具体的 `intent`，不覆盖别的请求的契约。`.intent/` 下的旧 spec 不得作为 evidence 引用（它
   记录的是上一轮的推断，不能当已核实事实）。schema 与输出字段不变。
 
+- Docs: the top-level READMEs (both languages) reflect the shipped behaviour: every spec is saved
+  to `.intent/` (headline, contract sections, artifact section, design principle 5), support
+  triage is promoted to measured (1 case, `support-delegate-irreversible`, subset run), the
+  evals block lists the delivery comparison and the v1.1.0 release-verification lines verbatim,
+  and the v0.1 phrasing is updated to the currently shipped backend.
+- Docs：两版顶层 README 同步已发布的行为：每份 spec 都存到 `.intent/`（头条、契约小节、产物节、
+  设计原则 5）；客服工单升为已实测（1 例 `support-delegate-irreversible`，子集运行）；评测块逐字
+  追加交付对照与 v1.1.0 发版核验两行；v0.1 表述更新为当前发布的后端。
+
 - Evals: release verification for the write-on-emit change — 4 affected-path cases (asking,
   empty workspace, underspecified halt, silence) pass 4/4 with writing tools absent, and the
   delivery skill arm satisfies all four write assertions (ASK then ROUTE saved to `.intent/`,
