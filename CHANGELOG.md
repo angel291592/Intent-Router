@@ -20,6 +20,14 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
   换更具体的 `intent`，不覆盖别的请求的契约。`.intent/` 下的旧 spec 不得作为 evidence 引用（它
   记录的是上一轮的推断，不能当已核实事实）。schema 与输出字段不变。
 
+- Docs: the Chinese walkthrough (`docs/zh-CN/skill-guide.md`) catches up with the skill as it now
+  stands — 500-line budget spent, five worked examples, and five new "why" passages: the silence
+  exit, the `record:`/`doc:` namespaces, per-domain probe surfaces, dangling references vs
+  budget-free history, and the three pre-emit self-checks.
+- Docs：中文导读（`docs/zh-CN/skill-guide.md`）补齐到与现行 skill 一致——预算已满 500 行、五个
+  示例导读，并新增五段"为什么"：静默出口、`record:`/`doc:` 命名空间、逐领域探测面、悬空引用与
+  预算外历史查询、emit 前三项自检。
+
 - Evals: the reports index lists the delivery comparison and the v1.1.0 release-verification
   reports and documents the `<date>-delivery-<harness>.md` naming rule; the delivery report gains
   one post-run observation — the skill-arm runs 1–2 loaded a byte-identical user-level copy, so
