@@ -23,7 +23,8 @@ breaks the other twenty-five harnesses.
 
 **Changing `SKILL.md` means re-running the evals.** Attach the report. A change to the skill's
 behaviour without evidence of its effect cannot be reviewed, and the numbers in the README have to
-stay traceable to a report in `evals/reports/`.
+stay traceable to a report in `evals/reports/`. A change that affects the delivered work product
+should also run the delivery comparison (`--delivery`).
 
 **Never loosen a case to make it pass.** If an evaluation case fails, the skill changes. Record
 what changed in the report's iteration section.
@@ -49,7 +50,7 @@ One thing per commit. English, imperative, prefixed `feat:` / `fix:` / `docs:` /
 uv run --with pyyaml --with jsonschema python evals/run.py --selftest
 uv run --with pyyaml --with jsonschema python evals/run.py --check-frontmatter skills/intent-router/SKILL.md
 uv run --with pyyaml --with jsonschema python evals/run.py --check-docs
-uv run --with pyyaml --with jsonschema python evals/run.py --harness claude-code --cases <id> --repeat 1
+uv run --with pyyaml --with jsonschema python evals/run.py --harness opencode --cases <id> --repeat 2
 ```
 
 The first three are offline and cost nothing. The fourth starts a real session — see

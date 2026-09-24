@@ -20,6 +20,12 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
   换更具体的 `intent`，不覆盖别的请求的契约。`.intent/` 下的旧 spec 不得作为 evidence 引用（它
   记录的是上一轮的推断，不能当已核实事实）。schema 与输出字段不变。
 
+- Docs: both `CONTRIBUTING` versions use the opencode runner with two repeats in the local example,
+  and note that changes affecting the delivered work product should also run the delivery
+  comparison.
+- Docs：两版 `CONTRIBUTING` 的本地运行示例改为 opencode、两轮重跑；并写明影响交付产物的改动还应跑
+  交付对照。
+
 - Docs: both `SECURITY` versions scope the skill's single write (its own `.intent/` spec, which can
   quote request text and probed record values, so the commit-or-ignore call is the project's),
   cover both fixtures under `evals/fixtures/`, and state "latest released version only" instead of

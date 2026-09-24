@@ -20,7 +20,8 @@ lockfile、没有运行时。评测工具在 `evals/` 下，可以通过 `uv run
 在这些文件里写 `Read`、`Grep`、`/skill:` 这类名字，会破坏其余二十五个 harness 的兼容性。
 
 **改了 `SKILL.md` 就必须重跑评测。** 请附上报告。改动 skill 行为却不给出效果证据，是无法审查的；
-而且 README 里的数字必须始终可追溯到 `evals/reports/` 下的某份报告。
+而且 README 里的数字必须始终可追溯到 `evals/reports/` 下的某份报告。影响交付产物的改动，还应跑
+交付对照（`--delivery`）。
 
 **绝不为了让用例通过而放宽它。** 评测用例失败时，要改的是 skill。把改了什么写进报告的迭代记录节。
 
@@ -42,7 +43,7 @@ lockfile、没有运行时。评测工具在 `evals/` 下，可以通过 `uv run
 uv run --with pyyaml --with jsonschema python evals/run.py --selftest
 uv run --with pyyaml --with jsonschema python evals/run.py --check-frontmatter skills/intent-router/SKILL.md
 uv run --with pyyaml --with jsonschema python evals/run.py --check-docs
-uv run --with pyyaml --with jsonschema python evals/run.py --harness claude-code --cases <id> --repeat 1
+uv run --with pyyaml --with jsonschema python evals/run.py --harness opencode --cases <id> --repeat 2
 ```
 
 前三条是离线的，零成本。第四条会起真实会话——跑全量之前请先看
