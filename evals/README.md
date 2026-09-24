@@ -65,6 +65,11 @@ clean workspace answers a trivial prompt without user-level instructions leaking
 skill is visible where it was installed, and which harness version and model answered. `--selftest`
 and `--rescore` never reach preflight and start no session.
 
+Before everything, the runner refuses to start when an intent-router copy sits in a user-level
+skills directory (`~/.config/opencode/skills`, `~/.claude/skills`, `~/.agents/skills`): the harness
+would load that copy alongside the workspace one and the run would measure whichever happens to
+win. Move the copy out, then run.
+
 ## 3. Cost
 
 A full suite is **15 case sessions per harness** (fourteen cases, plus one extra turn for the

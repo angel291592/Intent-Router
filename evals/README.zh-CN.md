@@ -58,6 +58,10 @@ runner 一律复制 skill 而非建链接，所以跑评测不会改动工作树
 skill 在安装位置是否可见、以及实际应答的 harness 版本与模型。`--selftest` 与 `--rescore` 不走
 预检、不起会话。
 
+在此之前，若用户级 skills 目录（`~/.config/opencode/skills`、`~/.claude/skills`、
+`~/.agents/skills`）里存在 intent-router 副本，runner 会拒绝启动：harness 会把它和工作区副本
+一起加载，实际测到的是碰巧生效的那一份。先移走副本再跑。
+
 ## 3. 成本
 
 全量一轮是**每 harness 15 次用例会话**（14 例，加两轮用例额外 1 次），每次 1–6 轮模型调用，外加

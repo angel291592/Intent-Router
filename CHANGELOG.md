@@ -7,6 +7,16 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
 
 ## [Unreleased]
 
+- Evals: the runner refuses to start when an intent-router copy sits in a user-level skills
+  directory (`~/.config/opencode/skills`, `~/.claude/skills`, `~/.agents/skills`): such a copy is
+  loaded alongside the workspace one and the run would measure whichever happens to win. Also:
+  subset rescores now render a subset report, and delivery snapshots persist `.intent/` so saved
+  specs travel with the snapshot.
+- Evals：runner 在用户级 skills 目录（`~/.config/opencode/skills`、`~/.claude/skills`、
+  `~/.agents/skills`）里存在 intent-router 副本时拒绝启动：该副本会和工作区副本一起被加载，实际
+  测到的是碰巧生效的那一份。附带：子集 rescore 现按子集口径渲染报告；交付快照一并保存 `.intent/`，
+  已存的 spec 随快照走。
+
 ## [1.0.0] — 2026-09-24
 
 First stable release; the owner promoted 0.x to 1.0. No skill-behaviour change in this round —

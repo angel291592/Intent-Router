@@ -1111,8 +1111,49 @@ def check(
 # preflight
 
 
+def user_level_skill_copies(env: dict | None = None) -> list[Path]:
+    """Existing intent-router copies in user-level skills directories.
+
+    The three global directories opencode documents (https://opencode.ai/docs/skills)
+    sit under each home directory; CLAUDE_CONFIG_DIR relocates the Claude one.
+    With env=None the real os.environ is used and Path.home() joins the home
+    set; a synthetic env must provide every variable itself, so selftest can
+    exercise this function on a machine that also holds real copies.
+    """
+    if env is None:
+        homes = {h for h in (os.environ.get("HOME"), os.environ.get("USERPROFILE"), str(Path.home())) if h}
+    else:
+        homes = {h for h in (env.get("HOME"), env.get("USERPROFILE")) if h}
+    relative = (
+        ".config/opencode/skills/intent-router",
+        ".claude/skills/intent-router",
+        ".agents/skills/intent-router",
+    )
+    found: set[Path] = set()
+    for home in homes:
+        for rel in relative:
+            candidate = Path(home) / rel
+            if candidate.is_dir():
+                found.add(candidate.resolve())
+    config_dir = env.get("CLAUDE_CONFIG_DIR") if env is not None else os.environ.get("CLAUDE_CONFIG_DIR")
+    if config_dir:
+        candidate = Path(config_dir) / "skills" / "intent-router"
+        if candidate.is_dir():
+            found.add(candidate.resolve())
+    return sorted(found)
+
+
 def preflight(harness: str, model: str | None) -> dict:
     """Contamination check, skill visibility and version, per eval_spec 4.3."""
+    copies = user_level_skill_copies()
+    if copies:
+        listing = "\n  ".join(str(p) for p in copies)
+        raise SystemExit(
+            "an intent-router copy sits in a user-level skills directory:\n"
+            f"  {listing}\n"
+            "the harness would load it alongside the workspace copy and the run\n"
+            "would measure whichever happens to win; move it out, then run again."
+        )
     out: dict[str, str] = {}
     exe = executable(harness)
 
@@ -1253,7 +1294,8 @@ def render_report(
 
     today = date_str or date.today().isoformat()
     summary = (
-        f"{today} · {harness} · {model} · {passed}/{suite_total} cases · "
+        f"{today} · {harness} · {model} · {passed}/{suite_total} "
+        f"{'subset cases' if subset else 'cases'} · "
         f"probe ratio {probe_ratio:.2f} · {over_ask} over-asks · "
         f"{len(hallucinated)} hallucinated evidence"
     )
@@ -2418,6 +2460,25 @@ def selftest() -> int:
     report = render_report("claude-code", "test-model", {"version": "x"}, results)
     expect("report holds the README line", "probe ratio 0.75" in report)
     expect("report states the threshold", "Threshold:" in report)
+    subset_report = render_report(
+        "claude-code", "test-model", {"version": "x"}, results, subset=True, suite_total=1
+    )
+    expect("subset report says '1/1 subset cases'", "1/1 subset cases" in subset_report)
+    expect("the default report does not say subset", "subset cases" not in report)
+
+    print("user-level skill copies")
+    # env=None would read this machine's real home; the synthetic env below
+    # keeps the test hermetic on CI and on a dev box alike.
+    with tempfile.TemporaryDirectory() as home:
+        env = {"HOME": home, "USERPROFILE": home}
+        expect("an empty synthetic home has no copies", user_level_skill_copies(env) == [])
+        (Path(home) / ".config" / "opencode" / "skills" / "intent-router").mkdir(parents=True)
+        (Path(home) / ".agents" / "skills" / "intent-router").mkdir(parents=True)
+        copies = user_level_skill_copies(env)
+        expect(
+            "two created copies resolve to exactly two entries (HOME=USERPROFILE dedupes)",
+            len(copies) == 2 and copies[0] != copies[1],
+        )
 
     print(f"\n{'selftest passed' if not failures else str(failures) + ' selftest failure(s)'}")
     return 1 if failures else 0
@@ -2676,6 +2737,10 @@ def rescore(raw_dir: Path, out_dir: Path, date_str: str | None) -> int:
         model_match = re.search(r"(?m)^- model: (.+)$", env_section)
         model = model_match.group(1).strip() if model_match else "(see environment)"
 
+    # A rescore of a subset of transcripts renders a subset report: matching the
+    # original run's subset flag keeps the §5 line in sync with the per-case
+    # denominators (a 4-case rescore must not print "4/14 cases").
+    subset = len(results) < len(cases)
     report = render_report(
         harness,
         model,
@@ -2684,8 +2749,8 @@ def rescore(raw_dir: Path, out_dir: Path, date_str: str | None) -> int:
         date_str=date_str,
         env_section=env_section,
         iterations_section=iterations_section,
-        subset=False,
-        suite_total=len(cases),
+        subset=subset,
+        suite_total=len(results) if subset else len(cases),
     )
     target = out_dir / f"{date_str}-{harness}.md"
     target.write_text(report, encoding="utf-8")
@@ -3277,7 +3342,10 @@ def persist_snapshot(
         errors="replace",
     )
     (target / "diff.patch").write_text(diff.stdout, encoding="utf-8")
-    for folder in ("src", "tests"):
+    # .intent/ joins the copy so a delivery snapshot also carries the specs the
+    # skill wrote; the scorer reads only src/, diff.patch, meta.json and
+    # transcript.txt, so scoring is unaffected.
+    for folder in ("src", "tests", ".intent"):
         source = workspace / folder
         if source.is_dir():
             shutil.copytree(source, target / folder)
