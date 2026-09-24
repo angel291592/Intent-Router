@@ -15,7 +15,7 @@ description: >-
   task whose objects, approach and failure behaviour are already stated.
 license: MIT
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   author: angel291592
   homepage: https://github.com/angel291592/Intent-Router
 ---

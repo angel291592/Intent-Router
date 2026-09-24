@@ -7,6 +7,28 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-09-24
+
+First feature release on the 1.x line: every emitted spec is now also saved to
+`.intent/<intent>.intent.yaml` by default — on ASK, ROUTE and HALT alike, written before the
+reply — so the contract survives the session, the next session, and the next teammate. The
+schema, the output fields and the spec format are unchanged; this release adds a default
+side effect, nothing else.
+/
+首个 1.x 行为版本：每份产出的 spec 现在默认同时保存到 `.intent/<intent>.intent.yaml`——ASK、
+ROUTE、HALT 一律如此，先写盘再回复——契约因此跨 session、跨接手者存活。schema、输出字段与 spec
+格式不变；本版新增的只是一个默认副作用，别的什么都没动。
+
+**Upgrade notes / 升级提示**
+
+- Your workspace will now gain a `.intent/` directory holding one YAML file per recent request.
+  Whether it belongs in version control is your project's decision — commit it next to the diff
+  it produced, or add it to your ignore file. /
+  你的工作区会出现 `.intent/` 目录，里面是最近请求各留的一份 YAML。进不进版本控制由项目决定——
+  跟着它产出的 diff 一起提交，或加进忽略清单。
+- Harnesses that confirm file writes before executing them will ask once per saved spec. /
+  会先确认再写文件的 harness，现在会对每份保存的 spec 请求一次确认。
+
 - Skill: every emitted spec is now also saved to `.intent/<intent>.intent.yaml` by default — on
   ASK, ROUTE and HALT alike, written before the reply so the contract survives the session, with
   the fenced block still in the reply. Nothing is written when the request is fully specified and
@@ -428,7 +450,8 @@ First release. L0 only: a prompt-only skill with no dependencies and no keys. /
 - L1 and L2 backends are declared and not implemented.
 - L1 与 L2 后端只做声明，未实现。
 
-[Unreleased]: https://github.com/angel291592/Intent-Router/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/angel291592/Intent-Router/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/angel291592/Intent-Router/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/angel291592/Intent-Router/compare/v0.3.0...v1.0.0
 [0.3.0]: https://github.com/angel291592/Intent-Router/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/angel291592/Intent-Router/compare/v0.1.2...v0.2.0
