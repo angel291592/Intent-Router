@@ -105,6 +105,15 @@ _Facts only, one line each: skill defects seen (not fixed, P5), runner anomalies
   `.agents/skills/`); the copy's 12 files are byte-identical to the skill at `fbfa606` except for
   line endings, so the published numbers hold. The copy has been removed, and the runner now
   refuses to start while any user-level copy exists.
+- Post-run audit (2026-09-24, later the same day): the §1 claim "bash still git-only" was wrong in
+  effect — transcripts show the bash tool was hidden entirely from the model (`unavailable tool
+  'bash'`, 36 hits across transcripts). Root cause: opencode 1.18.32 resolves tool visibility from
+  the LAST rule of a permission object, so a bash object ending in `"*": "deny"` hides the tool
+  regardless of the specific allow patterns. The `opencode.json` snapshot above is the config as
+  actually written at run time and stays untouched; the fix (catch-all `"*"` first, allow patterns
+  after) landed in the runner's `OPENCODE_CONFIG` so future runs get the intended restricted
+  git-log/show channel. Case conclusions are unaffected: assertions target behaviour and evidence
+  form, and git-only-fact passed by reading `.git` files after two unavailable-bash calls.
 
 ## 5. Line for the README
 

@@ -155,6 +155,11 @@ GIT_ID = [
 # OpenCode permission keys and values are per https://opencode.ai/docs/permissions
 # (read/glob/grep/bash/edit/task/skill/question/webfetch/websearch/
 # external_directory/doom_loop; allow|ask|deny; bash takes command patterns).
+# ⚠️ Object-syntax rules resolve "last matching rule wins" AND opencode 1.18.32
+# decides tool visibility from the LAST rule for a key: a bash object ending in
+# `"*": "deny"` hides the bash tool from the model entirely (transcripts show
+# `unavailable tool 'bash'`). The catch-all `"*"` must therefore come FIRST and
+# the specific allow patterns after it, exactly as the official docs prescribe.
 # question is denied so the model writes its question into the transcript instead
 # of waiting on an interactive prompt that non-interactive mode cannot answer;
 # doom_loop is allowed and external_directory denied because both default to
@@ -166,7 +171,7 @@ OPENCODE_CONFIG = {
         "glob": "allow",
         "grep": "allow",
         "skill": "allow",
-        "bash": {"git log*": "allow", "git show*": "allow", "*": "deny"},
+        "bash": {"*": "deny", "git log*": "allow", "git show*": "allow"},
         "edit": "deny",
         "task": "deny",
         "question": "deny",
