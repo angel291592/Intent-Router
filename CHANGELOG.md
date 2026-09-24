@@ -20,6 +20,14 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
   换更具体的 `intent`，不覆盖别的请求的契约。`.intent/` 下的旧 spec 不得作为 evidence 引用（它
   记录的是上一轮的推断，不能当已核实事实）。schema 与输出字段不变。
 
+- Docs: `evals/README` (both languages) separates the result metric from diagnostics, states the
+  true full-suite session count (16 case sessions + 2 preflight = 18) and documents the release
+  verification tier with v1.1.0's actual spend; the not-yet-covered section now states which
+  support and auto cases have published runs and which do not.
+- Docs：`evals/README`（双语）区分结果指标与诊断指标，写明全量真实会话数（16 次用例会话 + 2 预检
+  = 18 次），新增发版核验档并记录 v1.1.0 的实际消耗；"尚未覆盖"一节改为如实写明哪些客服与 auto
+  用例已有公开运行、哪些还没有。
+
 - Docs: the top-level READMEs (both languages) reflect the shipped behaviour: every spec is saved
   to `.intent/` (headline, contract sections, artifact section, design principle 5), support
   triage is promoted to measured (1 case, `support-delegate-irreversible`, subset run), the

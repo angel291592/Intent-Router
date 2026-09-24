@@ -12,6 +12,13 @@ Two things, kept apart in every report:
   asking), over-asks, and hallucinated evidence. These are the figures quoted in the top-level
   README, and they may only come from a report in `reports/`.
 
+Two more, with different jobs:
+
+- **Result** — the delivery-quality comparison (`--delivery`) is the metric that says whether the
+  final work product got better; it is the number the top-level README quotes as the outcome.
+- **Diagnostics** — probe ratio and the other summary counters describe behaviour; they are never
+  judged against a threshold.
+
 Nothing is mocked. Each case runs a real session against a fresh temporary copy of a fixture
 repository with the skill installed into it.
 
@@ -72,12 +79,18 @@ win. Move the copy out, then run.
 
 ## 3. Cost
 
-A full suite is **15 case sessions per harness** (fourteen cases, plus one extra turn for the
-two-turn case), each 1–6 model calls, plus **2 preflight sessions** — 17 sessions. The ten-case
-suite measured about 16 minutes with `--jobs 4`, so budget roughly 20 minutes for fourteen. The
-same run also has `--smoke` (1 case session + 2 preflight) and Tier 3 re-runs
-(affected cases × 2, plus 2 preflight). Tier 0 and Tier 1 cost nothing. Iterate on
-`--cases <id> --repeat 2` and keep a full suite for the moment you need numbers.
+A full suite is **18 sessions per harness**: 14 cases + the second turn for the two two-turn
+cases = 16 case sessions, plus **2 preflight sessions**. The ten-case suite measured about 16
+minutes with `--jobs 4`, so budget roughly 20 minutes for fourteen. The same run also has
+`--smoke` (1 case session + 2 preflight) and Tier 3 re-runs (affected cases × 2, plus 2
+preflight). Tier 0 and Tier 1 cost nothing. Iterate on `--cases <id> --repeat 2` and keep a full
+suite for the moment you need numbers.
+
+A fifth tier, **release verification**: after a change to the skill, run each affected-path case
+once — not to iterate, but to confirm the change did not break behaviour that already passed.
+It does not replace Tier 3's two repeats when iterating; the two are documented separately so
+the "Two repeats, never one" rule stays intact. v1.1.0's release verification spent 11 sessions
+(2 preflight + 3 delivery sessions for the skill arm, plus 2 preflight + 4 case sessions).
 
 ## 4. Reading a report
 
@@ -179,6 +192,11 @@ explicitly, so trigger probability is not part of this measurement — that is w
 
 - A conversation long enough to exhaust the ask budget (four turns or more).
 - A second fixture in another ecosystem; everything here is TypeScript/Node.
-- Non-code domains — the support-queue cases exist, but no published report covers them yet.
-- Auto-trigger reliability is measured on two cases only, one that should fire and one that should
-  not, so the rate is indicative rather than precise.
+- Non-code domains — `support-delegate-irreversible` passed in the published subset report
+  `2026-09-23-opencode-2.md`; the other two support-queue cases have not reached a published
+  report yet.
+- Auto-trigger reliability: the auto-trigger figures in the reports are aggregated from the two
+  cases that assert it directly (`add-caching-auto` should fire, `question-not-trigger` should
+  stay quiet); four more auto cases cover trigger behaviour by assertion, of which
+  `fully-specified-auto-quiet` and `partially-specified-auto` are in published reports, while
+  `support-furious-auto` and `research-scope-auto` have not reached one yet.

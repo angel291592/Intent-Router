@@ -11,6 +11,12 @@
 - **数字**——`resolved_by_probe / unknowns_found`（自己查掉而非开口问的比例）、过度提问数、幻觉
   evidence 数。顶层 README 引用的数字只能来自 `reports/` 下的报告。
 
+另外两项，分工不同：
+
+- **结果**——交付质量对照（`--delivery`）回答"最终交付是否变好"，是顶层 README 里作为结果引用的
+  数字。
+- **诊断**——probe ratio 与其他汇总计数描述行为，从不参与阈值判定。
+
 全部真实调用，不 mock。每个用例都在一份新建的 fixture 仓库临时副本里跑真实会话，skill 已装进去。
 
 ## 2. 怎么跑
@@ -64,11 +70,15 @@ skill 在安装位置是否可见、以及实际应答的 harness 版本与模�
 
 ## 3. 成本
 
-全量一轮是**每 harness 15 次用例会话**（14 例，加两轮用例额外 1 次），每次 1–6 轮模型调用，外加
-**2 次预检会话**——共 17 次会话。10 例套件实测 `--jobs 4` 下约 16 分钟，14 例按此估算约 20 分钟。
-同一轮还可用 `--smoke`（1 用例会话 +
-2 预检）与 Tier 3 定向重跑（受影响用例 × 2 次 + 2 预检）。Tier 0 与 Tier 1 零成本。迭代时用
-`--cases <id> --repeat 2`，只在真的需要出数字时跑全量。
+全量一轮是**每 harness 18 次会话**：14 例 + 两个两轮用例的第二轮 = 16 次用例会话，外加
+**2 次预检会话**。10 例套件实测 `--jobs 4` 下约 16 分钟，14 例按此估算约 20 分钟。
+同一轮还可用 `--smoke`（1 用例会话 + 2 预检）与 Tier 3 定向重跑（受影响用例 × 2 次 + 2 预检）。
+Tier 0 与 Tier 1 零成本。迭代时用 `--cases <id> --repeat 2`，只在真的需要出数字时跑全量。
+
+第五档，**发版核验**：改了 skill 之后，受影响路径的用例各跑一次——不是为了迭代，而是确认这次改动
+没有弄坏已经通过的行为。它不替代迭代期的 Tier 3（×2）；两者分开书写，"两轮重跑、绝不单轮"的规则
+不受影响。v1.1.0 的发版核验共消耗 11 次会话（skill 臂 2 预检 + 3 次交付会话，再加 2 预检 + 4 次
+用例会话）。
 
 ## 4. 怎么读报告
 
@@ -159,5 +169,9 @@ uv run --with pyyaml --with jsonschema python evals/run.py \
 
 - 长到耗尽提问预算的对话（四轮及以上）。
 - 第二个生态的 fixture；现有 fixture 全是 TypeScript/Node。
-- 非编程领域——support-queue 用例已存在，但还没有已入库的报告覆盖它们。
-- 自动触发可靠性只测了两例（一例该触发、一例不该触发），所以该比率是指示性的，不是精确值。
+- 非编程领域——`support-delegate-irreversible` 已在已入库的子集报告 `2026-09-23-opencode-2.md`
+  里通过；另外两个 support-queue 用例尚未进入公开报告。
+- 自动触发可靠性：报告里的 auto-trigger 指标由两个直接断言它的用例汇总（`add-caching-auto` 该
+  触发、`question-not-trigger` 该静默）；另有 4 个 auto 用例以断言覆盖触发行为，其中
+  `fully-specified-auto-quiet`、`partially-specified-auto` 已进公开报告，`support-furious-auto`、
+  `research-scope-auto` 尚未进入。
