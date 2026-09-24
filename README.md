@@ -15,11 +15,11 @@ What that buys you:
   you get back. Say it the way you'd say it to a capable teammate, *"add caching to the user API"*,
   and the skill writes the briefing a senior engineer would have written first. You stop coaxing
   the model and start putting it to work.
-- You answer less, not more. Before anything reaches you it reads what your repo, ticket system or
-  docs already answer, so the forty-six-question interview becomes the one question that genuinely
-  needs your judgment — and that one answer lands in the delivered code: in the delivery
-  comparison, every run with the skill asks exactly one question and 3 of 3 delivered caches state
-  their failure policy, while none of the 5 bare deliveries do
+- It asks one question, and the answer lands in the delivered code. Before anything reaches you it
+  reads what your repo, ticket system or docs already answer, so the forty-six-question interview
+  becomes the one question that genuinely needs your judgment — and in the delivery comparison,
+  every run with the skill asks exactly that one question and 3 of 3 delivered caches state their
+  failure policy, while none of the 5 bare deliveries do
   ([report](evals/reports/2026-09-24-delivery-opencode.md)).
 - The work carries further. Every run ends in a machine-readable `IntentSpec`, saved to
   `.intent/<intent>.intent.yaml` before the reply that carries it, whose probed fields carry

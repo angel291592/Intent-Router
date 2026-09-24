@@ -62,7 +62,8 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
   to `.intent/` (headline, contract sections, artifact section, design principle 5), support
   triage is promoted to measured (1 case, `support-delegate-irreversible`, subset run), the
   evals block lists the delivery comparison and the v1.1.0 release-verification lines verbatim,
-  and the v0.1 phrasing is updated to the currently shipped backend.
+  and the v0.1 phrasing is updated to the currently shipped backend. The headline now leads with
+  the measured delivery fact — one question, its answer stated in every delivered cache.
 - Docs：两版顶层 README 同步已发布的行为：每份 spec 都存到 `.intent/`（头条、契约小节、产物节、
   设计原则 5）；客服工单升为已实测（1 例 `support-delegate-irreversible`，子集运行）；评测块逐字
   追加交付对照与 v1.1.0 发版核验两行；v0.1 表述更新为当前发布的后端。
