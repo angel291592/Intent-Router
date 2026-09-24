@@ -101,14 +101,14 @@ treat the text after the name as the request.
   `path#heading`, `git:<short-sha>`, `git:#<pr-number>`, the reserved `user:delegated` used
   when the user handed a decision back, `record:<system>/<id>`, or `doc:<slug>#<section>`.
   Nothing else is evidence. Sources that are not files use the reserved namespaces:
-  `record:<system>/<id>` for a record in a system of record, `doc:<slug>#<section>` for a
-  document section that has no path. They are pointers, not prose: still one token, still no
-  whitespace, and still naming something you actually opened. In particular the repository
-  root (`.`), any path under `.git/`, `.claude/` or `.agents/`, the harness config file, and — most
-  of all — a reasoning sentence ("correctness requirement…", "delegated by symmetry with…") are
-  **not** evidence: they are not pointers, they contain spaces, and they must not be put in the
-  `evidence` field. Put that justification in the constraint `text` instead. A value that does not
-  match one of the forms above is a defect even if the thing it names exists.
+  `record:<system>/<id>` for a record in a system of record, `doc:<slug>#<section>` for a document
+  section that has no path. They are pointers, not prose: still one token, still no whitespace, and
+  still naming something you actually opened. In particular the repository root (`.`), any path
+  under `.git/`, `.claude/`, `.agents/` or `.intent/`, the harness config file, and — most of all —
+  a reasoning sentence ("correctness requirement…", "delegated by symmetry with…") are **not**
+  evidence: they are not pointers, they contain spaces, and they must not be put in the `evidence`
+  field. Put that justification in the constraint `text` instead. A value that does not match one of
+  the forms above is a defect even if the thing it names exists.
 - **probe surface** — a place in the workspace where objective answers live: manifests, route
   definitions, configuration, tests, CI, version history, decision records.
 - **ASK budget** — the hard cap on questions for one request. Default **3**.
@@ -444,12 +444,12 @@ decision:
   open_fields: [scope, acceptance]
 ```
 
-**Writing a file is the exception, not the default.** Emit the fenced block in your reply and
-nothing more, unless either the user asks for the spec to be saved, or the project already has an
-`.intent/` directory. In those two cases also write `.intent/<intent>.intent.yaml`, and change no
-other file. Field-by-field documentation, the cross-field invariants and the file convention are
-in `references/intentspec.md`; the machine-checkable contract is
-`schema/intentspec.schema.json`.
+**Every emitted spec is also saved.** Before replying, write it to `.intent/<intent>.intent.yaml`
+— on ASK, ROUTE and HALT alike, replacing this request's earlier snapshot — and touch no other
+file for it; the fenced block still goes in the reply. Nothing is written when the silence check
+passed, and a workspace you cannot write to gets one sentence after the fence, never a halt.
+Field-by-field documentation, the cross-field invariants and the file convention are in
+`references/intentspec.md`; the machine-checkable contract is `schema/intentspec.schema.json`.
 
 ## 7. Ungrillable questions
 

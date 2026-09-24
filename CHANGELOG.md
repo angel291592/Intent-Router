@@ -7,6 +7,19 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
 
 ## [Unreleased]
 
+- Skill: every emitted spec is now also saved to `.intent/<intent>.intent.yaml` by default — on
+  ASK, ROUTE and HALT alike, written before the reply so the contract survives the session, with
+  the fenced block still in the reply. Nothing is written when the request is fully specified and
+  the skill stays silent; an unwritable workspace gets one sentence after the fence, never a halt;
+  a different request colliding with the same intent name picks a more specific `intent` instead
+  of replacing the existing file. Saved specs are excluded from evidence (an old spec records
+  earlier inferences and must not be cited as probed fact). Schema and output fields unchanged.
+- Skill：每份产出的 spec 现在默认同时保存到 `.intent/<intent>.intent.yaml`——ASK、ROUTE、HALT
+  一律如此，先写盘再回复，契约因此跨 session 存活；回复里的 yaml 围栏照旧。请求本身已完整、skill
+  静默通过时不写任何文件；工作区不可写时只在围栏后说明一句，不 HALT；不同请求撞同一个 intent 名时
+  换更具体的 `intent`，不覆盖别的请求的契约。`.intent/` 下的旧 spec 不得作为 evidence 引用（它
+  记录的是上一轮的推断，不能当已核实事实）。schema 与输出字段不变。
+
 - Evals: the runner refuses to start when an intent-router copy sits in a user-level skills
   directory (`~/.config/opencode/skills`, `~/.claude/skills`, `~/.agents/skills`): such a copy is
   loaded alongside the workspace one and the run would measure whichever happens to win. Also:

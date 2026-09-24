@@ -228,11 +228,12 @@ EVIDENCE_TOKEN_OK = re.compile(
     r"|[^\s:#]+(?::\d+(?:-\d+)?)?(?:#[^\s]+)?)$"
 )
 # Tokens that parse as a token but are not workspace pointers: the repo root,
-# git internals, the installed skill copies, and the harness config file. The
-# bare "." is matched exactly (the repo root), never as a prefix — a dotfile
-# such as .github/workflows/ci.yml is a legitimate workspace pointer.
+# git internals, the installed skill copies, the skill's own saved specs, and
+# the harness config file. The bare "." is matched exactly (the repo root),
+# never as a prefix — a dotfile such as .github/workflows/ci.yml is a
+# legitimate workspace pointer.
 NON_POINTER_EXACT = (".",)
-NON_POINTER_PREFIXES = ("./", ".git/", ".claude/", ".agents/", "opencode.json")
+NON_POINTER_PREFIXES = ("./", ".git/", ".claude/", ".agents/", ".intent/", "opencode.json")
 
 # Rate limiting / quota exhaustion is an environment fault, never a behaviour
 # verdict: a run that hits it must be retried and, if still failing, recorded as
@@ -1859,6 +1860,11 @@ def selftest() -> int:
             "delegated by correctness: src/db/users.ts and src/routes/users.ts confirm x",
             "evidence_form",
         ),
+        (
+            "a saved spec under .intent/ is a form violation",
+            ".intent/add_caching.intent.yaml",
+            "evidence_form",
+        ),
     ):
         doc = json.loads(json.dumps(route))
         doc["constraints"][0]["evidence"] = pointer
@@ -1903,6 +1909,14 @@ def selftest() -> int:
     expect(
         "a well-formed path missing from the real manifest is evidence_valid",
         "evidence_valid" in outcome["failures"] and "evidence_form" not in outcome["failures"],
+    )
+
+    doc = json.loads(json.dumps(route))
+    doc["constraints"][0]["evidence"] = ".intent/add_caching.intent.yaml"
+    outcome = check(cases["add-caching-two-turn"], record_for(doc), validator, manifest=manifest)
+    expect(
+        "a saved spec is a form violation, never evidence_valid",
+        "evidence_form" in outcome["failures"] and "evidence_valid" not in outcome["failures"],
     )
 
     # The two exact violations measured in the 2026-09-22 corpus. They contain

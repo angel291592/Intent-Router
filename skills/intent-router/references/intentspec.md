@@ -112,15 +112,28 @@ not.
 
 ## The `.intent/` file convention
 
-The default is to emit the fenced block in the reply and write nothing. Write
-`.intent/<intent>.intent.yaml` only when the user asks for the spec to be saved, or the project
-already has an `.intent/` directory — an existing directory is the project opting in.
+Every emitted spec — ASK, ROUTE and HALT alike — is also written to `.intent/<intent>.intent.yaml`
+at the workspace root, before the reply that carries the same spec in its fenced block. Nothing is
+written when the silence check passed.
 
 When writing:
 
 - the filename stem is the `intent` value, so `add_caching` becomes `.intent/add_caching.intent.yaml`;
-- the content is the spec and nothing else;
-- no other file is touched, and nothing is committed.
+- the content is the spec and nothing else — the reply's fenced spec, without the fence;
+- a later emit for the same request replaces the file, so it holds the latest snapshot: an `ASK`
+  file is a question still waiting, a `ROUTE` file is the settled contract;
+- if the file already exists and its `request` is a different request, choose a more specific
+  `intent` instead of replacing it — the existing file is another piece of work's contract;
+- no other file is touched, and nothing is committed — whether `.intent/` belongs in version
+  control is the project's decision;
+- a workspace that cannot be written to is stated in one sentence after the fence; it never turns
+  the outcome into a halt, because the spec itself is complete.
 
-The point of the file is that it can sit next to the diff it produced, so "what was this change
-trying to do" has an answer that is not archaeology.
+A file under `.intent/` is never evidence for a new spec. It records what an earlier run
+concluded, including the values that run inferred; citing it would turn an old inference into a
+probed fact. Probe the sources it was built from instead.
+
+The file is written before the reply because some environments keep only a turn's final message,
+and the fence has to be in it. The point of the file is that the next session, agent or teammate
+starts from the contract instead of from zero, and that it can sit next to the diff it produced —
+so "what was this change trying to do" has an answer that is not archaeology.
