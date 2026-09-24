@@ -20,6 +20,14 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
   换更具体的 `intent`，不覆盖别的请求的契约。`.intent/` 下的旧 spec 不得作为 evidence 引用（它
   记录的是上一轮的推断，不能当已核实事实）。schema 与输出字段不变。
 
+- Evals: the reports index lists the delivery comparison and the v1.1.0 release-verification
+  reports and documents the `<date>-delivery-<harness>.md` naming rule; the delivery report gains
+  one post-run observation — the skill-arm runs 1–2 loaded a byte-identical user-level copy, so
+  the published numbers hold, the copy is removed and preflight now refuses to run with one present.
+- Evals：报告索引补上交付对照与 v1.1.0 发版核验两份报告，并写明 `<date>-delivery-<harness>.md`
+  命名规则；交付报告新增一条事后核查观察——skill 臂 run 1–2 加载的是逐字节一致的用户级副本，已
+  发布数字成立；副本已移除，且预检现在会在存在副本时拒绝运行。
+
 - Docs: `evals/README` (both languages) separates the result metric from diagnostics, states the
   true full-suite session count (16 case sessions + 2 preflight = 18) and documents the release
   verification tier with v1.1.0's actual spend; the not-yet-covered section now states which

@@ -1,9 +1,12 @@
 # Reports
 
-Reports land here as `<date>-<harness>.md`, one per harness per run, and they are the only place the
-numbers in the top-level README may come from. The reports currently committed are:
+Reports land here as `<date>-<harness>.md` (suite runs) and `<date>-delivery-<harness>.md`
+(delivery comparison), one per harness per run, and they are the only place the numbers in the
+top-level README may come from. The reports currently committed are:
 
 - `2026-09-22-opencode.md`, `2026-09-23-opencode.md`, `2026-09-23-opencode-2.md`
+- `2026-09-24-opencode.md` (v1.1.0 release verification, 4-case subset)
+- `2026-09-24-delivery-opencode.md` (delivery-quality comparison)
 
 claude-code run records are kept locally but not committed: the channel they ran through restricted
 the model in ways that make the results unattributable to the skill, so publishing them would be

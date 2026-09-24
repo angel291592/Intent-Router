@@ -100,6 +100,11 @@ _Facts only, one line each: skill defects seen (not fixed, P5), runner anomalies
 - Environmental reruns: none. `skill_not_loaded`: none. Rate-limit retries: none observed.
 - V12 rescore equivalence: two consecutive `--rescore-delivery` renders of these snapshots are
   byte-identical.
+- Post-run audit (2026-09-24): the effective skill-arm runs 1 and 2 loaded the intent-router copy
+  left in the user-level `~/.config/opencode/skills` (run 3 loaded the workspace copy in
+  `.agents/skills/`); the copy's 12 files are byte-identical to the skill at `fbfa606` except for
+  line endings, so the published numbers hold. The copy has been removed, and the runner now
+  refuses to start while any user-level copy exists.
 
 ## 5. Line for the README
 
