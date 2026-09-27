@@ -667,6 +667,34 @@ def build_command(
     return cmd
 
 
+def harness_env(cwd: Path) -> dict[str, str]:
+    """The environment every harness process runs with, for a session in cwd."""
+    return {
+        **os.environ,
+        "PYTHONUTF8": "1",
+        # opencode's Claude Code compatibility layer injects the user's
+        # global ~/.claude/CLAUDE.md into every session. On this machine
+        # that file is a 13.5k-token personal workflow protocol whose
+        # first line is "always reply in Chinese" — it made an English
+        # eval prompt get answered in Chinese and drove the model to
+        # classify eval prompts as real work items. The evaluation must
+        # measure the skill, not the operator's global instructions
+        # (plan §0.2 logic, now enforced for opencode too). Skills are
+        # unaffected: the second flag keeps .claude/skills loading on.
+        "OPENCODE_DISABLE_CLAUDE_CODE_PROMPT": "1",
+        "OPENCODE_DISABLE_CLAUDE_CODE_SKILLS": "0",
+        # opencode 1.18.32 `run` creates its session in $PWD whenever that
+        # variable is set, overriding the process cwd. A shell such as Git
+        # Bash exports PWD and subprocess cwd= does not update it, so every
+        # session silently ran in the directory run.py was launched from —
+        # the real repository, with the workspace opencode.json and its
+        # permission limits unread (2026-09-27: sessions edited the tracked
+        # fixture and ran npm there). Pin PWD to the workspace, as a shell's
+        # `cd` would.
+        "PWD": str(cwd),
+    }
+
+
 def _invoke_once(cmd: list[str], cwd: Path) -> tuple[str, str, int]:
     try:
         done = subprocess.run(
@@ -677,21 +705,7 @@ def _invoke_once(cmd: list[str], cwd: Path) -> tuple[str, str, int]:
             encoding="utf-8",
             errors="replace",
             timeout=TIMEOUT,
-            env={
-                **os.environ,
-                "PYTHONUTF8": "1",
-                # opencode's Claude Code compatibility layer injects the user's
-                # global ~/.claude/CLAUDE.md into every session. On this machine
-                # that file is a 13.5k-token personal workflow protocol whose
-                # first line is "always reply in Chinese" — it made an English
-                # eval prompt get answered in Chinese and drove the model to
-                # classify eval prompts as real work items. The evaluation must
-                # measure the skill, not the operator's global instructions
-                # (plan §0.2 logic, now enforced for opencode too). Skills are
-                # unaffected: the second flag keeps .claude/skills loading on.
-                "OPENCODE_DISABLE_CLAUDE_CODE_PROMPT": "1",
-                "OPENCODE_DISABLE_CLAUDE_CODE_SKILLS": "0",
-            },
+            env=harness_env(cwd),
         )
     except subprocess.TimeoutExpired:
         return "", f"timeout after {TIMEOUT}s", 124
@@ -1229,6 +1243,16 @@ def preflight(harness: str, model: str | None) -> dict:
         out["skill_visible_reply"] = (text or stderr)[:300]
     finally:
         rm_tree(probe)
+    if spec is None:
+        # An explicitly invoked skill that does not answer means the session
+        # did not run where the skill was installed; every case after this
+        # would measure nothing, or run somewhere it must not (2026-09-27:
+        # the run went on after "NO" and its sessions edited the real
+        # repository). Stop before any case is dispatched.
+        raise SystemExit(
+            f"preflight: the skill is not visible in a prepared workspace ({status}); "
+            f"reply: {out['skill_visible_reply'][:200]!r}. No case was run."
+        )
 
     out.setdefault("model", model or "(harness default)")
     return out
@@ -2532,6 +2556,20 @@ def selftest() -> int:
         (ws / ".claude" / "skills" / "intent-router").is_dir()
         and (ws / ".agents" / "skills" / "intent-router").is_dir()
         and json.loads((ws / "opencode.json").read_text(encoding="utf-8"))["permission"]["edit"] == "deny",
+    )
+    rm_tree(ws)
+
+    print("harness sessions run in their own workspace")
+    ws = Path(tempfile.mkdtemp(prefix="intent-router-env-selftest-"))
+    env = harness_env(ws)
+    expect(
+        "the harness environment pins PWD to the session workspace (opencode run honours $PWD over cwd)",
+        env["PWD"] == str(ws) and env["PWD"] != os.environ.get("PWD"),
+    )
+    expect(
+        "the harness environment keeps the CLAUDE.md contamination guard",
+        env["OPENCODE_DISABLE_CLAUDE_CODE_PROMPT"] == "1"
+        and env["OPENCODE_DISABLE_CLAUDE_CODE_SKILLS"] == "0",
     )
     rm_tree(ws)
 
