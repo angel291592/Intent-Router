@@ -12,7 +12,7 @@
         --rescore evals/reports/raw/<harness> [--date YYYY-MM-DD]
 
     uv run --with pyyaml --with jsonschema python evals/run.py \
-        --delivery --harness opencode [--repeat 3] [--arm bare|skill|both] [--jobs 4]
+        --delivery --harness opencode [--repeat 3] [--arm bare|prompt|skill|both|all] [--jobs 4]
 
     uv run --with pyyaml --with jsonschema python evals/run.py \
         --rescore-delivery evals/reports/raw/delivery/<harness>
@@ -106,6 +106,7 @@ EXPECT_KEYS = frozenset(
         "question_lang",
         "not_target",
         "open_field_regex",
+        "open_issue",
     }
 )
 CASE_KEYS = frozenset(
@@ -207,6 +208,18 @@ OPENCODE_DELIVERY_BARE_CONFIG = {
         "skill": "deny",
     },
 }
+
+# The delivery `prompt` arm: the bare arm's configuration plus this one sentence
+# appended to the first prompt. It stands for what an ordinary user could type
+# instead of installing the skill, so the comparison asks whether the skill buys
+# more than a single instruction does. It deliberately says nothing about
+# failure behaviour: naming the one decision the scorer rewards would coach the
+# arm rather than measure it.
+CONTROL_PROMPT_SUFFIX = (
+    "Before you start, check what this repository already says, "
+    "and ask me about any decision it cannot settle."
+)
+DELIVERY_ARMS = ("bare", "prompt", "skill")
 
 # claude-code tool whitelist: the read-only set the existing 14 cases run with,
 # plus Edit/Write for delivery runs (claude-code permissions are CLI flags, not
@@ -1056,6 +1069,16 @@ def check_turn(
             )
             if not re.search(want, blob, re.IGNORECASE):
                 fail(key)
+        elif key == "open_issue":
+            # The request-defect marker (SKILL.md section 3): the optional
+            # `issue` enum on an open unknown, English by contract, so the key
+            # stays language-independent like open_field_regex — and, like it,
+            # can never match a ROUTEd spec, whose `unknown` is empty.
+            if not any(
+                isinstance(u, dict) and u.get("issue") == want
+                for u in spec.get("unknown") or []
+            ):
+                fail(key)
         elif key == "question_keywords":
             blob = question_blob(spec).lower()
             if not any(str(w).lower() in blob for w in want):
@@ -1794,6 +1817,45 @@ def selftest() -> int:
         "open_field_regex" in outcome["failures"],
     )
 
+    print("open_issue matches the request-defect marker on an open unknown")
+    premise_ask = json.loads(json.dumps(ask))
+    premise_ask["unknown"][0]["issue"] = "premise"
+    expect(
+        "the schema accepts issue: premise on an unknown item",
+        not list(validator.iter_errors(premise_ask)),
+    )
+    outcome = check(
+        {"id": "x", "fixture": "user-api", "expect": {"open_issue": "premise"}},
+        record_for(premise_ask),
+        validator,
+    )
+    expect(
+        f"an open unknown carrying issue: premise matches open_issue: {outcome['failures']}",
+        outcome["pass"],
+    )
+    outcome = check(
+        {"id": "x", "fixture": "user-api", "expect": {"open_issue": "conflict"}},
+        record_for(premise_ask),
+        validator,
+    )
+    expect("a different issue value fails open_issue", "open_issue" in outcome["failures"])
+    outcome = check(
+        {"id": "x", "fixture": "user-api", "expect": {"open_issue": "ambiguous"}},
+        record_for(ask),
+        validator,
+    )
+    expect(
+        "ordinary missing information (no issue) fails open_issue",
+        "open_issue" in outcome["failures"],
+    )
+    expect(
+        "validate_cases accepts open_issue",
+        validate_cases([{"id": "x", "expect": {"open_issue": "premise"}}]) == [],
+    )
+    other_issue = json.loads(json.dumps(premise_ask))
+    other_issue["unknown"][0]["issue"] = "other"
+    expect("the schema rejects issue: other", bool(list(validator.iter_errors(other_issue))))
+
     print("attribution counting: probed constraints may outnumber resolved unknowns")
     # Regression guard for the 2026-09-23 finding. The one git-only-fact run that
     # PASSED emitted three `source: probed` constraints while reporting
@@ -2390,6 +2452,40 @@ def selftest() -> int:
         outcome["score"] == 0 and outcome["aux"]["no_delivery"] is True,
     )
 
+    print("intent_check reads the final session only")
+
+    def session_block(body: str) -> str:
+        return f"$ opencode run --format json x\n[exit 0]\n{body}\n[stderr]\n"
+
+    # The bodies spell newlines as the two characters \n, the way the harness
+    # JSON escapes them, so a marker inside a session never splits it.
+    for name, blocks, expected in (
+        (
+            "marker in the final session",
+            [
+                session_block('{"text":"asked A or B"}'),
+                session_block('{"text":"done\\nIntent check\\n- met: src/routes/users.ts:12"}'),
+            ],
+            True,
+        ),
+        (
+            "marker only in an earlier session",
+            [session_block('{"text":"Intent check"}'), session_block('{"text":"done"}')],
+            False,
+        ),
+        ("no marker anywhere", [session_block('{"text":"done"}')], False),
+    ):
+        snap = make_snapshot(
+            "ic-" + name.replace(" ", "-"),
+            diff_parts=[fake_diff("src/routes/users.ts", ideal_added)],
+            routes_text=ideal_routes(),
+        )
+        (snap / "transcript.txt").write_text("\n\n".join(blocks), encoding="utf-8")
+        outcome = score_user_api_caching(snap)
+        expect(f"{name}: intent_check is {expected}", outcome["aux"]["intent_check"] is expected)
+    outcome = score_user_api_caching(ideal)
+    expect("a snapshot without a transcript leaves intent_check None", outcome["aux"]["intent_check"] is None)
+
     print("delivery case validation, prepare() arms and claude tools")
     good = yaml.safe_load(DELIVERY_CASES_PATH.read_text(encoding="utf-8"))
     expect("the real delivery.yaml validates clean", validate_delivery_cases(good) == [])
@@ -2484,6 +2580,86 @@ def selftest() -> int:
     )
     expect("subset report says '1/1 subset cases'", "1/1 subset cases" in subset_report)
     expect("the default report does not say subset", "subset cases" not in report)
+
+    print("delivery report rendering: the prompt arm and the pinned README line")
+    delivery_items = ("reuses_shared_redis", "uses_default_ttl", "invalidates_on_write",
+                      "covers_all_reads", "states_failure_policy", "contract_preserved")
+
+    def delivery_result(arm: str, n: int, *, failure_policy: bool = True, intent_check=None) -> dict:
+        items = {name: True for name in delivery_items}
+        items["states_failure_policy"] = failure_policy
+        return {
+            "case": "add-caching-delivery",
+            "arm": arm,
+            "n": n,
+            "sessions": [{"state": None, "wall_s": 10.0}],
+            "environmental": False,
+            "skill_not_loaded": False,
+            "no_delivery": False,
+            "answers_used": 0,
+            "items": items,
+            "score": sum(items.values()),
+            "aux": {"adr_read": True, "intent_check": intent_check, "diff_files": 1, "diff_added_lines": 30},
+        }
+
+    def readme_line_of(text: str) -> str:
+        match = re.search(r"^## 5\. Line for the README\n\n```\n(.*?)\n```", text, re.M | re.S)
+        return match.group(1) if match else ""
+
+    # Synthetic, never raw/: CI has no raw/ directory. The shape is the
+    # 2026-09-24 measurement — bare 5 runs at 5/6, skill 3 runs at 6/6, every
+    # run on the shared Redis client.
+    pinned = [delivery_result("bare", n, failure_policy=False) for n in range(1, 6)] + [
+        delivery_result("skill", n) for n in range(1, 4)
+    ]
+    report = render_delivery_report(
+        "opencode", "dp/deepseek-flash", {}, pinned, date_str="2026-09-24"
+    )
+    expect(
+        "without a prompt arm the README line is byte-identical to the 2026-09-24 report",
+        readme_line_of(report)
+        == "2026-09-24 · opencode · dp/deepseek-flash · delivery add-caching-delivery · "
+        "bare 5.0/6 (N=5) · with skill 6.0/6 (N=3) · ADR trap avoided bare 5/5 vs skill 3/3",
+    )
+    expect(
+        "without a prompt arm the summary and repeats keep their bare/skill form",
+        "| metric | bare | skill |" in report and "- repeats per arm: bare N=5, skill N=3" in report,
+    )
+    three = [
+        delivery_result("bare", 1, failure_policy=False),
+        delivery_result("prompt", 1, failure_policy=False),
+        delivery_result("skill", 1, intent_check=True),
+    ]
+    report = render_delivery_report(
+        "opencode", "dp/deepseek-flash", {}, three, date_str="2026-09-27"
+    )
+    line = readme_line_of(report)
+    expect(
+        "with a prompt arm the summary table has three arm columns",
+        "| metric | bare | prompt | skill |" in report
+        and "- repeats per arm: bare N=1, prompt N=1, skill N=1" in report,
+    )
+    expect(
+        f"with a prompt arm the README line carries it between bare and skill: {line!r}",
+        "one-line prompt 5.0/6 (N=1)" in line
+        and line.index("bare 5.0/6") < line.index("one-line prompt") < line.index("with skill")
+        and "vs prompt 1/1 vs skill 1/1" in line,
+    )
+    expect(
+        "the Intent check aux row counts only the run that reported it",
+        "| Intent check reported (aux) | 0 | 0 | 1 |" in report,
+    )
+    expect(
+        "section 1 states the prompt arm's configuration and its suffix verbatim",
+        "the prompt arm is the bare arm's configuration" in report and CONTROL_PROMPT_SUFFIX in report,
+    )
+    report_lines = report.splitlines()
+    header_at = next(i for i, ln in enumerate(report_lines) if ln.startswith("| arm | run |"))
+    expect(
+        "the per-run delimiter row has as many cells as its header (GitHub renders the table)",
+        report_lines[header_at].count("|") == report_lines[header_at + 1].count("|")
+        and "| ic |" in report_lines[header_at],
+    )
 
     print("user-level skill copies")
     # env=None would read this machine's real home; the synthetic env below
@@ -3068,8 +3244,8 @@ def score_user_api_caching(snapshot: Path) -> dict:
     """Score one delivery snapshot for the user-api fixture. Pure function.
 
     Reads only snapshot files (diff.patch, src/**, tests/**, meta.json) — no
-    network, no npm, no transcript (the one exception is the aux `adr_read`
-    flag). A snapshot with no added lines at all is a run that delivered
+    network, no npm, no transcript (the exceptions are the aux `adr_read` and
+    `intent_check` flags). A snapshot with no added lines at all is a run that delivered
     nothing (§5.3: no_delivery counts into N as 0/6), so every item is False.
     """
     diff_path = snapshot / "diff.patch"
@@ -3166,6 +3342,7 @@ def score_user_api_caching(snapshot: Path) -> dict:
     sessions_meta = meta.get("sessions") or []
     aux = {
         "adr_read": None,
+        "intent_check": None,
         "diff_added_lines": len(added_src) + sum(
             len(lines) for file, lines in added.items() if not file.startswith("src/")
         ),
@@ -3180,6 +3357,12 @@ def score_user_api_caching(snapshot: Path) -> dict:
     if transcript_path.exists():
         text = transcript_path.read_text(encoding="utf-8", errors="replace")
         aux["adr_read"] = "0007" in text or "adr/" in text
+        # Verify (SKILL.md section 5) reports under a line reading exactly
+        # `Intent check`, and only the final session can report on the delivered
+        # work. persist_snapshot joins sessions with "\n\n" and each starts with
+        # "$ "; the harness JSON escapes newlines inside texts, so that
+        # separator occurs only between sessions.
+        aux["intent_check"] = "Intent check" in text.split("\n\n$ ")[-1]
     return {"items": items, "score": score, "aux": aux}
 
 
@@ -3207,7 +3390,11 @@ def run_delivery_once(
         harness,
         with_skill=(arm == "skill"),
         opencode_config=(
-            (OPENCODE_DELIVERY_BARE_CONFIG if arm == "bare" else OPENCODE_DELIVERY_CONFIG)
+            (
+                OPENCODE_DELIVERY_BARE_CONFIG
+                if arm in ("bare", "prompt")
+                else OPENCODE_DELIVERY_CONFIG
+            )
             if harness == "opencode"
             else None
         ),
@@ -3222,6 +3409,10 @@ def run_delivery_once(
     prompt = str(case["prompt"]).strip()
     if arm == "skill":
         prompt = prompt_for({"prompt": prompt, "mode": "explicit"}, harness)
+    elif arm == "prompt":
+        # First turn only: later turns are replaced by the scripted answer or
+        # the implement prompt, exactly as on the other arms.
+        prompt = f"{prompt} {CONTROL_PROMPT_SUFFIX}"
     base = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=workspace, capture_output=True, text=True
     ).stdout.strip()
@@ -3396,6 +3587,16 @@ def persist_snapshot(
 ITEM_MARK = {True: "✓", False: "✗"}
 
 
+def delivery_arms(results: list[dict]) -> list[str]:
+    """The arms present in the results, in DELIVERY_ARMS order.
+
+    Falls back to bare and skill — the two columns a delivery report always had
+    before the prompt arm existed — when the results name no arm at all.
+    """
+    present = {r["arm"] for r in results}
+    return [arm for arm in DELIVERY_ARMS if arm in present] or ["bare", "skill"]
+
+
 def render_delivery_report(
     harness: str,
     model: str,
@@ -3406,17 +3607,21 @@ def render_delivery_report(
     env_section: str | None = None,
     observations_section: str | None = None,
 ) -> str:
-    """Render the bare-vs-skill delivery report.
+    """Render the delivery comparison report over the bare, prompt and skill arms.
 
     Summary numbers are computed here from the scored runs only (P9); the
     `## 4. Observations` section stays hand-written and is inherited verbatim
-    by --rescore-delivery, like the suite report's iterations section.
+    by --rescore-delivery, like the suite report's iterations section. Table
+    columns are the arms present in the results (delivery_arms); the §5 README
+    line keeps its original bare/skill format unless a prompt arm is present.
     """
     today = date_str or date.today().isoformat()
     case_id = results[0]["case"] if results else "add-caching-delivery"
     per_arm: dict[str, list[dict]] = {"bare": [], "skill": []}
     for r in results:
         per_arm.setdefault(r["arm"], []).append(r)
+    arms = delivery_arms(results)
+    with_prompt = "prompt" in arms
 
     def judged(arm: str) -> list[dict]:
         return [
@@ -3433,6 +3638,9 @@ def render_delivery_report(
         if not values:
             return "—"
         return f"{sum(values) / len(values):.1f}"
+
+    def row(label: str, cell) -> str:
+        return f"| {label} | " + " | ".join(str(cell(arm)) for arm in arms) + " |"
 
     if env_section is not None:
         preamble = [f"# Delivery-quality report — {harness}", "", env_section.rstrip(), ""]
@@ -3459,11 +3667,12 @@ def render_delivery_report(
             f"- harness: {harness} ({env.get('version', 'unknown')})",
             f"- model: {model}",
             f"- skill commit: {env.get('skill_commit', 'unknown')}",
-            f"- repeats per arm: bare N={len(judged('bare'))}, skill N={len(judged('skill'))}",
+            "- repeats per arm: " + ", ".join(f"{arm} N={len(judged(arm))}" for arm in arms),
             f"- contamination check: {env.get('contamination_ok', 'not run')} "
             f"(reply: {env.get('contamination_reply', '')!r})",
-            "- skill visible in a prepared workspace: not applicable to the bare arm; "
-            f"{env.get('skill_visible', 'not run')} for the skill arm",
+            "- skill visible in a prepared workspace: not applicable to the "
+            + ("bare and prompt arms" if with_prompt else "bare arm")
+            + f"; {env.get('skill_visible', 'not run')} for the skill arm",
             f"- permissions: "
             + (
                 "claude allowedTools: Edit/Write added, bash still git-only"
@@ -3473,6 +3682,12 @@ def render_delivery_report(
                 "loads user-level skills from ~/.config/opencode/skills, where an installer "
                 "test left an intent-router copy — without that deny the bare arm silently "
                 "used the skill (its first turn emitted the IntentSpec format verbatim)"
+            )
+            + (
+                "; the prompt arm is the bare arm's configuration plus one sentence appended "
+                f"to its first prompt: {CONTROL_PROMPT_SUFFIX!r}"
+                if with_prompt
+                else ""
             ),
             f"- scripted user: {scripted}",
             "- skill arm invocation: explicit (isolates trigger probability from "
@@ -3494,39 +3709,44 @@ def render_delivery_report(
     lines = preamble + [
         "## 2. Summary",
         "",
-        "| metric | bare | skill |",
-        "|---|---|---|",
-        f"| runs judged (environmental excluded) | {len(judged('bare'))} | {len(judged('skill'))} |",
-        f"| mean score /6 | {arm_line('bare', lambda r: r['score'])} | "
-        f"{arm_line('skill', lambda r: r['score'])} |",
+        "| metric | " + " | ".join(arms) + " |",
+        "|---|" + "---|" * len(arms),
+        row("runs judged (environmental excluded)", lambda arm: len(judged(arm))),
+        row("mean score /6", lambda arm: arm_line(arm, lambda r: r["score"])),
     ]
     for name in item_names:
-        bare = sum(1 for r in judged("bare") if r["items"].get(name))
-        skill = sum(1 for r in judged("skill") if r["items"].get(name))
         lines.append(
-            f"| {name} | {bare}/{len(judged('bare')) or '—'} | {skill}/{len(judged('skill')) or '—'} |"
+            row(
+                name,
+                lambda arm: f"{sum(1 for r in judged(arm) if r['items'].get(name))}"
+                f"/{len(judged(arm)) or '—'}",
+            )
         )
+    # The per-run table's delimiter row is built from the same column list as its
+    # header: GitHub renders a table only when the two cell counts match.
+    columns = (
+        ["arm", "run", "sessions", "states", "wall s", "answered", "score"]
+        + [name[:4] for name in item_names]
+        + ["adr", "ic", "files"]
+    )
     lines += [
-        f"| ADR read (aux) | "
-        f"{sum(1 for r in judged('bare') if r['aux'].get('adr_read'))} | "
-        f"{sum(1 for r in judged('skill') if r['aux'].get('adr_read'))} |",
-        f"| no_delivery runs | "
-        f"{sum(1 for r in judged('bare') if r['no_delivery'])} | "
-        f"{sum(1 for r in judged('skill') if r['no_delivery'])} |",
-        f"| mean sessions | {arm_line('bare', lambda r: len(r['sessions']))} | "
-        f"{arm_line('skill', lambda r: len(r['sessions']))} |",
-        f"| mean wall-clock s | "
-        f"{arm_line('bare', lambda r: sum(s.get('wall_s') or 0 for s in r['sessions']))} | "
-        f"{arm_line('skill', lambda r: sum(s.get('wall_s') or 0 for s in r['sessions']))} |",
-        f"| mean questions answered | {arm_line('bare', lambda r: r['answers_used'])} | "
-        f"{arm_line('skill', lambda r: r['answers_used'])} |",
+        row("ADR read (aux)", lambda arm: sum(1 for r in judged(arm) if r["aux"].get("adr_read"))),
+        row(
+            "Intent check reported (aux)",
+            lambda arm: sum(1 for r in judged(arm) if r["aux"].get("intent_check")),
+        ),
+        row("no_delivery runs", lambda arm: sum(1 for r in judged(arm) if r["no_delivery"])),
+        row("mean sessions", lambda arm: arm_line(arm, lambda r: len(r["sessions"]))),
+        row(
+            "mean wall-clock s",
+            lambda arm: arm_line(arm, lambda r: sum(s.get("wall_s") or 0 for s in r["sessions"])),
+        ),
+        row("mean questions answered", lambda arm: arm_line(arm, lambda r: r["answers_used"])),
         "",
         "## 3. Per run",
         "",
-        "| arm | run | sessions | states | wall s | answered | score | "
-        + " | ".join(name[:4] for name in item_names)
-        + " | adr | files |",
-        "|---|---|---|---|---|---|---|" + "---|" * 7,
+        "| " + " | ".join(columns) + " |",
+        "|" + "---|" * len(columns),
     ]
     for r in sorted(results, key=lambda r: (r["arm"], r["n"])):
         flags = ""
@@ -3543,7 +3763,8 @@ def render_delivery_report(
         lines.append(
             f"| {r['arm']} | {r['n']}{flags} | {len(r['sessions'])} | {states} | {wall} | "
             f"{r['answers_used']} | {r['score']}/6 | {cells} | "
-            f"{ITEM_MARK.get(r['aux'].get('adr_read'), '—')} | {files} |"
+            f"{ITEM_MARK.get(r['aux'].get('adr_read'), '—')} | "
+            f"{ITEM_MARK.get(r['aux'].get('intent_check'), '—')} | {files} |"
         )
     if observations_section is not None:
         lines += ["", observations_section.rstrip()]
@@ -3557,13 +3778,21 @@ def render_delivery_report(
         ]
     mean = lambda arm: arm_line(arm, lambda r: r["score"])
     adr = lambda arm: sum(1 for r in judged(arm) if r["items"].get(item_names[0]))
+    # Without a prompt arm this line must stay byte-identical to the format the
+    # 2026-09-24 report and the README evals block already carry.
     summary = (
         f"{today} · {harness} · {model} · delivery {case_id} · "
         f"bare {mean('bare')}/6 (N={len(judged('bare'))}) · "
+    )
+    if with_prompt:
+        summary += f"one-line prompt {mean('prompt')}/6 (N={len(judged('prompt'))}) · "
+    summary += (
         f"with skill {mean('skill')}/6 (N={len(judged('skill'))}) · "
         f"ADR trap avoided bare {adr('bare')}/{len(judged('bare')) or 1} "
-        f"vs skill {adr('skill')}/{len(judged('skill')) or 1}"
     )
+    if with_prompt:
+        summary += f"vs prompt {adr('prompt')}/{len(judged('prompt')) or 1} "
+    summary += f"vs skill {adr('skill')}/{len(judged('skill')) or 1}"
     lines += ["", "## 5. Line for the README", "", "```", summary, "```", ""]
     return "\n".join(lines)
 
@@ -3578,7 +3807,13 @@ def run_delivery(args: argparse.Namespace) -> int:
         cases = [c for c in cases if c["id"] in wanted]
     if not cases:
         raise SystemExit("no delivery cases selected")
-    arms = {"bare": ["bare"], "skill": ["skill"], "both": ["bare", "skill"]}[args.arm]
+    arms = {
+        "bare": ["bare"],
+        "prompt": ["prompt"],
+        "skill": ["skill"],
+        "both": ["bare", "skill"],
+        "all": list(DELIVERY_ARMS),
+    }[args.arm]
 
     print(f"preflight for {args.harness} ...")
     env = preflight(args.harness, args.model)
@@ -3653,7 +3888,7 @@ def run_delivery(args: argparse.Namespace) -> int:
 def rescore_delivery(raw_dir: Path, out_dir: Path, date_str: str | None) -> int:
     """Re-score persisted delivery snapshots with the current scorer. Zero sessions.
 
-    Reads <raw_dir>/<arm>/<case>-<n>/meta.json for arm in bare/skill, re-runs
+    Reads <raw_dir>/<arm>/<case>-<n>/meta.json for arm in bare/prompt/skill, re-runs
     the registered scorer over each snapshot, and rewrites the matching
     delivery report in place. Environment and observations text are inherited
     verbatim from the report being replaced.
@@ -3665,7 +3900,7 @@ def rescore_delivery(raw_dir: Path, out_dir: Path, date_str: str | None) -> int:
         )
     cases = {c["id"]: c for c in load_delivery_cases()}
     results: list[dict] = []
-    for arm in ("bare", "skill"):
+    for arm in DELIVERY_ARMS:
         arm_dir = raw_dir / arm
         if not arm_dir.is_dir():
             continue
@@ -3724,7 +3959,7 @@ def rescore_delivery(raw_dir: Path, out_dir: Path, date_str: str | None) -> int:
         "- repeats per arm: "
         + ", ".join(
             f"{arm} N={sum(1 for r in results if r['arm'] == arm and not (r['environmental'] or r['skill_not_loaded']))}"
-            for arm in ("bare", "skill")
+            for arm in delivery_arms(results)
         ),
         env_section,
     )
@@ -3760,7 +3995,9 @@ def main() -> int:
     parser.add_argument("--smoke", action="store_true")
     parser.add_argument("--rescore", metavar="RAW_DIR")
     parser.add_argument("--delivery", action="store_true")
-    parser.add_argument("--arm", choices=("bare", "skill", "both"), default="both")
+    parser.add_argument(
+        "--arm", choices=("bare", "prompt", "skill", "both", "all"), default="both"
+    )
     parser.add_argument("--rescore-delivery", dest="rescore_delivery", metavar="RAW_DELIVERY_DIR")
     parser.add_argument("--date", default=None)
     parser.add_argument("--out", default=str(EVALS / "reports"))
