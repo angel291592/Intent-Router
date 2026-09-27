@@ -28,3 +28,6 @@ Desktop.ini
 __pycache__/
 node_modules/
 dist/
+
+# 私有：skill 全文中文参照译本（仅供所有者阅读调优；非可执行，不入库。见 agent.md 决策 #5）
+docs/zh-CN/skill-full/
