@@ -163,6 +163,10 @@
         "category": {
           "$ref": "#/$defs/category"
         },
+        "issue": {
+          "enum": ["ambiguous", "conflict", "premise"],
+          "description": "Set when the unknown is a defect in the request itself rather than missing information: two readings (ambiguous), two stated things that cannot both hold (conflict), or a stated thing a source contradicts (premise). Absent means ordinary missing information."
+        },
         "note": {
           "type": "string",
           "minLength": 1,
