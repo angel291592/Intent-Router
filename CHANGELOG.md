@@ -103,6 +103,25 @@ per constraint under a fixed marker, `Intent check`.
   一条不带围栏的回复有没有提问，现在按它的最后一条消息判断，而不是第一条；评分从不读这一项，
   因此重评分的数字不变。
 
+- Evals: verification for this release, on opencode with `dp/deepseek-flash` — 6 of 6 subset
+  cases pass with 0 hallucinated evidence: the three new defect cases, plus the silence,
+  non-trigger and auto-trigger cases the wider trigger could regress
+  (`evals/reports/2026-09-27-opencode.md`). An exploratory three-arm delivery run at N=1 per arm
+  scores bare 5.0/6, the one-line prompt 6.0/6 and the skill 6.0/6: at that size the skill shows
+  no gain over a one-sentence prompt on the six scored decisions, so no claim that it beats one is
+  made and the result stays out of the README evals block. The skill arm reported its
+  `Intent check` with a pointer on every `met` line, two of them carrying more than the one
+  pointer the rule asks for; the prompt arm's four batched questions went unanswered because of
+  the runner defect fixed above, and that arm was not re-run
+  (`evals/reports/2026-09-27-delivery-opencode.md`).
+- Evals：本版在 opencode + `dp/deepseek-flash` 上的核验——6 例子集 6/6 通过、0 条编造 evidence：
+  三个新增缺陷用例，加上触发面放宽后可能回归的静默、不触发与自动触发三例
+  （`evals/reports/2026-09-27-opencode.md`）。一次探索性的三臂交付对照（每臂 N=1）得分为 bare
+  5.0/6、一句提示词 6.0/6、skill 6.0/6：这个样本量下，skill 在六项评分决策上没有显示出相对一句
+  提示词的增益，因此不做任何"优于一句提示词"的声称，该结果也不进 README 的评测块。skill 臂输出了
+  `Intent check`，每条 `met` 都带指针，其中两条多于规则要求的一个指针；一句提示词臂一次性抛出的
+  四个问题因上文修复的 runner 缺陷无人作答，该臂未重跑（`evals/reports/2026-09-27-delivery-opencode.md`）。
+
 ## [1.1.0] — 2026-09-24
 
 First feature release on the 1.x line: every emitted spec is now also saved to
