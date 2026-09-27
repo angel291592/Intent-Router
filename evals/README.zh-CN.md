@@ -70,8 +70,8 @@ skill 在安装位置是否可见、以及实际应答的 harness 版本与模�
 
 ## 3. 成本
 
-全量一轮是**每 harness 18 次会话**：14 例 + 两个两轮用例的第二轮 = 16 次用例会话，外加
-**2 次预检会话**。10 例套件实测 `--jobs 4` 下约 16 分钟，14 例按此估算约 20 分钟。
+全量一轮是**每 harness 21 次会话**：17 例 + 两个两轮用例的第二轮 = 19 次用例会话，外加
+**2 次预检会话**。10 例套件实测 `--jobs 4` 下约 16 分钟，17 例按此估算约 27 分钟。
 同一轮还可用 `--smoke`（1 用例会话 + 2 预检）与 Tier 3 定向重跑（受影响用例 × 2 次 + 2 预检）。
 Tier 0 与 Tier 1 零成本。迭代时用 `--cases <id> --repeat 2`，只在真的需要出数字时跑全量。
 
@@ -88,7 +88,7 @@ Tier 0 与 Tier 1 零成本。迭代时用 `--cases <id> --repeat 2`，只在真
 单个用例默认单次运行即判定；`--repeat N`（N > 1）时过半通过即通过。套件达标条件是**至少
 `ceil(0.8 × 用例数)` 例通过，且幻觉 evidence 恰好为 0**——只要出现一条指向不存在文件的 evidence，
 无论其它指标多好都算不达标：错答会被评审发现，凭空编造的引用不会。阈值随用例数自动跟随，不写死
-数字，因此 14 例套件需要通过 12 例。
+数字，因此 17 例套件需要通过 14 例。
 
 四种失败与"判错决策态"分开计数，因为它们说明的是不同的事：`not triggered`（预期应触发却没产出
 spec）、`degraded output`（产出了但解析不了）、`timeouts`、`harness errors`。evidence 失败又分两
@@ -121,7 +121,8 @@ spec）、`degraded output`（产出了但解析不了）、`timeouts`、`harnes
 `evidence_regex`、`question_keywords`（任一命中）、`text_keywords`（任一命中）、`output_regex`
 （不区分大小写）、`question_lang`、`not_target`、`open_field_regex`（匹配每个开放 unknown 的
 `field` 与 `category`，是 `question_keywords` 的语言无关对应物；只在期望 ASK 的用例上有意义，
-因为 ROUTE 的 spec 没有开放 unknown）。
+因为 ROUTE 的 spec 没有开放 unknown）、`open_issue`（匹配任一开放 unknown 上的 `issue` 值——
+`ambiguous`、`conflict` 或 `premise`；同样只在期望 ASK 的用例上有意义）。
 
 `triggered`、`schema_valid`、`invariants_ok`、`evidence_valid`、`evidence_form` 在"预期应产出
 spec"时恒被检查，用例无需列出。运行上报的失败名还包括 `timeout`、`harness_error`、`turn1_not_ask`
@@ -133,23 +134,28 @@ spec"时恒被检查，用例无需列出。运行上报的失败名还包括 `t
 ## 6. 交付质量对照
 
 上面那些用例断言的是产出的 `IntentSpec` 的形状；交付模式量的是 spec 的目的本身——仓库里的最终
-工作产物有没有变好。同一句弱表达（`add caching to the user API`）在同一份 fixture 上跑两次：
-一次裸跑（不装 skill）、一次显式调用 skill——权限与"脚本化用户"完全一致——然后按 fixture 自带的
-可机检"正确交付"定义给每个工作区打分。
+工作产物有没有变好。同一句弱表达（`add caching to the user API`）在同一份 fixture 上最多跑三
+臂：**bare**（不装 skill）、**prompt**（bare 配置 + 只在第一轮 prompt 后追加固定一句——`run.py`
+里的 `CONTROL_PROMPT_SUFFIX`：*"Before you start, check what this repository already says, and
+ask me about any decision it cannot settle."*）、**skill**（显式调用）——权限与"脚本化用户"
+完全一致——然后按 fixture 自带的可机检"正确交付"定义给每个工作区打分。prompt 臂要回答的是交付
+对照本来答不了的一个问题：skill 的增量，是不是一句话就能拿到？
 
 ```bash
 # 冒烟：每臂 1 次，先看快照与得分落盘情况，再决定是否加量
 uv run --with pyyaml --with jsonschema python evals/run.py \
-    --delivery --harness opencode --repeat 1 --jobs 2
+    --delivery --harness opencode --repeat 1 --arm all --jobs 2
 
-# 正式对照：每臂 3 次判定
+# 正式对照：三臂各 3 次判定
 uv run --with pyyaml --with jsonschema python evals/run.py \
-    --delivery --harness opencode --repeat 3 --jobs 4
+    --delivery --harness opencode --repeat 3 --arm all --jobs 4
 
 # 离线：用现行评分器复评已落盘快照，零会话
 uv run --with pyyaml --with jsonschema python evals/run.py \
     --rescore-delivery evals/reports/raw/delivery/opencode
 ```
+
+`--arm` 可取 `bare`、`prompt`、`skill`、`both`（bare + skill，默认）或 `all`（三臂全跑）。
 
 用例放 `delivery.yaml`（与 `cases.yaml` 分开校验）；字段说明见该文件。一个用例包含弱表达
 `prompt`、fixture、"脚本化用户"的 `answer_when_asked`、`max_answers`、一次性发送的
@@ -162,7 +168,9 @@ uv run --with pyyaml --with jsonschema python evals/run.py \
 2 `uses_default_ttl`（`src/cache/redis.ts` 之外不得硬编码 TTL）、3 `invalidates_on_write`
 （POST 与 DELETE 要失效缓存键）、4 `covers_all_reads`（三个 GET handler 全部走缓存）、
 5 `states_failure_policy`（有明确的缓存失败行为）、6 `contract_preserved`（响应形状与
-`src/db/users.ts` 不被改动）。没有产出 diff 的运行记 0/6。skill 臂是显式调用，因此触发概率
+`src/db/users.ts` 不被改动）。没有产出 diff 的运行记 0/6。另有两个 aux 标记随得分一起记录、
+但从不参与判定：`adr_read`（转录里提到了 ADR）与 `intent_check`（最终 session 的回复里含字面量
+标记行 `Intent check`，只有 skill 臂的 Verify 步骤会输出它）。skill 臂是显式调用，因此触发概率
 不在本测量的范围——触发率由 `add-caching-auto` 单独度量。
 
 ## 7. 尚未覆盖
@@ -175,3 +183,6 @@ uv run --with pyyaml --with jsonschema python evals/run.py \
   触发、`question-not-trigger` 该静默）；另有 4 个 auto 用例以断言覆盖触发行为，其中
   `fully-specified-auto-quiet`、`partially-specified-auto` 已进公开报告，`support-furious-auto`、
   `research-scope-auto` 尚未进入。
+- 三个请求缺陷用例（`ambiguous-reading`、`conflicting-constraints`、`premise-adr-auto`）目前只
+  覆盖代码领域，跟套件其余部分一样；同样这三类问题在工单队列或政策档案里是否也能被同样识别，
+  尚未验证。

@@ -79,9 +79,9 @@ win. Move the copy out, then run.
 
 ## 3. Cost
 
-A full suite is **18 sessions per harness**: 14 cases + the second turn for the two two-turn
-cases = 16 case sessions, plus **2 preflight sessions**. The ten-case suite measured about 16
-minutes with `--jobs 4`, so budget roughly 20 minutes for fourteen. The same run also has
+A full suite is **21 sessions per harness**: 17 cases + the second turn for the two two-turn
+cases = 19 case sessions, plus **2 preflight sessions**. The ten-case suite measured about 16
+minutes with `--jobs 4`, so budget roughly 27 minutes for seventeen. The same run also has
 `--smoke` (1 case session + 2 preflight) and Tier 3 re-runs (affected cases × 2, plus 2
 preflight). Tier 0 and Tier 1 cost nothing. Iterate on `--cases <id> --repeat 2` and keep a full
 suite for the moment you need numbers.
@@ -102,7 +102,7 @@ must pass. The suite meets its threshold when **at least `ceil(0.8 × cases)` of
 hallucinated evidence is exactly 0** — a single evidence pointer to a file that does not exist
 fails the suite regardless of everything else, because an invented citation survives review in a
 way a wrong answer does not. The threshold tracks the case count automatically rather than a
-hard-coded number, so the fourteen-case suite needs 12.
+hard-coded number, so the seventeen-case suite needs 14.
 
 Four failure modes are counted separately from wrong decisions, because they say something
 different: `not triggered` (expected to fire but no spec was emitted), `degraded output` (a spec
@@ -138,7 +138,9 @@ Assertion keys: `state`, `state_in`, `cause`, `should_trigger`, `asked_eq`, `max
 `evidence_regex`, `question_keywords` (any match), `text_keywords` (any match), `output_regex`
 (case-insensitive), `question_lang`, `not_target`, `open_field_regex` (matches `field` and
 `category` of each open unknown — the language-independent counterpart of `question_keywords`,
-and only meaningful on a case that expects ASK, since a ROUTE spec has no open unknown).
+and only meaningful on a case that expects ASK, since a ROUTE spec has no open unknown),
+`open_issue` (matches the `issue` value — `ambiguous`, `conflict` or `premise` — on any open
+unknown; same ASK-only caveat as `open_field_regex`).
 
 `triggered`, `schema_valid`, `invariants_ok`, `evidence_valid` and `evidence_form` are always
 checked whenever a spec is expected, so no case needs to list them. Failure names reported for a run
@@ -153,24 +155,30 @@ report's iteration section.
 
 The case assertions above measure the shape of the emitted `IntentSpec`. The delivery mode
 measures the thing the spec is for: whether the final work product in the repository got better.
-The same weak request (`add caching to the user API`) runs twice on the same fixture — once bare
-(the skill is not installed) and once with the skill invoked explicitly — under identical
-permissions and the same scripted user, and each resulting workspace is scored against the
-fixture's own machine-checkable definition of a correct delivery.
+The same weak request (`add caching to the user API`) runs on the same fixture across up to
+three arms — **bare** (the skill is not installed), **prompt** (the bare configuration, with one
+fixed sentence appended to the first prompt only — `CONTROL_PROMPT_SUFFIX` in `run.py`: *"Before
+you start, check what this repository already says, and ask me about any decision it cannot
+settle."*) and **skill** (invoked explicitly) — under identical permissions and the same scripted
+user, and each resulting workspace is scored against the fixture's own machine-checkable
+definition of a correct delivery. The prompt arm exists to answer one question a delivery
+comparison can't otherwise: is the skill's gain something a single sentence already buys you?
 
 ```bash
 # smoke: one run per arm, then inspect snapshots and scores before paying more
 uv run --with pyyaml --with jsonschema python evals/run.py \
-    --delivery --harness opencode --repeat 1 --jobs 2
+    --delivery --harness opencode --repeat 1 --arm all --jobs 2
 
-# a real comparison: three judged runs per arm
+# a real comparison: three judged runs per arm, all three arms
 uv run --with pyyaml --with jsonschema python evals/run.py \
-    --delivery --harness opencode --repeat 3 --jobs 4
+    --delivery --harness opencode --repeat 3 --arm all --jobs 4
 
 # offline: re-score persisted snapshots with the current scorer, zero sessions
 uv run --with pyyaml --with jsonschema python evals/run.py \
     --rescore-delivery evals/reports/raw/delivery/opencode
 ```
+
+`--arm` takes `bare`, `prompt`, `skill`, `both` (bare + skill, the default) or `all` (all three).
 
 Cases live in `delivery.yaml` (validated separately from `cases.yaml`); see that file for the
 field reference. A case carries the weak `prompt`, the fixture, the scripted user's
@@ -184,9 +192,11 @@ in-process cache — the ADR 0007 trap), 2 `uses_default_ttl` (no hardcoded TTL 
 `src/cache/redis.ts`), 3 `invalidates_on_write` (POST and DELETE drop cache keys), 4
 `covers_all_reads` (all three GET handlers go through the cache), 5 `states_failure_policy`
 (some explicit cache-failure behaviour), 6 `contract_preserved` (response shapes and
-`src/db/users.ts` untouched). A run that produces no diff scores 0/6. The skill arm is invoked
-explicitly, so trigger probability is not part of this measurement — that is what
-`add-caching-auto` measures.
+`src/db/users.ts` untouched). A run that produces no diff scores 0/6. Two aux flags are recorded
+alongside the score but never judged: `adr_read` (the transcript mentions the ADR) and
+`intent_check` (the final session's reply contains the literal marker line `Intent check`, which
+only the skill arm's Verify step emits). The skill arm is invoked explicitly, so trigger
+probability is not part of this measurement — that is what `add-caching-auto` measures.
 
 ## 7. Not covered yet
 
@@ -200,3 +210,6 @@ explicitly, so trigger probability is not part of this measurement — that is w
   stay quiet); four more auto cases cover trigger behaviour by assertion, of which
   `fully-specified-auto-quiet` and `partially-specified-auto` are in published reports, while
   `support-furious-auto` and `research-scope-auto` have not reached one yet.
+- The three request-defect cases (`ambiguous-reading`, `conflicting-constraints`,
+  `premise-adr-auto`) are code-only, same as the rest of the suite; whether the same three issues
+  get caught the same way in a ticket queue or a policy archive is unverified.
