@@ -7,15 +7,19 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
 
 ## [Unreleased]
 
-Three request defects the request itself carries — two readings, two stated things that cannot
-both hold, a stated approach a source contradicts — are now recognized and marked with an
-optional `issue` field, resolved through the existing ASK state (no new state). A request that
-passes the silence check now gets one premise check (at most two lookups) before the skill stays
-silent, so a fully specified request whose approach a decision record already rules out is still
-caught. When a ROUTEd hand-off is carried out in the same conversation, the skill now checks the
-delivered work against its own spec and reports one line per constraint under a fixed marker,
-`Intent check`.
+## [1.2.0] — 2026-09-27
+
+A feature release with a backward-compatible contract: the schema gains one optional field, so
+every spec 1.1.0 wrote still validates. Three request defects the request itself carries — two
+readings, two stated things that cannot both hold, a stated approach a source contradicts — are
+now recognized and marked with an optional `issue` field, resolved through the existing ASK state
+(no new state). A request that passes the silence check now gets one premise check (at most two
+lookups) before the skill stays silent, so a fully specified request whose approach a decision
+record already rules out is still caught. When a ROUTEd hand-off is carried out in the same
+conversation, the skill now checks the delivered work against its own spec and reports one line
+per constraint under a fixed marker, `Intent check`.
 /
+一个契约向后兼容的功能版本：schema 只新增一个可选字段，1.1.0 写出的每份 spec 依然能通过校验。
 请求本身携带的三类缺陷——两种读法、两件声明的事不能同时成立、一件声明的事被来源否定——现在会
 被识别并标进一个可选字段 `issue`，经既有的 ASK 态解决（不新增状态）。通过静默检查的请求现在会
 再做一次前提检查（最多两次查找）才保持静默，因此一个写得很完整、但方法已被决策记录否定的请求
@@ -66,6 +70,15 @@ delivered work against its own spec and reports one line per constraint under a 
   与 Kiro specs 的对比（Jev、Laya 保留，标为多数"不适用"——不同的层）；新增一段装与不装的真实
   diff 对照；为前提检查与 Verify 各新增一条设计原则与一条局限。
 
+- Docs: the Chinese walkthrough (`docs/zh-CN/skill-guide.md`) explains why the premise check runs,
+  why `issue` exists, why a stated constraint may be questioned on two grounds only, and why
+  Verify writes nothing to `.intent/`; both `evals/README` versions document the `prompt` arm,
+  `--arm all`, `open_issue` and `intent_check`, and put the cost and threshold figures at 17 cases
+  (21 sessions, 14 of 17 to pass).
+- Docs：中文导读（`docs/zh-CN/skill-guide.md`）补写前提检查为何要跑、为何新增 `issue`、为何声明
+  的约束只能以两种理由被质疑、为何 Verify 不写 `.intent/`；两版 `evals/README` 写明 `prompt` 臂、
+  `--arm all`、`open_issue` 与 `intent_check`，成本与阈值按 17 例计（21 次会话、17 例须过 14 例）。
+
 - Evals: `open_issue` asserts the `issue` value on an open unknown; three cases added
   (`ambiguous-reading`, `conflicting-constraints`, `premise-adr-auto`), suite now 17 cases.
   Delivery mode gains a `prompt` arm (`--arm prompt` / `--arm all`): the bare configuration plus
@@ -75,6 +88,20 @@ delivered work against its own spec and reports one line per constraint under a 
   `conflicting-constraints`、`premise-adr-auto`），套件现为 17 例。交付模式新增 `prompt` 臂
   （`--arm prompt` / `--arm all`）：bare 配置 + 只在第一轮 prompt 后追加固定一句话，用来衡量
   skill 的增量能否经受住"一句话对照组"的考验。交付评分新增 `intent_check` aux 标记。
+
+- Evals (fixes): every harness session now runs in its own temporary workspace — opencode 1.18.32
+  opens its session in `$PWD`, which Git Bash exports and a subprocess `cwd` does not update, so a
+  run could land in the caller's own repository; the runner now pins `PWD`, and preflight stops
+  when the explicitly invoked skill does not answer. The opencode `bash` permission object now
+  lists its catch-all rule first; ending on a `"*"` deny hid the tool entirely. In delivery mode,
+  whether an unfenced reply asked a question is judged by its final message, not its first;
+  scoring never reads this, so rescored numbers are unchanged.
+- Evals（修复）：每个 harness 会话现在都在自己的临时工作区里跑——opencode 1.18.32 会在 `$PWD`
+  里建会话，而 Git Bash 会导出这个变量、子进程的 `cwd` 却不更新它，一次评测因此可能跑进调用方
+  自己的仓库；runner 现在固定 `PWD`，并在显式调用的 skill 没有应答时于预检阶段停下。opencode 的
+  `bash` 权限对象现在把兜底规则放在最前；以 `"*"` deny 结尾会让这个工具整个消失。交付模式里，
+  一条不带围栏的回复有没有提问，现在按它的最后一条消息判断，而不是第一条；评分从不读这一项，
+  因此重评分的数字不变。
 
 ## [1.1.0] — 2026-09-24
 
@@ -519,7 +546,8 @@ First release. L0 only: a prompt-only skill with no dependencies and no keys. /
 - L1 and L2 backends are declared and not implemented.
 - L1 与 L2 后端只做声明，未实现。
 
-[Unreleased]: https://github.com/angel291592/Intent-Router/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/angel291592/Intent-Router/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/angel291592/Intent-Router/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/angel291592/Intent-Router/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/angel291592/Intent-Router/compare/v0.3.0...v1.0.0
 [0.3.0]: https://github.com/angel291592/Intent-Router/compare/v0.2.0...v0.3.0

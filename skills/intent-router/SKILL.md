@@ -14,7 +14,7 @@ description: >-
   Not for explaining existing state ("what does X do", "why is Y slow").
 license: MIT
 metadata:
-  version: "1.1.0"
+  version: "1.2.0"
   author: angel291592
   homepage: https://github.com/angel291592/Intent-Router
 ---
