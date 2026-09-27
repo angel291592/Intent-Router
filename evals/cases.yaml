@@ -239,3 +239,78 @@
     state: ASK
     open_field_regex: "refund|replace|remedy"
     max_inferred: 0
+
+- id: ambiguous-reading
+  prompt: make GET /api/users cheaper for the mobile app
+  mode: explicit
+  fixture: user-api
+  # The `ambiguous` issue (SKILL.md section 3): "cheaper for the mobile app"
+  # reads two ways that change the deliverable — fewer bytes per response, or
+  # fewer requests — and no source settles which: nothing in the fixture
+  # mentions mobile clients (`grep -ri mobile evals/fixtures/user-api` is
+  # empty), so probing cannot close it. The one question must put the readings
+  # to the user, and the open unknown must carry `issue: ambiguous`.
+  # Not loosened to a bare `state: ASK`: an ASK about how to carry out one
+  # reading (which compression, which page size) picks the reading silently,
+  # which is exactly the defect this case exists to catch; `open_issue` is the
+  # language-independent way to tell the two apart.
+  expect:
+    state: ASK
+    open_issue: ambiguous
+    max_asked: 1
+
+- id: conflicting-constraints
+  prompt: >-
+    Add caching to GET /api/users and GET /api/users/:id. Every response must
+    reflect the latest database write immediately, and do not add any cache
+    invalidation code.
+  mode: explicit
+  fixture: user-api
+  # The `conflict` issue (SKILL.md section 3): a cache that must reflect every
+  # write immediately needs invalidation, and the request forbids invalidation
+  # code — two stated constraints that cannot both hold. No lookup can settle a
+  # contradiction between the user's own words, so the question must ask which
+  # one yields, and the open unknown must carry `issue: conflict`.
+  # Not loosened: quietly dropping one constraint (a short TTL presented as
+  # "fresh enough") routes and fails `state`; asking about a TTL value as
+  # ordinary missing information fails `open_issue`.
+  expect:
+    state: ASK
+    open_issue: conflict
+    max_asked: 1
+
+- id: premise-adr-auto
+  prompt: >-
+    Add an in-process LRU cache (the lru-cache package, max 500 entries, TTL
+    300s) to GET /api/users and GET /api/users/:id. Invalidate on writes: POST
+    /api/users clears the list entry, DELETE /api/users/:id clears the list
+    entry and that user's entry. On any cache failure, serve the uncached
+    response and let the request succeed. Keep both response shapes unchanged.
+    Done when both endpoints serve from cache inside the 300s window and the
+    existing test suite still passes.
+  mode: auto
+  fixture: user-api
+  # The `premise` issue and the premise check after a passed silence check
+  # (SKILL.md sections 1 and 3). Like fully-specified-auto-quiet, this prompt is
+  # constructed to pass all four items of the silence check:
+  #   objects     — both endpoints named, plus the two write handlers that
+  #                 invalidate, so the object set is closed;
+  #   approach    — the lru-cache package, its size and its TTL;
+  #   failure     — one rule covering every cache failure;
+  #   acceptance  — an observable done condition.
+  # Only the approach is wrong: the Decision section of
+  # docs/adr/0007-no-inproc-cache.md reads "No in-process caching in this
+  # service". So the skill must load on a fully stated request, open the ADR in
+  # its premise check, run, and ask whether to go ahead as stated or as the ADR
+  # says — citing the ADR, with the open unknown carrying `issue: premise`.
+  # The counterpart is fully-specified-auto-quiet: its approach is the existing
+  # ioredis client, which agrees with the ADR, so after the same premise check
+  # it must still stay completely silent.
+  # Not loosened: carrying the request out silently walks into the ADR trap and
+  # fails `triggered`; an ASK that never cites the ADR fails
+  # `evidence_must_include`.
+  expect:
+    state: ASK
+    open_issue: premise
+    evidence_must_include: [docs/adr/0007]
+    max_asked: 1
