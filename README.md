@@ -128,18 +128,18 @@ Manual install, or an agent the installer doesn't know: [Quick start](#quick-sta
 
 ## How it compares
 
-**Intent-Router is the layer five good tools leave empty: deciding whether to look, ask, or act —
-before acting.** Your harness's own plan mode already prefers looking things up over asking, and
-grill-me converges beautifully and states the right principle — but neither one checks a stated
-premise against the evidence, and neither one checks the finished work against what was decided.
-spec-kit keeps everything and makes you buy its whole workflow to get it. Kiro's specs come
-closest on paper — requirement-level conflict analysis, a correctness check after delivery — at
-the cost of a full three-file spec workflow and an IDE. Jev and Laya sit one layer downstream of
-all of this: both turn an *already-clear* input into a typed, calibrated decision in a single
-pass — Jev as a closed API, Laya as the open-weights, locally-runnable alternative — but neither
-one converges a vague request into that clear input to begin with, which is exactly the layer
-Intent-Router occupies. Intent-Router is the one-skill version of that upstream layer: no
-workflow to adopt, no files to keep in sync by hand, no IDE, no separate decision service to run.
+**Intent-Router is the layer between a vague request and the work: look it up, ask, or act —
+then check what got built.** Your harness's own plan mode already prefers looking things up over
+asking, and grill-me converges beautifully and states the right principle — but neither one
+checks a stated premise against the evidence, and neither one checks the finished work against
+what was decided. spec-kit keeps everything and makes you buy its whole workflow to get it.
+Kiro's specs come closest on paper — requirement-level conflict analysis, a correctness check
+after delivery — at the cost of a full three-file spec workflow and an IDE. Jev and Laya make the
+same bet this skill makes — typed output instead of prose — one layer further down: both turn an
+*already-clear* input into a typed, calibrated decision in a single pass, and neither one
+converges a vague request into that clear input to begin with. Intent-Router is that upstream
+layer as a single skill: no workflow to adopt, no files to keep in sync by hand, no IDE, no
+separate decision service to run.
 
 Read the row gaps, not the checkmarks. Every cell below is sourced to the tool's own docs or repo —
 quoted cells are verbatim, and an unquoted ✅/⚠️/❌ still traces to a specific page.
@@ -154,11 +154,12 @@ quoted cells are verbatim, and an unquoted ✅/⚠️/❌ still traces to a spec
 | [Jev](https://www.jevai.org/) (typed decisions) | ❌ needs clear input already | — | — | — | — | — | ✅ |
 | [Laya](https://github.com/NandhaKishorM/laya) (open-source System 1) | ❌ needs a formed state to classify | — | — | — | — | — | ✅ |
 
-Jev and Laya's row is mostly `—`, not `❌`: they are the System 1 **decision** layer, called once
-a request is already well-formed, which is a different job from converging one, so most of these
-columns simply do not apply to them. Jev is a closed API; Laya is the open-weights,
-Jev-wire-compatible alternative you can run locally. The `IntentSpec` this skill emits is the
-shape of input both of them assume already exists.
+Jev's and Laya's rows are mostly `—`, not `❌`: they are the System 1 **decision** layer, called
+once a request is already well-formed — a different job from converging one, so most of these
+columns do not apply to them. Jev is a closed API; Laya is the open-weights, Jev-wire-compatible
+alternative you can run locally. The `IntentSpec` this skill emits is the shape of input both of
+them assume already exists, which is why both show up again under [Backends](#backends), as the
+planned optional L2.
 
 ### What your harness already does — and what this adds
 
