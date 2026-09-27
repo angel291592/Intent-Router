@@ -7,6 +7,75 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
 
 ## [Unreleased]
 
+Three request defects the request itself carries — two readings, two stated things that cannot
+both hold, a stated approach a source contradicts — are now recognized and marked with an
+optional `issue` field, resolved through the existing ASK state (no new state). A request that
+passes the silence check now gets one premise check (at most two lookups) before the skill stays
+silent, so a fully specified request whose approach a decision record already rules out is still
+caught. When a ROUTEd hand-off is carried out in the same conversation, the skill now checks the
+delivered work against its own spec and reports one line per constraint under a fixed marker,
+`Intent check`.
+/
+请求本身携带的三类缺陷——两种读法、两件声明的事不能同时成立、一件声明的事被来源否定——现在会
+被识别并标进一个可选字段 `issue`，经既有的 ASK 态解决（不新增状态）。通过静默检查的请求现在会
+再做一次前提检查（最多两次查找）才保持静默，因此一个写得很完整、但方法已被决策记录否定的请求
+仍会被抓住。当一份 ROUTE 的交接工作就在同一对话里被执行完，skill 现在会拿自己的 spec 核对交付
+结果，在一个固定标记 `Intent check` 下逐条约束报一行。
+
+**Upgrade notes / 升级提示**
+
+- The skill now also loads on a fully specified request, and reads at most two more files before
+  staying silent. If nothing it opens contradicts the request, nothing changes; if something
+  does, it now asks one question it previously would have missed. /
+  skill 现在也会在四项齐全的请求上加载，并在保持静默前多读至多两个文件。如果它打开的东西都不
+  跟请求矛盾，什么都不变；如果矛盾，它现在会问一个此前会漏问的问题。
+
+- Skill: an unknown item may carry an optional `issue`: `ambiguous` (the request reads two ways),
+  `conflict` (two stated things cannot both hold) or `premise` (a source contradicts something
+  stated). Each is asked before any other unknown; in no-ask mode `ambiguous`/`conflict` halt as
+  `underspecified`, while `premise` closes as `inferred` with a one-sentence note, unless it
+  crosses an irreversible boundary.
+- Skill：unknown 项可携带可选字段 `issue`：`ambiguous`（请求能读成两种意思）、`conflict`
+  （两件声明的事不能同时成立）或 `premise`（某个来源否定了声明的内容）。三类都先于其它未知项
+  提问；no-ask 模式下 `ambiguous`/`conflict` 以 `underspecified` 中止，`premise` 则以 `inferred`
+  收口并附一句话说明，除非触及不可逆边界。
+
+- Skill: a stated constraint may now be questioned for one of two reasons — it collides with
+  another stated constraint, or a source the skill opened contradicts it — never to split it into
+  sub-cases the user did not distinguish.
+- Skill：声明的约束现在可以因两种理由被质疑——它跟另一条声明的约束冲突，或被 skill 打开过的
+  来源否定——但永远不是为了拆成用户没有区分的子情形。
+
+- Skill: after a ROUTEd hand-off is carried out in the same conversation, the skill checks the
+  delivered work against every constraint and reports it under a line reading exactly
+  `Intent check`, writing nothing to `.intent/`.
+- Skill：ROUTE 交接的工作在同一对话内执行完后，skill 会拿每条约束核对交付结果，在一行恰好写作
+  `Intent check` 的标记下报告，不向 `.intent/` 写任何东西。
+
+- Docs: SKILL.md is reworded to fit the new rules within its 500-line budget (495 lines); the
+  description states the new triggers and the new silence condition, and the `resolution`
+  scorecard is now described as a diagnostic, never a number to push up.
+- Docs：SKILL.md 为容纳新规则重新措辞、仍在 500 行预算内（495 行）；description 写明新的触发
+  条件与新的静默条件；`resolution` 记分卡改称诊断指标，不再是要推高的数字。
+
+- Docs: both top-level READMEs rewrite the comparison table against harness-native plan modes,
+  grill-me, spec-kit `/clarify` and Kiro specs (Jev and Laya stay, now marked mostly
+  not-applicable — a different tier), add a real diff excerpt contrasting an installed and a bare
+  delivery, and add two design principles and two limitations for the premise check and Verify.
+- Docs：两版顶层 README 把对比表换成对 harness 原生 plan 模式、grill-me、spec-kit `/clarify`
+  与 Kiro specs 的对比（Jev、Laya 保留，标为多数"不适用"——不同的层）；新增一段装与不装的真实
+  diff 对照；为前提检查与 Verify 各新增一条设计原则与一条局限。
+
+- Evals: `open_issue` asserts the `issue` value on an open unknown; three cases added
+  (`ambiguous-reading`, `conflicting-constraints`, `premise-adr-auto`), suite now 17 cases.
+  Delivery mode gains a `prompt` arm (`--arm prompt` / `--arm all`): the bare configuration plus
+  one fixed sentence appended to the first prompt only, to measure whether the skill's gain
+  survives against a one-line control. Delivery scoring gains an `intent_check` aux flag.
+- Evals：`open_issue` 断言某个开放 unknown 的 `issue` 值；新增 3 个用例（`ambiguous-reading`、
+  `conflicting-constraints`、`premise-adr-auto`），套件现为 17 例。交付模式新增 `prompt` 臂
+  （`--arm prompt` / `--arm all`）：bare 配置 + 只在第一轮 prompt 后追加固定一句话，用来衡量
+  skill 的增量能否经受住"一句话对照组"的考验。交付评分新增 `intent_check` aux 标记。
+
 ## [1.1.0] — 2026-09-24
 
 First feature release on the 1.x line: every emitted spec is now also saved to
