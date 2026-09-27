@@ -4,9 +4,9 @@
 
 **给 AI agent 用的意图编译器（intent compiler）。**
 
-把一句含糊的请求变成一份带类型的 `IntentSpec`——带类型的决策模型（Jev、Laya）和下游所有路由器
-都默认它已经存在的那份清晰、机器可读的输入：能自己查到的就去查，只问查不到的，意图仍不充分时
-拒绝产出。
+把一句含糊的请求变成一份带类型的 `IntentSpec`：能自己查到的就去查，只问查不到的，指出请求自相
+矛盾、有两种读法、或前提被你自己的仓库否定，意图仍不充分时拒绝产出。交接的工作在同一对话里做完
+后，它还会拿产出的 spec 逐条核对交付结果——不是感觉一下，是一条一条对。
 
 这给你带来的是：
 
@@ -28,6 +28,41 @@
 [![CI](https://github.com/angel291592/Intent-Router/actions/workflows/ci.yml/badge.svg)](https://github.com/angel291592/Intent-Router/actions/workflows/ci.yml)
 [![Stars](https://img.shields.io/github/stars/angel291592/Intent-Router)](https://github.com/angel291592/Intent-Router/stargazers)
 [![Works without installing anything](https://img.shields.io/badge/backend-L0%20prompt--only-green.svg)](#后端分层backends)
+
+### "装了"到底改变了什么，看 diff 本身
+
+同一句弱表达、同一份 fixture、同一套权限，只差一行——[装与不装对照](evals/reports/2026-09-24-delivery-opencode.md)
+（不装 N=5、装了 N=3）。逐字截自各自运行自己产出的 `diff.patch`，决定"缓存本身失败时该怎么办"
+的那一段：
+
+**不装**——没有失败路径可读。Redis 一挂，请求跟着一起挂：
+
+```ts
+const hit = await getCache<T>(key);
+if (hit !== null) {
+  return hit;
+}
+const value = await load();
+if (value !== null) {
+  await setCache(key, value);
+}
+return value;
+```
+
+**装了 skill**——问了唯一一个没有文件能回答的问题，然后把答案写进了代码：
+
+```ts
+async function readCache<T>(key: string): Promise<{ hit: boolean; value: T | null }> {
+  try {
+    return { hit: true, value: await getCache<T>(key) };
+  } catch {
+    return { hit: false, value: null };
+  }
+}
+```
+
+5 次不装的运行全部交出第一种形态；3 次装了的运行全部交出第二种形态。这两段代码都不是为写本
+README 手打的——都是直接从产出下方 [评测](#评测evals) 那些数字的运行里原样取出来的。
 
 ```
               "给 user API 加缓存"                   "这个客户炸了，你处理一下"
@@ -76,7 +111,7 @@ npx skills add angel291592/Intent-Router
 - [问题在哪](#问题在哪) · [它怎么工作](#它怎么工作) · [四个决策态](#四个决策态)
 - [两个走通实例](#两个走通实例)——一个在代码仓库里，一个在客服工单里
 - [产物](#产物) · [适用领域](#适用领域) · [快速开始](#快速开始) · [评测（Evals）](#评测evals)
-- [七条设计原则](#七条设计原则) · [局限](#局限)
+- [九条设计原则](#九条设计原则) · [局限](#局限)
 - [后端分层（Backends）](#后端分层backends) · [相关工作（Prior art）](#相关工作prior-art) · [参与贡献](#参与贡献)
 
 ---
@@ -84,33 +119,38 @@ npx skills add angel291592/Intent-Router
 ## 横向对比
 
 **Intent-Router 填的正是五个好工具都留空的那一层：在动手之前，先决定该查、该问、还是该做。**
-grill-me 收敛得很漂亮、原则也说对了，但什么都不留下。Intent-Router 把那条原则推广成 *grill
-anything*：在盘问你之前，先盘问仓库、工单队列、运维手册——一切能替自己作答的东西。
-spec-kit 什么都留下，但你得把它整套工作流一起买。路由器决策很快，但根本处理不了模糊。Jev 和
-Laya 返回的正是你想要的那种带类型、已校准的决策——*前提是输入已经成型了*：Jev 需要一个组织好的
-问题，Laya 需要一份成型的待分类状态。把含糊请求变成那份成型输入，恰恰是难的部分——而它俩都不做
-这一步。
+你的 harness 自带的 plan 模式本来就更倾向先查后问，grill-me 收敛得很漂亮、原则也说对了——但
+两者都不会拿证据核对一条声明的前提，也都不会拿证据核对交付完的东西。spec-kit 什么都留下，
+但你得把它整套工作流一起买。Kiro 的 specs 在纸面上最接近——需求级冲突分析、交付后的正确性
+核验——代价是一整套三文件 spec 工作流加一个 IDE。Jev 和 Laya 处在下游再下一层：两者都是拿到
+*已经成型*的输入后单次前向给出一个带类型、已校准的决策——Jev 是闭源 API，Laya 是权重开放、
+可本地跑的替代品——但两者都不会把一句含糊的请求收敛成那份成型输入，而这恰恰是 Intent-Router
+所在的那一层。Intent-Router 是这层上游能力的单 skill 版本：不用买整套工作流、不用手动同步一堆
+文件、不需要 IDE，也不需要跑一个独立的决策服务。
 
-要读的是格子里的落差，不是那些勾：
+要读的是格子里的落差，不是那些勾。下表每个格子都有据可查——带引号的是原文直引，没带引号的
+✅/⚠️/❌ 也都能追到具体页面：
 
-| | 能收敛模糊输入 | 不问自己查得到的 | 机器可读产物 | 可判定的停止 | 自动触发 |
-|---|---|---|---|---|---|
-| **Intent-Router** | ✅ | ✅ `PROBE`，带 evidence 与 metric | ✅ `IntentSpec` | ✅ 谓词 | ✅ |
-| [grill-me](https://github.com/mattpocock/skills) | ✅ 轮次/frontier | ⚠️ 只是原则，未被追踪（无 evidence、无 metric） | ❌ 设计上无状态 | ⚠️ "frontier 空了" | ❌ 手动 |
-| [spec-kit `/clarify`](https://github.com/github/spec-kit) | ✅ 11 类扫描 | ❌ 直接问你 | ✅ 回写进 `spec.md` | ✅ ≤10 个问题 | ⚠️ 需要 `specs/<feature>/` 与它的工作流 |
-| [semantic-router](https://github.com/aurelio-labs/semantic-router) / [RouteLLM](https://github.com/lm-sys/RouteLLM) | ❌ 返回 `None` | —— | ❌ 一个标签 | ✅ 阈值 | ✅ |
-| [Jev](https://www.jevai.org/)（带类型的决策） | ❌ 需要清晰输入 | —— | ✅ 带类型 + 已校准 | ✅ confidence | ✅ |
-| [Laya](https://github.com/NandhaKishorM/laya)（开源 System 1） | ❌ 需要成型的状态/问题集 | —— | ✅ 带类型的 `choice`/`score`/`noul` | ✅ 校准概率 | ✅ |
+| | 能收敛模糊输入 | 不问自己查得到的 | 用证据指出矛盾与错误前提 | 不在不可逆处猜 | 跨会话留存的契约文件 | 交付后按意图核对 | 自动触发 |
+|---|---|---|---|---|---|---|---|
+| **Intent-Router** | ✅ | ✅ `PROBE` | ✅ `ambiguous` / `conflict` / `premise` | ✅ `HALT` | ✅ `.intent/*.yaml` | ✅ `Intent check` | ✅ |
+| 你的 harness 自带的 plan 模式 + 提问工具 | ✅ 会问 | ⚠️ 因家而异——Codex 的 plan 模板明写了这条规则；Claude Code 与 Cursor 会探索，但都没写规则 | ❌ 三家都未见文档 | ⚠️ 是审批闸门，不按可逆性区分 | ✅ Claude Code、Cursor 会存计划文件；Codex 的计划只活在回复里 | ❌ 未见文档 | ⚠️ Claude Code 的工具由模型自行调用；Cursor 只是建议；Codex 需要显式切换模式 |
+| [grill-me](https://github.com/mattpocock/skills) | ✅ 轮次/frontier | ✅ *"凡是你自己能查到的，就别问用户"* | ❌ 未见文档 | ✅ *"决定是用户的"* | ❌ 设计上无状态 | ❌ 未见文档 | ❌ 手动（`/grill-me`） |
+| [spec-kit `/clarify`](https://github.com/github/spec-kit) | ✅ 分类扫描，≤5 问 | ⚠️ 只排除"已经答过"的问题，不排除"仓库能答"的问题 | ⚠️ 另一个命令 `/analyze` 会标出冲突的需求 | ⚠️ 未解决项标"Deferred"，不测可逆性 | ✅ 回写进 `spec.md` | ✅ 另一个命令 `/converge` | ❌ 手动，一次一个 `/speckit-*` 命令 |
+| [Kiro specs](https://kiro.dev/docs/specs) | ✅ *"需要时会问澄清问题"* | ⚠️ 会做"代码库探索"，未见明文规则 | ⚠️ `analyze-requirements` 在整个需求集里找逻辑矛盾（仅 IDE/CLI） | 未见文档 | ✅ 每个 spec 三个文件 | ✅ 基于性质测试的"Correctness"核验（仅 IDE） | ❌ 手动（`Shift+Tab` / `/plan`） |
+| [Jev](https://www.jevai.org/)（带类型的决策） | ❌ 需要已经成型的输入 | —— | —— | —— | —— | —— | ✅ |
+| [Laya](https://github.com/NandhaKishorM/laya)（开源 System 1） | ❌ 需要一份已成型待分类的状态 | —— | —— | —— | —— | —— | ✅ |
 
-Jev 和 Laya 在同一层——System 1 决策层。Jev 是闭源 API；Laya 是权重开放、与 Jev 线级兼容、可在
-本地跑的替代品。两者都是拿到*成型*输入后单次前向回答带类型的问题；两者都不会把含糊请求收敛成
-成型输入。上游这个收敛层正是 Intent-Router 所在的位置，而它产出的 `IntentSpec` 正是它们想要的
-输入形状。
+Jev 和 Laya 那一行大多是"——"而不是"❌"：它们是 System 1**决策**层，在请求已经成型之后才被
+调用，这跟"收敛一个还没成型的请求"是不同的活儿，所以这几列大多根本不适用于它们。Jev 是闭源
+API；Laya 是权重开放、与 Jev 线级兼容、可在本地跑的替代品。这个 skill 产出的 `IntentSpec`
+正是它们俩都假定已经存在的那份输入形状。
 
 ### 你的 harness 本来就会做什么——以及这层多出了什么
 
-先说句公道话：好的 harness 原生就会"能查到的不问、问的时候给推荐默认值"。这部分不是本 skill
-的贡献，本页其余内容也不应被读作在暗示这一点。
+先说句公道话：好的 harness 原生就会"能查到的不问、问的时候给推荐默认值"。交付对照里，全部
+5 次不装 skill 的运行都自己读了 `docs/adr/0007-no-inproc-cache.md`、并避开了它警告的那个陷阱——
+这个习惯是真的，也不是本 skill 的贡献。本页其余内容也不应被读作在暗示这一点。
 
 它多出的是一段对话装不下的那部分：
 
@@ -122,6 +162,10 @@ Jev 和 Laya 在同一层——System 1 决策层。Jev 是闭源 API；Laya 是
   后端故障被一个看似澄清性的提问掩盖过去。
 - **不可逆的猜测拒绝出产。** 原生的偏置是"选一个合理默认值、说明一下、继续做"。当推断值触到
   不可逆边界时，skill 拒绝 ROUTE——宁可 HALT 并报出字段名。
+- **只拿证据质疑前提，从不凭口味。** 一条决策记录、一个被钉住的依赖版本、或一个已被删除的文件
+  只要否定了你的请求，就值得先问一句；仅仅是"我更喜欢另一种做法"永远不构成质疑的理由。
+- **交付会被核对，不只是交接了事。** 当工作就在同一对话里被执行完，skill 会拿自己写的 spec
+  重新核对实际交付的东西，逐条约束报一行——`met` 并带代码指针，或者 `not met`。
 
 ---
 
@@ -290,7 +334,7 @@ decision:
   confidence: 0.88
 resolution:
   unknowns_found: 4
-  resolved_by_probe: 3        # ← 要优化的就是这个数
+  resolved_by_probe: 3        # 诊断指标，不是目标
   asked: 1
 trace: [...]                  # 可重放
 ```
@@ -318,7 +362,7 @@ trace: [...]                  # 可重放
 
 | 领域 | PROBE 能够到 | 值得问的那个问题 | 状态 |
 |---|---|---|---|
-| **编码 agent** | 仓库、依赖、版本历史、测试、CI、ADR | 不可逆的技术权衡 | ✅ **已实测**——[评测套件](#评测evals)，14 个用例 |
+| **编码 agent** | 仓库、依赖、版本历史、测试、CI、ADR | 不可逆的技术权衡 | ✅ **已实测**——[评测套件](#评测evals)，17 个用例 |
 | **客服与服务工单** | 工单历史、订单与事件日志、账户权益、当前生效的政策 | 退款还是换货——当两者都被允许、且发一个就否掉另一个 | ✅ **已实测**——1 个用例（`support-delegate-irreversible`），[子集运行](evals/reports/2026-09-23-opencode-2.md) |
 | **研究与分析** | 先前笔记、历史报告、在用的来源白名单、已缓存的检索结果 | 深度还是广度——当交付物的形态会因此改变 | 📋 **已写规格** |
 | **运维与数据作业** | schema、看板、上一次运行的输出、部署与事故历史、留存策略 | 回填能不能改写历史行 | 📋 **已写规格** |
@@ -396,7 +440,7 @@ Zed、Warp、Kiro CLI、Junie、Augment、Factory Droid
 
 ## 评测（Evals）
 
-14 个用例，跑在专门作为探测靶子构建的 fixture 工作区上，在真实 harness 里跑，零 mock。用例断言
+17 个用例，跑在专门作为探测靶子构建的 fixture 工作区上，在真实 harness 里跑，零 mock。用例断言
 决策态、各个计数器，以及**每个 evidence 指针指向的文件必须真实存在**——只要有一处编造的引用，
 整个套件就算失败，其他全对也不算。
 
@@ -405,23 +449,25 @@ Zed、Warp、Kiro CLI、Junie、Augment、Factory Droid
 2026-09-23 · opencode · dp/deepseek-flash · 8/8 subset cases · probe ratio 1.00 · 0 over-asks · 0 hallucinated evidence
 2026-09-24 · opencode · dp/deepseek-flash · delivery add-caching-delivery · bare 5.0/6 (N=5) · with skill 6.0/6 (N=3) · ADR trap avoided bare 5/5 vs skill 3/3
 2026-09-24 · opencode · (harness default) · 4/4 subset cases · probe ratio 0.25 · 0 over-asks · 0 hallucinated evidence
+2026-09-27 · opencode · dp/deepseek-flash · 6/6 subset cases · probe ratio 0.44 · 0 over-asks · 0 hallucinated evidence
 <!-- evals:end -->
 
 逐行说明：第 1 行是 2026-09-23 当日套件规模（10 例）下的全量单次运行；第 2 行是当天提示词强化后
 对 8 用例子集的单次重测——子集口径，与全量数字分开陈述；第 3 行是交付对照，本项目的**结果指标**——
 skill 臂三次运行全部交付 6/6，且每次都写明了缓存失败策略，不装的 5 次一次都没有；第 4 行是 v1.1.0
-发版核验，4 用例子集运行。probe ratio 是**诊断指标**，从不参与判定。套件现为 14 例，全量阈值随之为
-14 例中至少通过 12 例、且零编造 evidence；这一规模下的全量运行尚无公开报告。所有公开报告都在
-[`evals/reports/`](evals/reports/)。
+发版核验，4 用例子集运行；第 5 行是 v1.2.0 新增的三个请求缺陷用例（`ambiguous`、`conflict`、
+`premise`）连同该改动可能影响的三个回归用例一起的子集运行。probe ratio 是**诊断指标**，从不参与
+判定。套件现为 17 例，全量阈值随之为 17 例中至少通过 14 例、且零编造 evidence；这一规模下的全量
+运行尚无公开报告。所有公开报告都在 [`evals/reports/`](evals/reports/)。
 
 怎么自己跑、每个用例查什么：[`evals/README.md`](evals/README.md)。
 
 ---
 
-## 七条设计原则
+## 九条设计原则
 
-1. **PROBE 永远优先于 ASK。** 一个你本来自己能查到的问题，就是一个 bug。盯住
-   `resolved_by_probe / unknowns_found` 并把它推高。
+1. **先查再问。** 一个你本来自己能查到的问题，就是一个 bug。`resolved_by_probe /
+   unknowns_found` 是要盯住的诊断指标，不是要追的分数。
 2. **停止是算出来的，不是感觉出来的。** 一个跑在必填字段上的谓词，加一个硬性 ASK 预算。
    不会有 session 一路问到四十六个问题。
 3. **推断必须可见。** 凡是模型自己填的都打 `inferred` 并带上依据。否掉一行，比多回答三个问题便宜。
@@ -430,6 +476,9 @@ skill 臂三次运行全部交付 6/6，且每次都写明了缓存失败策略�
    spec 都会存进 `.intent/`，契约因此跨 session 存活。
 6. **路由要声明自己不是什么。** 负向条件才是防止重叠目标互相渗透的东西。
 7. **宁可拒绝，不要猜。** 不充分而且预算用完了？停下来，点名那个开放字段。
+8. **只拿证据质疑前提，从不凭口味。** 一个否定用户所述内容的来源值得一问；仅仅更喜欢另一种做法
+   永远不值得。
+9. **按契约核对交付。** 交接工作的 spec 不算完事，直到交付的东西被逐条约束核对过。
 
 ---
 
@@ -446,6 +495,13 @@ skill 臂三次运行全部交付 6/6，且每次都写明了缓存失败策略�
 - **全量数字只在编码领域。** [评测](#评测evals)里的全量数字属于编码套件。客服工单已有自己的实测
   用例（`support-delegate-irreversible`，子集运行），其余标"已写规格"的领域都是设计与文档，
   **不是实测**。✅ 那几行你可以信；📋 那几行请当作起点，在你自己的场景里自行验证。
+- **前提检查只认来源里明写的矛盾。** 它读决策记录、清单文件和对象定义，找的是能否定这条请求的
+  东西；它不会去评判一个自己更喜欢的方案，你的来源保持沉默也不算证据。这一点在所有领域机制相同——
+  测它的三个用例目前只覆盖代码，跟[评测](#评测evals)其余部分一样；[适用领域](#适用领域)里其它
+  领域在这一点上同样只是"已写规格"，不是"已实测"。
+- **Verify 只给指针，不替你跑测试。** 一行 `met` 附带的是 `path:line` 指针，不是一次测试运行——
+  它是审阅者会先看的东西，不能取代 `npm test`。需要跑起来的服务或实时数据才能确认的约束，会
+  报 `not checkable here`，绝不会猜一个 `met`。
 - **L0 的 confidence 是模型自报的。** 当序数看，别当校准值。想要真校准（ECE、Brier）？那是 L2。
 - **自动触发是概率性的。** 每个 harness 都拿你的请求去匹配 skill 的 `description`，没有一个能保证
   命中。要紧的时候就显式调用。

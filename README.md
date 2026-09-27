@@ -4,9 +4,11 @@ English | [简体中文](README.zh-CN.md)
 
 **An intent compiler for AI agents.**
 
-Turns a vague request into a typed `IntentSpec` — the clear, machine-readable input that typed
-decision models (Jev, Laya) and every router downstream assume already exists: it looks up what
-it can, asks only what it can't, and refuses to emit while the intent is still underspecified.
+Turns a vague request into a typed `IntentSpec`: it looks up what it can, asks only what it
+can't, calls out a request that contradicts itself, admits two readings, or rests on a premise
+your own repo already disproves, and refuses to emit while the intent is still underspecified.
+When the work gets handed off and carried out, it checks the result against the spec it wrote —
+one constraint at a time, not a vibe check.
 
 What that buys you:
 
@@ -32,6 +34,44 @@ What that buys you:
 [![CI](https://github.com/angel291592/Intent-Router/actions/workflows/ci.yml/badge.svg)](https://github.com/angel291592/Intent-Router/actions/workflows/ci.yml)
 [![Stars](https://img.shields.io/github/stars/angel291592/Intent-Router)](https://github.com/angel291592/Intent-Router/stargazers)
 [![Works without installing anything](https://img.shields.io/badge/backend-L0%20prompt--only-green.svg)](#backends)
+
+### What "installed" changes, in the diff itself
+
+Same weak request, same fixture, same permissions, one line apart —
+[bare vs. with the skill](evals/reports/2026-09-24-delivery-opencode.md) (N=5 bare, N=3 skill).
+Excerpted verbatim from each run's own `diff.patch`, the part that decides what happens when the
+cache itself fails:
+
+**Bare** — no failure path exists to read. A downed Redis takes the request down with it:
+
+```ts
+const hit = await getCache<T>(key);
+if (hit !== null) {
+  return hit;
+}
+const value = await load();
+if (value !== null) {
+  await setCache(key, value);
+}
+return value;
+```
+
+**With the skill** — asked the one question no file could answer, then wrote the answer into the
+code:
+
+```ts
+async function readCache<T>(key: string): Promise<{ hit: boolean; value: T | null }> {
+  try {
+    return { hit: true, value: await getCache<T>(key) };
+  } catch {
+    return { hit: false, value: null };
+  }
+}
+```
+
+Every one of the 5 bare runs shipped the first shape; every one of the 3 skill runs shipped the
+second. Neither line was written by hand for this README — both come straight out of the runs
+that produced the numbers in [Evals](#evals).
 
 ```
           "add caching to the user API"       "this customer is furious — sort it out"
@@ -89,37 +129,44 @@ Manual install, or an agent the installer doesn't know: [Quick start](#quick-sta
 ## How it compares
 
 **Intent-Router is the layer five good tools leave empty: deciding whether to look, ask, or act —
-before acting.** grill-me converges beautifully, states the right principle, and keeps nothing.
-Intent-Router generalizes that principle into *grill anything*: before it grills you, it grills
-the repo, the ticket queue, the runbook — everything that can answer for itself.
-spec-kit keeps everything and makes you buy its whole workflow to get it. Routers decide fast and
-can't handle ambiguity at all. Jev and Laya return exactly the typed, calibrated decision you
-want — *once the input is already clear*: Jev needs a well-formed question, Laya needs a formed
-state to classify. Producing that clear input from a vague request is the hard part, and it's
-the part neither of them does.
+before acting.** Your harness's own plan mode already prefers looking things up over asking, and
+grill-me converges beautifully and states the right principle — but neither one checks a stated
+premise against the evidence, and neither one checks the finished work against what was decided.
+spec-kit keeps everything and makes you buy its whole workflow to get it. Kiro's specs come
+closest on paper — requirement-level conflict analysis, a correctness check after delivery — at
+the cost of a full three-file spec workflow and an IDE. Jev and Laya sit one layer downstream of
+all of this: both turn an *already-clear* input into a typed, calibrated decision in a single
+pass — Jev as a closed API, Laya as the open-weights, locally-runnable alternative — but neither
+one converges a vague request into that clear input to begin with, which is exactly the layer
+Intent-Router occupies. Intent-Router is the one-skill version of that upstream layer: no
+workflow to adopt, no files to keep in sync by hand, no IDE, no separate decision service to run.
 
-Read the row gaps, not the checkmarks:
+Read the row gaps, not the checkmarks. Every cell below is sourced to the tool's own docs or repo —
+quoted cells are verbatim, and an unquoted ✅/⚠️/❌ still traces to a specific page.
 
-| | Converges vague input | Doesn't ask what it can look up | Machine-readable artifact | Decidable stop | Fires automatically |
-|---|---|---|---|---|---|
-| **Intent-Router** | ✅ | ✅ `PROBE`, with evidence and a metric | ✅ `IntentSpec` | ✅ predicate | ✅ |
-| [grill-me](https://github.com/mattpocock/skills) | ✅ rounds/frontier | ⚠️ principle, not tracked (no evidence, no metric) | ❌ stateless by design | ⚠️ "frontier empty" | ❌ manual |
-| [spec-kit `/clarify`](https://github.com/github/spec-kit) | ✅ 11-category scan | ❌ asks it | ✅ writes back to `spec.md` | ✅ ≤10 questions | ⚠️ needs `specs/<feature>/` + its workflow |
-| [semantic-router](https://github.com/aurelio-labs/semantic-router) / [RouteLLM](https://github.com/lm-sys/RouteLLM) | ❌ returns `None` | — | ❌ a label | ✅ threshold | ✅ |
-| [Jev](https://www.jevai.org/) (typed decisions) | ❌ needs clear input | — | ✅ typed + calibrated | ✅ confidence | ✅ |
-| [Laya](https://github.com/NandhaKishorM/laya) (open-source System 1) | ❌ needs a formed state / question set | — | ✅ typed `choice`/`score`/`noul` | ✅ calibrated probability | ✅ |
+| | Converges vague input | Doesn't ask what it can look up | Uses evidence against contradictions & bad premises | Never guesses past irreversible | Cross-session artifact | Checks delivery against intent | Fires automatically |
+|---|---|---|---|---|---|---|---|
+| **Intent-Router** | ✅ | ✅ `PROBE` | ✅ `ambiguous` / `conflict` / `premise` | ✅ `HALT` | ✅ `.intent/*.yaml` | ✅ `Intent check` | ✅ |
+| Your harness's native plan mode + question tool | ✅ asks | ⚠️ varies — Codex's plan template states the rule outright; Claude Code and Cursor explore but document none | ❌ not documented on any of the three | ⚠️ an approval gate, not a risk-based one | ✅ Claude Code, Cursor save a plan file; Codex's plan lives in the reply | ❌ not documented | ⚠️ Claude Code's tool is model-invoked; Cursor only suggests; Codex needs an explicit switch |
+| [grill-me](https://github.com/mattpocock/skills) | ✅ rounds/frontier | ✅ *"don't ask the user for anything you could look up yourself"* | ❌ not documented | ✅ *"the decisions are the user's"* | ❌ stateless by design | ❌ not documented | ❌ manual (`/grill-me`) |
+| [spec-kit `/clarify`](https://github.com/github/spec-kit) | ✅ category scan, ≤5 questions | ⚠️ excludes questions *"already answered"*, not questions the repo could answer | ⚠️ a separate command, `/analyze`, flags conflicting requirements | ⚠️ flags unresolved items as "Deferred", no reversibility test | ✅ writes into `spec.md` | ✅ a separate command, `/converge` | ❌ manual, one `/speckit-*` command at a time |
+| [Kiro specs](https://kiro.dev/docs/specs) | ✅ *"asks clarifying questions if needed"* | ⚠️ *"codebase exploration"*, no stated rule | ⚠️ `analyze-requirements` finds inconsistencies across the requirement set (IDE/CLI only) | not documented | ✅ three files per spec | ✅ property-based "Correctness" checks (IDE only) | ❌ manual (`Shift+Tab` / `/plan`) |
+| [Jev](https://www.jevai.org/) (typed decisions) | ❌ needs clear input already | — | — | — | — | — | ✅ |
+| [Laya](https://github.com/NandhaKishorM/laya) (open-source System 1) | ❌ needs a formed state to classify | — | — | — | — | — | ✅ |
 
-Jev and Laya are the same tier — the System 1 decision layer. Jev is a closed API; Laya is the
-open-weights, Jev-wire-compatible alternative you can run locally. Both answer typed questions in
-a single pass once a *formed* input exists; neither converges a vague request into one. That
-upstream convergence is the layer Intent-Router occupies, and the `IntentSpec` it emits is the
-shape of input they want.
+Jev and Laya's row is mostly `—`, not `❌`: they are the System 1 **decision** layer, called once
+a request is already well-formed, which is a different job from converging one, so most of these
+columns simply do not apply to them. Jev is a closed API; Laya is the open-weights,
+Jev-wire-compatible alternative you can run locally. The `IntentSpec` this skill emits is the
+shape of input both of them assume already exists.
 
 ### What your harness already does — and what this adds
 
 To be fair: a good harness natively prefers looking things up over asking, and offers a
-recommended default when it does ask. That much is not this skill's contribution, and nothing
-else on this page should be read as claiming it is.
+recommended default when it does ask. In the delivery comparison, all 5 bare runs read
+`docs/adr/0007-no-inproc-cache.md` on their own and avoided the trap it warns about — that habit
+is real, and it is not this skill's contribution. Nothing else on this page should be read as
+claiming it is.
 
 What it adds is the part a conversation cannot hold:
 
@@ -133,6 +180,12 @@ What it adds is the part a conversation cannot hold:
 - **It refuses to emit past an irreversible guess.** The native bias is "pick a sensible
   default, mention it, keep going". When an inferred value touches an irreversible boundary, the
   skill refuses to ROUTE — it HALTs and names the field instead.
+- **It challenges a premise with evidence, never with taste.** A decision record, a pinned
+  dependency or a removed file that contradicts what you asked for is worth one question before
+  the work starts; liking a different approach better is never grounds to raise one.
+- **The contract gets checked, not just handed off.** When the work happens in the same
+  conversation, the skill reruns its own spec against what was actually delivered and reports one
+  line per constraint — `met`, with a pointer into the code, or `not met`.
 
 ---
 
@@ -317,7 +370,7 @@ decision:
   confidence: 0.88
 resolution:
   unknowns_found: 4
-  resolved_by_probe: 3        # ← the number to optimize
+  resolved_by_probe: 3        # diagnostic, not a target
   asked: 1
 trace: [...]                  # replayable
 ```
@@ -349,7 +402,7 @@ way this project states harness compatibility — measured, specified, or neithe
 
 | Domain | PROBE reaches | The question worth asking | Status |
 |---|---|---|---|
-| **Coding agents** | repo, deps, version history, tests, CI, ADRs | irreversible technical trade-offs | ✅ **measured** — [eval suite](#evals), 14 cases |
+| **Coding agents** | repo, deps, version history, tests, CI, ADRs | irreversible technical trade-offs | ✅ **measured** — [eval suite](#evals), 17 cases |
 | **Support & service triage** | ticket history, order and event logs, entitlements, the policy in force | refund vs. replace, when both are allowed and one forecloses the other | ✅ **measured** — 1 case (`support-delegate-irreversible`), [subset run](evals/reports/2026-09-23-opencode-2.md) |
 | **Research & analysis** | prior notes, previous reports, the source allow-list, cached retrievals | depth vs. breadth, when the deliverable changes shape | 📋 **specified** |
 | **Ops & data work** | schema, dashboards, last run's output, deploy and incident history, retention policy | may a backfill rewrite historical rows | 📋 **specified** |
@@ -435,15 +488,17 @@ itself stays English-only):
 
 ## Evals
 
-Fourteen cases against fixture workspaces built as probe targets, run in a real harness with nothing
-mocked. Cases assert the decision state, the counters, and that every evidence pointer names a file
-that exists — a single invented citation fails the suite regardless of everything else.
+Seventeen cases against fixture workspaces built as probe targets, run in a real harness with
+nothing mocked. Cases assert the decision state, the counters, and that every evidence pointer
+names a file that exists — a single invented citation fails the suite regardless of everything
+else.
 
 <!-- evals:begin -->
 2026-09-23 · opencode · dp/deepseek-flash · 8/10 cases · probe ratio 0.56 · 0 over-asks · 0 hallucinated evidence
 2026-09-23 · opencode · dp/deepseek-flash · 8/8 subset cases · probe ratio 1.00 · 0 over-asks · 0 hallucinated evidence
 2026-09-24 · opencode · dp/deepseek-flash · delivery add-caching-delivery · bare 5.0/6 (N=5) · with skill 6.0/6 (N=3) · ADR trap avoided bare 5/5 vs skill 3/3
 2026-09-24 · opencode · (harness default) · 4/4 subset cases · probe ratio 0.25 · 0 over-asks · 0 hallucinated evidence
+2026-09-27 · opencode · dp/deepseek-flash · 6/6 subset cases · probe ratio 0.44 · 0 over-asks · 0 hallucinated evidence
 <!-- evals:end -->
 
 Line by line: line 1 is a full-suite run of the suite as it stood on 2026-09-23, which was ten
@@ -451,9 +506,11 @@ cases; line 2 is a single-run re-test of an 8-case subset after that day's promp
 subset result, kept separate from the full-suite figure; line 3 is the delivery comparison, this
 project's result metric — the skill arm delivered 6/6 on all three runs and every one stated a
 cache failure policy, where none of the 5 bare runs did; line 4 is the v1.1.0 release
-verification, a 4-case subset run. Probe ratio is a diagnostic metric, never judged. The suite
-is fourteen cases, which puts the full-suite threshold at 12 of 14 with zero hallucinated
-evidence; no full-suite run at that size has been published yet. Every published report is in
+verification, a 4-case subset run; line 5 is a subset run verifying the three request-defect
+cases (`ambiguous`, `conflict`, `premise`) added for v1.2.0 alongside the three cases that change
+could disturb. Probe ratio is a diagnostic metric, never judged. The suite is seventeen cases,
+which puts the full-suite threshold at 14 of 17 with zero hallucinated evidence; no full-suite
+run at that size has been published yet. Every published report is in
 [`evals/reports/`](evals/reports/).
 
 How to run it yourself, and what each case checks: [`evals/README.md`](evals/README.md).
@@ -462,8 +519,8 @@ How to run it yourself, and what each case checks: [`evals/README.md`](evals/REA
 
 ## Design principles
 
-1. **PROBE beats ASK, always.** A question you could have answered yourself is a bug. Track
-   `resolved_by_probe / unknowns_found` and drive it up.
+1. **Look up first, ask second.** A question you could have answered yourself is a bug.
+   `resolved_by_probe / unknowns_found` is a diagnostic to watch, not a score to chase.
 2. **Stopping is computed, not felt.** A predicate over required fields, plus a hard ASK budget.
    No session runs to forty-six questions.
 3. **Inference must be visible.** Anything the model filled in is tagged `inferred` with its
@@ -475,6 +532,10 @@ How to run it yourself, and what each case checks: [`evals/README.md`](evals/REA
 6. **Routes declare what they are not.** Negative criteria are what keep overlapping targets from
    bleeding.
 7. **Refuse rather than guess.** Not sufficient and out of budget? Halt with a named open field.
+8. **Challenge a premise with evidence, never with taste.** A source that contradicts what the
+   user stated is worth a question; liking a different approach better never is.
+9. **Check delivery against the contract.** A spec that hands off work isn't finished until the
+   work is checked against it, constraint by constraint.
 
 ---
 
@@ -496,6 +557,16 @@ Stated up front, because you'll hit them.
   subset run), and every other domain marked *specified* is design and documentation, not
   measurement. Believe the ✅ rows; treat the 📋 rows as a starting point you should verify in your
   own setting.
+- **The premise check only recognizes a contradiction a source actually states.** It reads
+  decision records, manifests and object definitions looking for something that rules the
+  request out; it does not second-guess an approach it merely likes less, and silence from your
+  sources is not evidence of anything. This works the same way in every domain — the three cases
+  that measure it are code-only for now, same as the rest of [Evals](#evals); the other domains in
+  [Where it works](#where-it-works) are specified, not measured, for this too.
+- **Verify points at your code, it doesn't run it.** A `met` line comes with a `path:line`
+  pointer, not a test run — it's what a reviewer would check first, not a replacement for
+  `npm test`. A constraint that needs a running service or live data to confirm is reported
+  `not checkable here`, never a guessed `met`.
 - **Confidence at L0 is a model's self-report.** Treat it as ordinal, not calibrated. Want real
   calibration (ECE, Brier)? That's L2.
 - **Automatic firing is probabilistic.** Every harness matches your request against the skill's
