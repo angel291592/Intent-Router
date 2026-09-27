@@ -2594,6 +2594,20 @@ def selftest() -> int:
     expect("a trailing question is a question", looks_like_question("Sure.\n\nWhich strategy should I use?"))
     expect("an option list is a question", looks_like_question("Options:\n\n- A) stale\n- B) uncached\n- C) hybrid"))
     expect("a plain statement is not", not looks_like_question("Done. The cache is in place."))
+    # The 2026-09-27 prompt-arm shape: a preamble event, then a final message
+    # that asks. The question check must see the final message.
+    two_texts = "\n".join(
+        json.dumps({"type": "text", "part": {"type": "text", "text": body}})
+        for body in (
+            "I'll explore the repository to understand its conventions first.",
+            "Four things the repo does not settle.\n\nWhich way do you want each of these?",
+        )
+    ) + "\n"
+    expect(
+        "a question in the final message of a multi-text run is seen as a question",
+        looks_like_question(final_reply(two_texts))
+        and not looks_like_question(extract_spec(harness_texts(two_texts))[2]),
+    )
 
     print("report rendering")
     results = [
@@ -3090,6 +3104,18 @@ def workspace_has_diff(workspace: Path, base_sha: str) -> bool:
     return done.returncode != 0
 
 
+def final_reply(stdout: str) -> str:
+    """The last assistant text of one harness run.
+
+    extract_spec returns the FIRST text of a run that emits no fence, which for
+    opencode is usually a preamble ("I'll explore the repository first"); a
+    question sits in the final message. The raw stdout blob, which
+    harness_texts appends last, is skipped the same way extract_spec skips it.
+    """
+    texts = [t for t in harness_texts(stdout) if not t.lstrip().startswith("{")]
+    return texts[-1] if texts else ""
+
+
 def looks_like_question(text: str) -> bool:
     """Heuristic for a bare-arm reply that ends by asking the user something.
 
@@ -3502,7 +3528,10 @@ def run_delivery_once(
                 # loaded. Not a behaviour verdict; rerun, and stop after two.
                 skill_not_loaded = True
                 break
-            asked = (state == "ASK") or (state is None and looks_like_question(text))
+            # Judge the final message: on 2026-09-27 the prompt arm ended its
+            # first session with four questions, but the check read the
+            # session's opening line, so the scripted user never answered.
+            asked = (state == "ASK") or (state is None and looks_like_question(final_reply(stdout)))
             if asked and answers_used < int(case["max_answers"]):
                 prompt = str(case["answer_when_asked"])
                 answers_used += 1
