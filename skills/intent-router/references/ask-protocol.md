@@ -37,7 +37,9 @@ rather than asking the user to pick a letter again.
    something the user already told you: a rule they stated is an `explicit` constraint, and
    re-opening it to distinguish sub-cases they did not distinguish ("you said serve uncached on
    invalidation failure — did you mean serve stale until the TTL, or bypass the cache?") is the
-   same defect wearing a more diligent-looking hat.
+   same defect wearing a more diligent-looking hat. The only exceptions are the conflict and
+   premise issues in the main instructions (section 3), where the stated constraint collides with
+   another stated constraint or with a source you opened.
 6. **Do not ask about implementation detail.** Which variable name, which file to put a helper in,
    which loop shape: those belong to whoever executes.
 7. **Ask in the user's language.** Spec keys stay English; the question text and option text use
@@ -72,6 +74,64 @@ When the user answers "you decide", "whatever you think", "your call", "up to yo
 more, and count that second ask against the budget. If it is declined again, halt with
 `cause: underspecified` and name the field. Guessing on behalf of a user who declined to choose is
 the failure mode this design exists to prevent.
+
+## Questions for the three issues
+
+The main instructions (section 3) name three defects in the request itself — `ambiguous`,
+`conflict` and `premise`. Each is asked before any other unknown and uses the same template; what
+changes is what the options are. The open unknown carries the matching `issue` value, so a reader
+can tell a defect in the request from ordinary missing information.
+
+- **`ambiguous`** — the options are the **readings** of the request, each a different
+  deliverable, never ways to carry out a reading you already picked. The unknown carries
+  `issue: ambiguous`.
+- **`conflict`** — the options say **which stated constraint yields**. Name both constraints in
+  the question, in the user's words. The unknown carries `issue: conflict`.
+- **`premise`** — option A goes ahead **as the source says**, and is usually the recommendation;
+  option B goes ahead **as stated**, accepting the risk the source records. `why_human` names the
+  source by its pointer. The unknown carries `issue: premise`, and the contradicting fact is
+  already a `probed` constraint whose evidence is that pointer.
+
+**Good** — `ambiguous`, after the ticket queue showed both kinds of work waiting:
+
+> "Handle the refund backlog" can mean two different jobs — which one do you want?
+>
+> Why you, not me: the queue holds refunds to issue and customers waiting for an answer, and
+> nothing in it says which one you meant; the two readings are different work.
+>
+> Recommended: B — a status reply is reversible and unblocks every waiting customer today, while
+> an issued refund cannot be taken back.
+>
+> A. Issue the pending refunds.
+> B. Reply to each waiting customer with the status and a date, and issue nothing yet.
+
+**Good** — `conflict`:
+
+> You asked to delete inactive accounts after 30 days and to keep every account's data for a year
+> for audits — the same records cannot do both. Which should give way?
+>
+> Why you, not me: both are your stated constraints, and a deleted record cannot be restored for
+> the audit.
+>
+> Recommended: A — it keeps both promises that can still be kept, and nothing is lost.
+>
+> A. Keep the audit year: deactivate at 30 days, delete the data after a year.
+> B. Keep the 30 days: delete everything at 30 days and drop the audit retention.
+
+**Good** — `premise`, after the decision record turned up while probing:
+
+> The request asks for an in-process LRU cache, but the project's decision record says one was
+> added, served stale data across replicas and was reverted. Should I follow the decision record,
+> or build what you asked for?
+>
+> Why you, not me: going against a recorded decision is its owner's call —
+> `docs/adr/0007-no-inproc-cache.md#decision` reads "No in-process caching in this service".
+>
+> Recommended: A — the shared Redis client already exists, and your TTL, size and invalidation
+> rules carry over unchanged.
+>
+> A. Follow the decision record: cache through the shared Redis client with your other rules.
+> B. Build the in-process LRU cache as stated, accepting stale reads across replicas.
 
 ## Good and bad questions
 

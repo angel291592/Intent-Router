@@ -354,7 +354,7 @@
         "inferred",
         "ask_budget"
       ],
-      "description": "The run's own scorecard. resolved_by_probe / unknowns_found is the number to push up: every question that could have been looked up and was asked anyway is a defect.",
+      "description": "How each unknown of this run closed. A diagnostic, not a score to push up: an honest question beats a stretched lookup, though a question whose answer could have been looked up is still a defect.",
       "properties": {
         "unknowns_found": {
           "type": "integer",

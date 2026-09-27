@@ -1,18 +1,17 @@
 ---
 name: intent-router
 description: >-
-  Converges an underspecified request into a typed IntentSpec before any planning,
-  routing or acting starts. Use when the user asks to implement, add, change, refactor,
-  fix, migrate, configure, handle, triage, sort out, look into or decide something and
-  the request leaves decisions open (which objects, which approach, what happens on
-  failure, which trade-off) — in a codebase, a ticket queue, a research brief or an ops
-  runbook — or when the user says "clarify the intent", "what do you need from me", or
-  invokes intent-router. Looks up answers in whatever sources it can reach (code, deps,
-  version history, tests, CI, docs, or a ticket log, an order record, entitlements, the
-  policy in force) before asking the human; asks only preference or irreversible
-  questions, one at a time, with a recommended default; halts instead of guessing. Do
-  not use for explaining existing state ("what does X do", "why is Y slow"), or for a
-  task whose objects, approach and failure behaviour are already stated.
+  Converges an underspecified request into a typed IntentSpec before planning or acting. Use when
+  the user asks to implement, add, change, refactor, fix, migrate, configure, handle, triage, sort
+  out, look into or decide something and the request leaves decisions open (which objects, which
+  approach, what happens on failure, which trade-off), contradicts itself, admits two readings, or
+  rests on an approach its sources may rule out — in a codebase, a ticket queue, a research brief
+  or a runbook — or when the user says "clarify the intent", "what do you need from me", or
+  invokes intent-router. Looks up what its sources hold (code, history, decision records, a ticket
+  log, an order record, the policy in force) before asking; asks only preference or irreversible
+  questions, one at a time, with a recommended default; halts instead of guessing; checks the
+  delivered work against the spec. Silent on a fully stated task its sources do not contradict.
+  Not for explaining existing state ("what does X do", "why is Y slow").
 license: MIT
 metadata:
   version: "1.1.0"
@@ -45,8 +44,8 @@ Do not start when:
 
 - the request asks you to explain existing state ("what does X do", "why is Y slow") rather than
   to find something out and produce a deliverable;
-- the silence check below passes — the request already states every decision-bearing item, so
-  there is nothing to converge;
+- the silence check below passes and its premise check finds no contradiction — the request
+  already states every decision-bearing item, so there is nothing to converge;
 - the request is trivially scoped and reversible (fix a typo, bump a patch version).
 
 **The silence check.** Run it once, against the request text alone, before probing anything. The
@@ -64,9 +63,16 @@ request is fully specified when all four hold:
    **A parameter the work must use is not a done condition** — a TTL, a limit or a response shape
    bounds the work without saying when it is done, and naming one does not close this item.
 
-If all four hold, **do not run**: emit no spec, no fenced block, no announcement that you
-considered this skill — treat the request as ordinary and carry it out directly. A spec emitted
-after a passed silence check is a false positive, costing the user more than this skill saves.
+If all four hold, make **one premise check** before staying out of the way: at most two lookups,
+aimed at the sources most likely to rule out what the request states — a decision record or
+history entry about the named approach, the manifest entry for a named dependency, the definition
+of a named object. If nothing you open contradicts the request, **do not run**: emit no spec, no
+fenced block, no announcement that you considered this skill or checked anything — treat the
+request as ordinary and carry it out directly. A spec emitted after a passed silence check is a
+false positive, costing the user more than this skill saves. If a source you opened does
+contradict it — the approach was tried and reverted, the dependency is pinned or removed, the
+object does not exist — run, with that contradiction as a `premise` issue (section 3). An
+approach you merely like better is never a contradiction.
 
 If any one of the four is unstated, run — and do not downgrade an unstated item to "inferable"
 because a plausible default exists: if the user had to be trusted with the outcome, or the
@@ -96,19 +102,13 @@ treat the text after the name as the request.
   constraint needed to act without guessing.
 - **inferred** — a value the model supplied itself. Always visible, always evidenced, always
   cheap for the user to veto in one line.
-- **evidence** — a pointer to where a value came from. It is always a **single token with no
-  whitespace**, in one of these forms only: `path`, `path:line`, `path:line-line`,
-  `path#heading`, `git:<short-sha>`, `git:#<pr-number>`, the reserved `user:delegated` used
-  when the user handed a decision back, `record:<system>/<id>`, or `doc:<slug>#<section>`.
-  Nothing else is evidence. Sources that are not files use the reserved namespaces:
-  `record:<system>/<id>` for a record in a system of record, `doc:<slug>#<section>` for a document
-  section that has no path. They are pointers, not prose: still one token, still no whitespace, and
-  still naming something you actually opened. In particular the repository root (`.`), any path
-  under `.git/`, `.claude/`, `.agents/` or `.intent/`, the harness config file, and — most of all —
-  a reasoning sentence ("correctness requirement…", "delegated by symmetry with…") are **not**
-  evidence: they are not pointers, they contain spaces, and they must not be put in the `evidence`
-  field. Put that justification in the constraint `text` instead. A value that does not match one of
-  the forms above is a defect even if the thing it names exists.
+- **evidence** — a pointer to where a value came from: one **token with no whitespace**, naming
+  something you actually opened, in one of these forms only: `path`, `path:line`, `path:line-line`,
+  `path#heading`, `git:<short-sha>`, `git:#<pr-number>`, `user:delegated` (a decision handed back),
+  `record:<system>/<id>` (a record in a system of record) or `doc:<slug>#<section>` (a section with
+  no path). Not evidence: the repository root (`.`), paths under `.git/`, `.claude/`, `.agents/`
+  or `.intent/`, the harness config file, and above all a reasoning sentence — that goes in the
+  constraint `text`. Anything else is a defect, even if the thing it names exists.
 - **probe surface** — a place in the workspace where objective answers live: manifests, route
   definitions, configuration, tests, CI, version history, decision records.
 - **ASK budget** — the hard cap on questions for one request. Default **3**.
@@ -125,13 +125,15 @@ Produce a draft spec. Do not emit it, do not act on it.
    `migrate_auth`, `rate_limit_signup`.
 3. List what the intent acts on in `objects` — files, endpoints, modules, jobs, records. If the
    request does not name them, leave it empty for now; this is an unknown, not a licence to pick.
-4. Copy every constraint the user stated into `constraints` with `source: explicit`. A constraint
-   the user stated is never re-derived and never questioned.
+4. Copy every constraint the user stated into `constraints` with `source: explicit`. A stated
+   constraint is never re-derived, and it is questioned for one of two reasons only — it collides
+   with another stated constraint, or a source you opened contradicts it (the `conflict` and
+   `premise` issues below) — never to split it into sub-cases the user did not distinguish.
 5. Enumerate the unknowns. Each gets a stable `field` name, a `category` from the table below, and
    a judgement: **decision-bearing or not**. In the emitted spec an unknown item carries exactly
-   `field`, `kind`, and optionally `category` and `note` — never a `decision_bearing` flag, a
-   free-form `detail`, or any other key; the judgement itself is expressed by keeping the item out
-   of `unknown` when it is not decision-bearing.
+   `field`, `kind`, and optionally `category`, `issue` and `note` — never a `decision_bearing`
+   flag, a free-form `detail`, or any other key; the judgement itself is expressed by keeping the
+   item out of `unknown` when it is not decision-bearing.
 
 | category | the question it asks | example in code | example outside code |
 |---|---|---|---|
@@ -152,14 +154,29 @@ request **does** state the failure rule, that is an `explicit` constraint and ne
 Re-opening a stated rule to distinguish sub-cases the user did not distinguish is the over-asking
 this skill exists to remove.
 
+**Three defects that filling in cannot fix.** Check the request for these before resolving
+anything; each one found becomes an `ask` unknown carrying `issue`, asked before any other
+unknown, because these are what the user would veto the work over.
+
+- `ambiguous` — the request reads two ways that change the deliverable, and no source settles
+  which ("make it cheaper for mobile": fewer bytes, or fewer requests). Look first — an inventory
+  often settles it; if it does not, the options are the readings, not ways to carry out one.
+- `conflict` — two things the user stated cannot both hold ("cache it", "always serve the latest
+  write", "add no invalidation"). The options say which one yields.
+- `premise` — a source you opened contradicts something the user stated: the approach was tried
+  and reverted, a named dependency is pinned or removed, a named object does not exist. It
+  surfaces while probing. Keep the user's words as the `explicit` constraint, add the
+  contradicting fact as a `probed` constraint with its evidence, and ask whether to go ahead as
+  stated or as the source says.
+
+In no-ask mode an `ambiguous` or `conflict` issue halts with `cause: underspecified`: choosing a
+reading is choosing *what*, which inference never may. A `premise` issue does not halt: the
+user's words decide, the unknown closes as an `inferred` constraint whose evidence is the
+contradicting source, and one sentence after the fence names the contradiction — unless going
+ahead as stated crosses an irreversible boundary, which halts.
+
 Unknowns that are **not** decision-bearing do not enter Pass 2. Note them in `trace` and move on;
 resolving them is the executor's job, not a reason to spend a question.
-
-`resolution.unknowns_found` counts **every decision-bearing unknown identified in Pass 1**,
-including the ones later closed by probe, answer or inference — it is not the count of what is
-still open at emit time (that is `len(unknown)`). It must hold that `unknowns_found =
-resolved_by_probe + asked + inferred + len(unknown)`; under-count the unknowns you already
-resolved and the scorecard stops balancing.
 
 ## 4. Pass 2 — Resolve
 
@@ -176,14 +193,11 @@ user. A question whose answer was sitting in the workspace is a defect, not a co
 
 ### 4.2 PROBE
 
-Name the sources first. A code workspace → the surfaces below. Anything else — a ticket queue,
-a records system, a policy archive, a notes collection, a candidate registry — load
-`references/domains.md` and use its table for that domain. The order below is the code instance
-of the iron law, not the general rule.
-
-Use whatever file-reading, search, or shell capability your environment provides; consult
-version-control history if your environment exposes it. If it exposes nothing, see *degraded*
-below — an absent capability is a fact about the environment, never a gap in the request.
+Name the sources first. A code workspace → the surfaces below; anything else (a ticket queue, a
+records system, a policy archive, a notes collection, a candidate registry) → load
+`references/domains.md` and use that domain's table. Use whatever file-reading, search, or shell
+capability your environment provides, version-control history included; if it exposes none, see
+*degraded* below: an absent capability is a fact about the environment, never a gap in the request.
 
 Work the probe surfaces in this order, stopping as soon as the unknown is settled:
 
@@ -197,15 +211,10 @@ Work the probe surfaces in this order, stopping as soon as the unknown is settle
 4. **Configuration, constants and environment templates** — values that are conventions, not
    opinions.
 5. **Tests and CI configuration** — the contract that is already enforced.
-6. **Version history** — recent commits, reverts and pull-request numbers, which carry the reasons
-   a current file cannot show. A version history your harness reaches through a shell command is
-   still a surface here: attempt the command once before declaring it unavailable, and record the
-   attempt in `trace` — never assume the capability away, or a `git:` pointer becomes impossible
-   to emit and a `degraded` cause becomes easy to invent. **If no shell capability answers, the
-   history is still on disk as files** — the log of reference updates, the stored commit message —
-   so read it there before calling the lookup failed. Whichever route reached it, the evidence is
-   the commit or pull-request pointer (`git:<short-sha>`, `git:#<number>`), never a path inside
-   the history store.
+6. **Version history** — commits, reverts and pull-request numbers carry reasons no current file
+   shows. Through a shell, try the command once before calling it unavailable and record the try
+   in `trace`; with no shell, read the history files on disk (reference log, stored commit
+   message). Evidence is `git:<short-sha>` or `git:#<number>`, never a path in the history store.
 
 Decision records, changelogs, and any agent instruction file the project ships are covered in
 `references/probe-surfaces.md`, together with the surfaces for other ecosystems.
@@ -221,17 +230,10 @@ comment, config value or record field naming a pull-request number, "revert", "p
 **reserved history query**, outside the 3-action budget, then stop; if the reason is still
 missing, reclassify it `ask` (full rule in `references/probe-surfaces.md`).
 
-**Every probed value carries evidence.** An unsourced claim about a workspace is indistinguishable
-from a guess, so `constraints` entries with `source: probed` or `source: inferred` must have an
-`evidence` pointer. One pointer per field: a single `path`, `path:line`, `path#heading` or
-`git:` reference — never comma-join two locations into one field; name the second location in
-its own constraint or its own trace entry. While probing, also record facts you were not looking
-for when they constrain the work — a reverted approach or a pinned version is exactly the
-constraint nobody remembers.
-
-Every entry in `objects` you established by probing rather than by the user naming it carries the
-pointer to where you established it, in a constraint or in a `trace` step. An object nobody can
-trace back to the definition that proves it exists is exactly the guess this pass prevents.
+**Every probed value carries evidence.** A `probed` or `inferred` constraint needs an `evidence`
+pointer — one per field, never two locations comma-joined (give the second its own constraint or
+trace entry). Record facts you were not looking for when they constrain the work — a reverted
+approach, a pinned version — and give every object you established by probing its pointer too.
 
 **Degraded.** When a probe fails for an environmental reason — no capability, a command error, a
 timeout — record it in `trace` as a failed lookup and keep the field's `kind: probe`. If the run
@@ -239,12 +241,10 @@ ends without enough information and the cause is failed lookups rather than an u
 request, halt with `cause: degraded` and an `error` that names what failed. Never present a broken
 environment as a vague request, or the reverse.
 
-**An empty probe surface is not the same as a failed lookup.** `degraded` means a lookup was
-*attempted and failed*. When the workspace simply has nothing to look up — an empty repository, a
-request that names no existing code — nothing failed, so `degraded` is the wrong cause. Reclassify
-the affected unknown as `kind: ask` and ASK: a person can still answer "what should this become",
-which is exactly the information the missing workspace cannot supply. HALT `degraded` is reserved
-for lookups that broke, never for surfaces that were never there.
+**An empty probe surface is not a failed lookup.** `degraded` means a lookup was *attempted and
+failed*; an empty repository, or a request that names no existing code, failed nothing. Reclassify
+the affected unknown as `kind: ask` and ASK: a person can still say what this should become, which
+is exactly what the missing workspace cannot supply.
 
 ### 4.3 ASK
 
@@ -254,7 +254,8 @@ Only for answers that live in a person's head, or decisions that cannot be walke
 the work over first — an observable behaviour or contract (what happens on failure, what the
 response looks like, what is in scope) before internal placement (which layer, which file, which
 module), because internal placement is the executor's call and may dissolve once the behavioural
-answer is known. Never pick a question for being easy to answer.
+answer is known. Never pick a question for being easy to answer. The three issues in section 3
+come before all of these.
 
 **What is never worth a question** — internal structure: which layer or file hosts the logic,
 which function names to use, how to organise the code. These are reversible implementation
@@ -282,16 +283,11 @@ user's own words or the workspace state it; otherwise ASK.
     restatements of the question, and not "other".
   - A free-form answer of up to five words is always acceptable; interpret it against the options.
 
-- **Delegation.** If the user answers "you decide", "whatever", "your call", take the recommended
-  option and record the constraint with `source: inferred` and `evidence: user:delegated` — a
-  reserved token, not a sentence, because evidence is always a single whitespace-free token and a
-  human-readable justification belongs in the constraint `text`. If that constraint is
-  `irreversible: true`, do not accept the delegation: restate the risk in one sentence and ask once
-  more. That second ask counts against the budget.
-- **Language.** Ask in the language the user wrote in — this is a hard rule, not a stylistic
-  preference: an English request gets an English question, even if the workspace you probed is
-  in another language or your runtime environment has its own language instructions. Spec keys
-  stay English; values may be in the user's language.
+- **Delegation.** On "you decide", "whatever", "your call", take the recommended option and record
+  it with `source: inferred` and `evidence: user:delegated` — unless it is `irreversible: true`:
+  then restate the risk in one sentence and ask once more, which counts against the budget.
+- **Language.** Ask in the language the user wrote in — a hard rule, whatever language the
+  workspace or your runtime instructions use (section 6, check 3). Spec keys stay English.
 - **When the budget is exhausted** and the spec is still not sufficient, stop asking and halt with
   `cause: underspecified`. Do not squeeze in "one more" question, and do not paper over the gap
   with a guess.
@@ -311,6 +307,7 @@ Then exactly one of three outcomes:
 - **ROUTE** — sufficient. Emit the complete IntentSpec with `decision.state: ROUTE` and a
   `target`: `implement`, `plan`, `research`, `respond`, `escalate`, `prototype`, or whatever
   the user named. State the hand-off and stop; do not start implementing inside this skill.
+  When the handed-off work is then carried out in this conversation, verify it (below).
 - **ASK** — not sufficient and the budget still allows a question. Emit the current spec snapshot
   with `decision.state: ASK` and `decision.question` set to the one question you are asking, then
   the question itself, then wait. The unresolved field stays in `unknown` and `resolution.asked`
@@ -323,13 +320,27 @@ Then exactly one of three outcomes:
   merged: one is the user's next move, the other is an operations signal. **Underspecified is not
   a halt while a question is still possible**: if an askable unknown remains and the budget allows
   a question, the outcome is ASK, not HALT. HALT `underspecified` is reserved for when asking is
-  impossible — no-ask mode, or the budget already spent. An empty or missing workspace never makes
-  a request underspecified: nothing failed, nothing dangles on the user's side, and a person can
-  still say what this should become — precisely what an absent workspace cannot supply. So ASK.
+  impossible — no-ask mode, or the budget spent. An empty workspace is ASK, never HALT (see 4.2).
 
 A spec that reaches ROUTE with an `inferred` constraint in it is fine — that is the design, and it
 is why inferred values are visible. A spec that reaches ROUTE with an inferred *irreversible*
 constraint is a bug.
+
+### After the hand-off: verify
+
+When the work a ROUTEd spec handed off is carried out in this same conversation, verify it before
+reporting it done. Reread the saved spec (or the fenced block, if it could not be saved) and check
+the finished work against every constraint that says what the work must or must not do. Report
+one line per constraint, after the work summary, under a line reading exactly `Intent check` —
+that line stays in English whatever the language; the lines under it use the user's language:
+
+- **met** — with the one pointer (`path:line`) where the delivered work satisfies it;
+- **not met** — then fix it before reporting, or say why it stays unmet;
+- **not checkable here** — with the reason (it needs a running service, a person, live data).
+
+Never mark a constraint met without a pointer into the delivered work. The check reads the spec;
+it does not reopen it — a decided constraint is checked, not asked again. It writes nothing to
+`.intent/`.
 
 ## 6. Output format
 
@@ -389,17 +400,17 @@ trace:
     detail: handing off to implement
 ```
 
-`confidence` is a self-reported ordinal, not a calibrated probability. `resolution` is the
-scorecard: `resolved_by_probe / unknowns_found` is the number to drive up, and it must hold that
-`unknowns_found = resolved_by_probe + asked + inferred + len(unknown)`.
+`confidence` is a self-reported ordinal, not a calibrated probability. `resolution` records how
+each unknown closed; it is a diagnostic, not a score to push up — an honest question beats a
+stretched lookup, and `unknowns_found = resolved_by_probe + asked + inferred + len(unknown)` must
+hold.
 
-Before emitting, reread the block you are about to send and check it against these three. Each is
-mechanically checkable against the block itself, so a reviewer will catch whichever one you skip.
+Before emitting, reread the block you are about to send and check it against these three:
 
 1. **Counts, by attribution and not from memory.** Walk the decision-bearing unknowns you listed
    in Pass 1, plus any the probing turned up, and attribute each one to exactly one outcome:
    closed by a lookup, closed by an answer the user gave, closed by a value you supplied, or still
-   open. Those four outcomes partition `unknowns_found`, which is why
+   open. Those four outcomes partition `unknowns_found`, which counts the closed ones too, so
    `unknowns_found = resolved_by_probe + asked + inferred + len(unknown)` holds.
    **Count unknowns, not constraints.** Two probed constraints that together settle one unknown
    add 1 to `resolved_by_probe`, not 2; a fact you recorded while probing because it constrains
@@ -446,55 +457,39 @@ decision:
 
 **Every emitted spec is also saved.** Before replying, write it to `.intent/<intent>.intent.yaml`
 — on ASK, ROUTE and HALT alike, replacing this request's earlier snapshot — and touch no other
-file for it; the fenced block still goes in the reply. Nothing is written when the silence check
-passed, and a workspace you cannot write to gets one sentence after the fence, never a halt.
+file for it; the fenced block still goes in the reply. Nothing is written when you stay silent
+(section 1), and a workspace you cannot write to gets one sentence after the fence, never a halt.
 Field-by-field documentation, the cross-field invariants and the file convention are in
 `references/intentspec.md`; the machine-checkable contract is `schema/intentspec.schema.json`.
 
 ## 7. Ungrillable questions
 
 Some questions cannot be resolved by probing *or* asking, because the user cannot answer them in
-the abstract either: "make it feel modern", "make the onboarding delightful", "pick a nicer
-layout". The signature is an aesthetic or experiential target with no observable acceptance
-criterion, where every option sounds acceptable in prose.
-
-**Recognise this before spending probe budget, not after.** When the request's goal is aesthetic or
-experiential, name it ungrillable in Pass 1 and route or halt on that basis immediately — do not
-first run several rounds of probing hoping the target will become objective. Deep probing an
-aesthetic target does not converge; it only burns the budget and delays the answer. The signature
-is checkable in one pass: if no conceivable file in the workspace could name an acceptance
-criterion for the goal, the goal is ungrillable.
-
-Do not spend questions on these. Name the ungrillable field, say that it needs something to react
-to rather than another round of discussion, and hand off to a throwaway artifact the requester can
-react to — a prototype or mock in code, a draft reply, one sample record, a single example layout —
-as the `target` — or halt with the field listed in `open_fields`. Either way, never quietly pick a
-direction and present it as the user's intent.
+the abstract either ("make it feel modern", "make the onboarding delightful"): the signature is an
+aesthetic or experiential target with no observable acceptance criterion, which no conceivable
+file in the workspace could name. **Recognise this in Pass 1, before spending probe budget** —
+probing it never converges, and it is not worth a question either. Name the ungrillable field,
+say it needs something to react to rather than more discussion, and hand off to a throwaway
+artifact as the `target` — a prototype or mock in code, a draft reply, one sample record — or halt
+with the field in `open_fields`. Never quietly pick a direction and present it as the user's intent.
 
 ## 8. Anti-patterns
 
-1. Asking something the workspace could have answered. This is the iron law; treat a violation as
-   a bug, not a style preference.
+1. Asking what the workspace could answer: treat a violation as a bug, not a style preference.
 2. Batching questions, or previewing the questions you might ask next.
 3. Reporting a failed lookup as missing information, or an underspecified request as a failure.
 4. A `probed` or `inferred` constraint with no `evidence`.
 5. Continuing to ask after the budget is spent, or substituting a guess for a halt.
 6. Starting to implement inside this skill instead of handing off at ROUTE.
-7. Running at all for a question, an explanation, or an already fully specified task.
-8. Passivity: the user keeps agreeing, and the run keeps grinding forward instead of noticing that
-   the spec became sufficient two answers ago. Converge and route.
+7. Running for a question, an explanation, or a fully specified task its sources do not contradict.
+8. Passivity: the run grinds on while the user keeps agreeing. Converge and route once sufficient.
 
 ## 9. References
 
 Load on demand; each is self-contained.
 
-- `references/probe-surfaces.md` — the full probe surface list per ecosystem, evidence formats,
-  budget and degraded examples.
-- `references/ask-protocol.md` — question templates, good versus bad questions, delegation,
-  budget overrides, language rules.
-- `references/intentspec.md` — every field explained, the cross-field invariants, the five
-  worked examples, the `.intent/` file convention.
-- `references/domains.md` — probe surfaces and typical questions outside code, plus the negative
-  criteria pattern for routing registries.
-- `references/harness-compat.md` — which agent environments load this skill, from where, and how
-  to invoke it explicitly.
+- `references/probe-surfaces.md` — probe surfaces per ecosystem, evidence formats, degraded cases.
+- `references/ask-protocol.md` — question templates and examples, delegation, budgets, language.
+- `references/intentspec.md` — every field, the invariants, the worked examples, `.intent/` files.
+- `references/domains.md` — probe surfaces and questions outside code, routing-registry criteria.
+- `references/harness-compat.md` — which environments load this skill, from where, how to invoke.

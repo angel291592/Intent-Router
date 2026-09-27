@@ -47,6 +47,7 @@ matters.
 | `field` | yes | Stable name, reusable verbatim in `decision.open_fields`. |
 | `kind` | yes | `probe` (an objective answer exists) \| `ask` (only a person can answer). |
 | `category` | no | Same six categories. |
+| `issue` | no | `ambiguous` \| `conflict` \| `premise`. Set when the unknown is a defect in the request itself rather than missing information: two readings (`ambiguous`), two stated things that cannot both hold (`conflict`), or a stated thing a source contradicts (`premise`). Absent means ordinary missing information. |
 | `note` | no | Why it is still open. |
 
 A `kind: probe` entry surviving into a halt is a statement about the environment: the answer
@@ -71,10 +72,19 @@ a user-facing message.
 
 ## `resolution`
 
-Five integers: `unknowns_found`, `resolved_by_probe`, `asked`, `inferred`, `ask_budget`.
+Five integers: `unknowns_found`, `resolved_by_probe`, `asked`, `inferred`, `ask_budget`. They
+record how each unknown closed; `resolved_by_probe / unknowns_found` is a diagnostic, not a score
+to push up — an honest question beats a stretched lookup. `asked` counts answers received, not
+questions sent.
 
-`resolved_by_probe / unknowns_found` is the ratio this design exists to push up. `asked` counts
-answers received, not questions sent.
+An unknown carrying `issue` counts like any other: it is part of `unknowns_found`, and once the
+user's answer closes it, it counts in `asked`. That holds for a `premise` issue too — probing
+surfaced it, but the user settled it, so it never counts in `resolved_by_probe`. In no-ask mode a
+`premise` issue closes as an `inferred` constraint and counts in `inferred`.
+
+When the premise check after a passed silence check (at most two lookups) finds a contradiction
+and the run goes ahead, each of its lookups is recorded as a `probe` trace step with its evidence.
+Those lookups do not count against any unknown's budget of three probe actions.
 
 ## Cross-field invariants
 
@@ -114,7 +124,7 @@ not.
 
 Every emitted spec — ASK, ROUTE and HALT alike — is also written to `.intent/<intent>.intent.yaml`
 at the workspace root, before the reply that carries the same spec in its fenced block. Nothing is
-written when the silence check passed.
+written when the skill stays silent (the silence check and its premise check both passed).
 
 When writing:
 
@@ -132,6 +142,9 @@ When writing:
 A file under `.intent/` is never evidence for a new spec. It records what an earlier run
 concluded, including the values that run inferred; citing it would turn an old inference into a
 probed fact. Probe the sources it was built from instead.
+
+The check after a hand-off (main instructions, section 5, *verify*) reads the saved spec and writes
+nothing under `.intent/`: its result goes in the reply only.
 
 The file is written before the reply because some environments keep only a turn's final message,
 and the fence has to be in it. The point of the file is that the next session, agent or teammate
