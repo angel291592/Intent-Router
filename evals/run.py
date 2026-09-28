@@ -695,21 +695,49 @@ def harness_env(cwd: Path) -> dict[str, str]:
     }
 
 
-def _invoke_once(cmd: list[str], cwd: Path) -> tuple[str, str, int]:
-    try:
-        done = subprocess.run(
-            cmd,
-            cwd=cwd,
+def kill_process_tree(proc: subprocess.Popen) -> None:
+    """Kill a harness invocation and everything it spawned.
+
+    The command on this platform is an npm shim, so the process that actually
+    runs is a grandchild. Killing only the direct child (which is what
+    subprocess.run's own timeout does) leaves that grandchild alive, still
+    holding the inherited stdout pipe: the reader then waits for an EOF that
+    never comes and the run hangs indefinitely *after* its timeout fired.
+    Observed on 2026-09-28: add-caching-two-turn's first turn timed out at 480 s
+    and the suite sat there until the orphan was killed by hand.
+    """
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
             capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=TIMEOUT,
-            env=harness_env(cwd),
         )
+        return
+    proc.kill()
+
+
+def _invoke_once(cmd: list[str], cwd: Path) -> tuple[str, str, int]:
+    proc = subprocess.Popen(
+        cmd,
+        cwd=cwd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=harness_env(cwd),
+    )
+    try:
+        stdout, stderr = proc.communicate(timeout=TIMEOUT)
     except subprocess.TimeoutExpired:
+        kill_process_tree(proc)
+        # The pipes close once the tree is gone; the second timeout only stops a
+        # surviving grandchild from hanging the suite a second time.
+        try:
+            proc.communicate(timeout=30)
+        except subprocess.TimeoutExpired:
+            pass
         return "", f"timeout after {TIMEOUT}s", 124
-    return done.stdout or "", done.stderr or "", done.returncode
+    return stdout or "", stderr or "", proc.returncode
 
 
 def invoke(cmd: list[str], cwd: Path, retries: int = 2) -> tuple[str, str, int]:
