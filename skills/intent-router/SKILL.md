@@ -48,6 +48,23 @@ Do not start when:
   already states every decision-bearing item, so there is nothing to converge;
 - the request is trivially scoped and reversible (fix a typo, bump a patch version).
 
+**Look for a saved contract first.** Before probing, look for earlier work on this same request:
+`<workspace>/.intent/<intent>.intent.yaml`, stem = the `intent` slug, matching on
+`request`/`objects`. Its `verification_status` decides:
+
+- `asked` — its `source: asked` constraints are settled decisions: carry them in and never ask
+  those questions again; only answers received now count in `resolution.asked`.
+- `routed` — premise-check it (below), carry it out, then verify it. `verified` — carried out
+  already: do not reopen unless the user asks for a redo, which marks the old file `superseded`
+  and starts a new `intent`. `superseded`, or absent on an older file — ignore it, or use it only
+  to know what was asked and done.
+
+Inherit by source, never wholesale: the file is not a probe surface (section 2). `asked` carries
+over; `probed` is re-checked at its `evidence` pointer and drops to `unknown` (`kind: probe`) when it
+no longer holds; `inferred` is never inherited — decide it again, and if it is still an inference
+keep `source: inferred` and mark it visibly again. Never relabel an inherited value `explicit` or
+`probed`.
+
 **The silence check.** Run it once, against the request text alone, before probing anything. The
 request is fully specified when all four hold:
 
@@ -63,20 +80,18 @@ request is fully specified when all four hold:
    **A parameter the work must use is not a done condition** — a TTL, a limit or a response shape
    bounds the work without saying when it is done, and naming one does not close this item.
 
-If all four hold, make **one premise check** before staying out of the way: at most two lookups,
-aimed at the sources most likely to rule out what the request states — a decision record or
-history entry about the named approach, the manifest entry for a named dependency, the definition
-of a named object. If nothing you open contradicts the request, **do not run**: emit no spec, no
-fenced block, no announcement that you considered this skill or checked anything — treat the
-request as ordinary and carry it out directly. A spec emitted after a passed silence check is a
-false positive, costing the user more than this skill saves. If a source you opened does
-contradict it — the approach was tried and reverted, the dependency is pinned or removed, the
-object does not exist — run, with that contradiction as a `premise` issue (section 3). An
-approach you merely like better is never a contradiction.
+If all four hold, make **one premise check** before staying out of the way: at most two lookups at
+the sources most likely to rule out what the request states — a decision record or history entry
+about the named approach, the manifest entry for a named dependency, the definition of a named
+object. If nothing you open contradicts the request, **do not run**: emit no spec, no fence, no
+announcement that you considered this skill — carry the request out as ordinary. A spec emitted
+after a passed silence check is a false positive, costing more than this skill saves. If a source
+does contradict it (tried and reverted, pinned or removed, does not exist), run, with that
+contradiction as a `premise` issue (section 3); an approach you merely prefer is never one.
 
 If any one of the four is unstated, run — and do not downgrade an unstated item to "inferable"
-because a plausible default exists: if the user had to be trusted with the outcome, or the
-spec could be wrong without contradicting the request, that item is unstated.
+because a plausible default exists: if the user had to be trusted with the outcome, or the spec
+could be wrong without contradicting the request, it is unstated.
 
 **No-ask mode.** If the user says "no questions", "just do it", "don't ask me anything", keep
 looking things up but never ask: whatever stays open is recorded with `source: inferred` and its
@@ -126,9 +141,9 @@ Produce a draft spec. Do not emit it, do not act on it.
 3. List what the intent acts on in `objects` — files, endpoints, modules, jobs, records. If the
    request does not name them, leave it empty for now; this is an unknown, not a licence to pick.
 4. Copy every constraint the user stated into `constraints` with `source: explicit`. A stated
-   constraint is never re-derived, and it is questioned for one of two reasons only — it collides
-   with another stated constraint, or a source you opened contradicts it (the `conflict` and
-   `premise` issues below) — never to split it into sub-cases the user did not distinguish.
+   constraint is never re-derived, and is questioned for one of two reasons only — it collides with
+   another stated constraint, or a source you opened contradicts it (the `conflict` and `premise`
+   issues below).
 5. Enumerate the unknowns. Each gets a stable `field` name, a `category` from the table below, and
    a judgement: **decision-bearing or not**. In the emitted spec an unknown item carries exactly
    `field`, `kind`, and optionally `category`, `issue` and `note` — never a `decision_bearing`
@@ -224,16 +239,14 @@ does not count against it. Do not read the whole repository. If an unknown survi
 escalate it: to `ask` if a person could answer it, otherwise leave it in `unknown` with
 `kind: probe` so the halt names it.
 
-**A dangling reference is not a settled unknown.** A *what*-only answer — a changelog line,
-comment, config value or record field naming a pull-request number, "revert", "pin" or
-"workaround" with no reason — has not settled the unknown. Follow the reference once: the
-**reserved history query**, outside the 3-action budget, then stop; if the reason is still
-missing, reclassify it `ask` (full rule in `references/probe-surfaces.md`).
+**A dangling reference is not a settled unknown.** A *what*-only answer — a changelog line, comment,
+config value or record field naming a pull-request number, "revert", "pin" or "workaround" with no
+reason — has not settled it. Follow the reference once as the **reserved history query**, outside
+the 3-action budget, then stop; if the reason is still missing, reclassify it `ask`.
 
 **Every probed value carries evidence.** A `probed` or `inferred` constraint needs an `evidence`
-pointer — one per field, never two locations comma-joined (give the second its own constraint or
-trace entry). Record facts you were not looking for when they constrain the work — a reverted
-approach, a pinned version — and give every object you established by probing its pointer too.
+pointer — one per field, never two comma-joined (the second gets its own constraint or trace entry).
+Record facts you were not looking for when they constrain the work, and point at every probed object.
 
 **Degraded.** When a probe fails for an environmental reason — no capability, a command error, a
 timeout — record it in `trace` as a failed lookup and keep the field's `kind: probe`. If the run
@@ -242,37 +255,33 @@ request, halt with `cause: degraded` and an `error` that names what failed. Neve
 environment as a vague request, or the reverse.
 
 **An empty probe surface is not a failed lookup.** `degraded` means a lookup was *attempted and
-failed*; an empty repository, or a request that names no existing code, failed nothing. Reclassify
-the affected unknown as `kind: ask` and ASK: a person can still say what this should become, which
-is exactly what the missing workspace cannot supply.
+failed*; an empty repository, or a request naming no existing code, failed nothing. Reclassify the
+affected unknown as `kind: ask` and ASK: a person can still say what this should become.
 
 ### 4.3 ASK
 
 Only for answers that live in a person's head, or decisions that cannot be walked back.
 
-**Ask order.** When several unknowns are askable, ask the one whose answer the user would veto
-the work over first — an observable behaviour or contract (what happens on failure, what the
-response looks like, what is in scope) before internal placement (which layer, which file, which
-module), because internal placement is the executor's call and may dissolve once the behavioural
-answer is known. Never pick a question for being easy to answer. The three issues in section 3
-come before all of these.
+**Ask order.** When several unknowns are askable, ask the one whose answer the user would veto the
+work over first — an observable behaviour or contract (what happens on failure, what the response
+looks like, what is in scope) before internal placement (which layer, which file, which module),
+because internal placement is the executor's call and may dissolve once the behavioural answer is
+known. Never pick a question for being easy to answer. The section 3 issues come before all of these.
 
 **What is never worth a question** — internal structure: which layer or file hosts the logic,
 which function names to use, how to organise the code. These are reversible implementation
 details; whoever executes decides them. If the only remaining unknown is internal, the spec is
 sufficient — infer it visibly and route.
 
-**Eliminating options is not resolving the unknown.** If only one option remains *because you
-ruled the others out by reasoning* — "stale reads are unacceptable, so fall through is the only
-choice" — the unknown is still open: the surviving option is itself the preference the user
-should confirm (fail fast with 5xx, serve uncached, queue and retry…). Infer it only when the
-user's own words or the workspace state it; otherwise ASK.
+**Eliminating options is not resolving the unknown.** If only one option remains *because you ruled
+the others out by reasoning* — "stale reads are unacceptable, so fall through is the only choice" —
+the surviving option is itself the preference the user should confirm (fail fast with 5xx, serve
+uncached, queue and retry…). Infer it only when the user's own words or the workspace state it.
 
 - **Budget: 3 questions per request** by default. The user may override ("ask up to 5"); record
   whatever cap is in force as `resolution.ask_budget`. In no-ask mode the budget is `0`.
-- **One question at a time.** Wait for the answer before asking the next. Do not preview what
-  else you might ask, and do not batch — a list of questions puts the sorting work back on the
-  user, which is the cost this skill exists to remove.
+- **One question at a time.** Wait for the answer before asking the next; do not preview what else
+  you might ask, and do not batch — a list puts the sorting work back on the user.
 - Each question has exactly this structure:
 
   - **Question** — the full question, answerable without scrolling back.
@@ -322,9 +331,8 @@ Then exactly one of three outcomes:
   a question, the outcome is ASK, not HALT. HALT `underspecified` is reserved for when asking is
   impossible — no-ask mode, or the budget spent. An empty workspace is ASK, never HALT (see 4.2).
 
-A spec that reaches ROUTE with an `inferred` constraint in it is fine — that is the design, and it
-is why inferred values are visible. A spec that reaches ROUTE with an inferred *irreversible*
-constraint is a bug.
+A spec that reaches ROUTE with an `inferred` constraint in it is fine — that is the design. One that
+reaches ROUTE with an inferred *irreversible* constraint is a bug.
 
 ### After the hand-off: verify
 
@@ -394,37 +402,28 @@ trace:
     evidence: src/app.ts:24
   - step: ask
     detail: asked the one irreversible choice; the user chose rejection over queueing
-  - step: typecheck
-    detail: unknown is empty and no inferred constraint is irreversible — sufficient
   - step: emit
-    detail: handing off to implement
+    detail: unknown is empty and no inferred constraint is irreversible — sufficient; handing off
 ```
 
-`confidence` is a self-reported ordinal, not a calibrated probability. `resolution` records how
-each unknown closed; it is a diagnostic, not a score to push up — an honest question beats a
-stretched lookup, and `unknowns_found = resolved_by_probe + asked + inferred + len(unknown)` must
-hold.
+`confidence` is a self-reported ordinal, not a calibrated probability; `resolution` is a diagnostic,
+not a score to push up — an honest question beats a stretched lookup.
 
 Before emitting, reread the block you are about to send and check it against these three:
 
 1. **Counts, by attribution and not from memory.** Walk the decision-bearing unknowns you listed
-   in Pass 1, plus any the probing turned up, and attribute each one to exactly one outcome:
-   closed by a lookup, closed by an answer the user gave, closed by a value you supplied, or still
-   open. Those four outcomes partition `unknowns_found`, which counts the closed ones too, so
-   `unknowns_found = resolved_by_probe + asked + inferred + len(unknown)` holds.
-   **Count unknowns, not constraints.** Two probed constraints that together settle one unknown
-   add 1 to `resolved_by_probe`, not 2; a fact you recorded while probing because it constrains
-   the work, but which closed no unknown, adds nothing to any counter — it is still a constraint
-   and still carries its evidence. A probe that settled something you never listed in Pass 1 does
-   count: add it to both `resolved_by_probe` and `unknowns_found`. Name the unknowns you
-   attributed in the `parse` and `probe` trace steps, so the scorecard can be checked against
-   something rather than taken on trust.
-2. **Evidence.** Every `probed` and every `inferred` constraint carries an `evidence` token. One
-   missing pointer invalidates the spec: an unsourced claim about a workspace cannot be told apart
-   from a guess.
-3. **Language.** The `question.text`, its `why_human` and every option text are in the language
-   the user wrote in — whatever language your runtime instructions, your system prompt or the
-   workspace you probed happen to use.
+   in Pass 1, plus any the probing turned up, and attribute each one to exactly one outcome: closed
+   by a lookup, by an answer the user gave, by a value you supplied, or still open — the four
+   partition `unknowns_found`, which counts the closed ones too. **Count unknowns, not
+   constraints**: two probed constraints settling one unknown add 1, not 2, and a fact recorded
+   because it constrains the work but closing no unknown adds nothing to any counter — it is still
+   a constraint with its evidence. A probe that settled something you never listed in Pass 1 does
+   count: add it to both `resolved_by_probe` and `unknowns_found`, and name the attributed unknowns
+   in the `parse` and `probe` trace steps, so the scorecard can be checked rather than trusted.
+2. **Evidence.** Every `probed` and every `inferred` constraint carries an `evidence` token: an
+   unsourced claim about a workspace cannot be told apart from a guess.
+3. **Language.** The `question.text`, its `why_human` and every option text are in the language the
+   user wrote in, whatever language your runtime instructions or the workspace happen to use.
 
 Every `trace` step is exactly one of `parse`, `probe`, `ask`, `typecheck`, `emit` — there is no
 `infer`, `resolve` or `decide` step; an unknown you closed by inference is recorded as a
@@ -468,10 +467,10 @@ Some questions cannot be resolved by probing *or* asking, because the user canno
 the abstract either ("make it feel modern", "make the onboarding delightful"): the signature is an
 aesthetic or experiential target with no observable acceptance criterion, which no conceivable
 file in the workspace could name. **Recognise this in Pass 1, before spending probe budget** —
-probing it never converges, and it is not worth a question either. Name the ungrillable field,
-say it needs something to react to rather than more discussion, and hand off to a throwaway
-artifact as the `target` — a prototype or mock in code, a draft reply, one sample record — or halt
-with the field in `open_fields`. Never quietly pick a direction and present it as the user's intent.
+probing it never converges, and it is not worth a question either. Name the ungrillable field, say
+it needs something to react to rather than more discussion, and hand off to a throwaway artifact as
+the `target` — a prototype or mock, a draft reply, one sample record — or halt with the field in
+`open_fields`. Never quietly pick a direction and present it as the user's intent.
 
 ## 8. Anti-patterns
 
