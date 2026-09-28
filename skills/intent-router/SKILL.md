@@ -156,13 +156,12 @@ Produce a draft spec. Do not emit it, do not act on it.
 | `non_goals_constraints` | explicit exclusions, hard limits on time, cost, compliance | no new dependencies | no commitment beyond the policy in force |
 
 When the request touches any step that can fail, be rejected, or half-complete — a cache write, a
-refund, a backfill, a notification, an approval — **and states no rule for that failure** —
-enumerate the failure path as its own unknown: not just "what should the feature do" but "what
-should happen when the feature's own step fails" — a cache write that errors, an invalidation
-that misses, a dependency that times out. Skipping the failure path while emitting a happy-path
-spec is the guess this pass exists to prevent. The converse is just as much a defect: when the
-request **does** state the failure rule, that is an `explicit` constraint and never an unknown.
-Re-opening a stated rule to distinguish sub-cases the user did not distinguish is the over-asking
+refund, a backfill, a notification, an approval — **and states no rule for that failure**, enumerate
+the failure path as its own unknown: not "what should the feature do" but "what should happen when
+the feature's own step fails" — a cache write that errors, an invalidation that misses, a dependency
+that times out. Skipping it while emitting a happy-path spec is the guess this pass exists to
+prevent; and when the request **does** state the failure rule, that is an `explicit` constraint,
+never an unknown — re-opening it to split sub-cases the user did not distinguish is the over-asking
 this skill exists to remove.
 
 **Three defects that filling in cannot fix.** Check the request for these before resolving
@@ -355,17 +354,22 @@ context — a check sharing the implementer's context is not a check.
 
 ## 6. Output format
 
-Emit one fenced `yaml` block containing the whole spec, in exactly this field order. Nothing else
-goes inside the fence; prose goes after it.
+**Lead with the human part.** Before the fence, 3–6 lines of prose: what you looked up, above all
+the finding that changed the approach; what you decided for the user, one line each, so any single
+line can be vetoed; and the one question, when there is one. Then the fenced `yaml` block holding
+the whole spec, in exactly this field order — nothing else inside it.
+
+**The fence stays.** Some environments keep only a turn's final message, and the eval reads the spec
+from the reply, so the block is never dropped in favour of the prose; a workspace that cannot be
+written to still gets one sentence after it (below).
 
 **Quote every dirty scalar.** Any value containing `:`, `#`, `{`, `}`, `[`, `]`, `,`, `"` or `'`,
 or starting with a character that is not a letter, must be wrapped in **single** quotes — an inner
 `'` is written `''`. Multi-line text uses the block scalar `>` instead. Single quotes, not double:
 the offending characters are usually double quotes themselves (`"ioredis": "^5.4.1"`), and
-single-quoting needs no escaping. The dangerous case is a value with a
-space and a `#` (a pull-request reference like `reverted in #412`): unquoted, YAML treats it as an
-inline comment and **silently truncates the value** — the fence still parses, so a corrupted spec
-survives a review that a hard error would have caught.
+single-quoting needs no escaping. The dangerous case is a `#` after a space (a reference like
+`reverted in #412`): unquoted, YAML reads it as an inline comment and **silently truncates the
+value** — the fence still parses, so a corrupted spec survives a review a hard error would catch.
 
 ```yaml
 spec_version: "0.1"
@@ -410,9 +414,7 @@ trace:
 ```
 
 `confidence` is a self-reported ordinal, not a calibrated probability; `resolution` is a diagnostic,
-not a score to push up — an honest question beats a stretched lookup.
-
-Before emitting, reread the block you are about to send and check it against these three:
+not a score to push up. Before emitting, reread the block and check it against these three:
 
 1. **Counts, by attribution and not from memory.** Walk the decision-bearing unknowns you listed
    in Pass 1, plus any the probing turned up, and attribute each one to exactly one outcome: closed
@@ -423,14 +425,14 @@ Before emitting, reread the block you are about to send and check it against the
    a constraint with its evidence. A probe that settled something you never listed in Pass 1 does
    count: add it to both `resolved_by_probe` and `unknowns_found`, and name the attributed unknowns
    in the `parse` and `probe` trace steps, so the scorecard can be checked rather than trusted.
-2. **Evidence.** Every `probed` and every `inferred` constraint carries an `evidence` token: an
-   unsourced claim about a workspace cannot be told apart from a guess.
-3. **Language.** The `question.text`, its `why_human` and every option text are in the language the
-   user wrote in, whatever language your runtime instructions or the workspace happen to use.
+2. **Evidence** — every `probed` and `inferred` constraint carries an `evidence` token (section 2):
+   an unsourced claim about a workspace cannot be told apart from a guess.
+3. **Language** — the question, its `why_human` and every option in the user's language, whatever
+   language your runtime instructions or the workspace happen to use (section 4.3).
 
 Every `trace` step is exactly one of `parse`, `probe`, `ask`, `typecheck`, `emit` — there is no
-`infer`, `resolve` or `decide` step; an unknown you closed by inference is recorded as a
-constraint with `source: inferred`, not as a new trace step.
+`infer`, `resolve` or `decide` step; an unknown closed by inference is a constraint with
+`source: inferred`, not a new trace step.
 
 For the other two states, `decision` carries different fields and nothing else changes:
 
@@ -459,11 +461,10 @@ decision:
 
 **Every emitted spec is also saved.** Before replying, write it to `.intent/<intent>.intent.yaml`
 — on ASK, ROUTE and HALT alike, replacing this request's earlier snapshot, with
-`verification_status: asked` on ASK and HALT and `routed` on ROUTE — and touch no other file for
-it; the fenced block still goes in the reply. Nothing is written when you stay silent (section 1),
-and a workspace you cannot write to gets one sentence after the fence, never a halt. Field-by-field
-documentation, the cross-field invariants and the file convention are in `references/intentspec.md`;
-the machine-checkable contract is `schema/intentspec.schema.json`.
+`verification_status: asked` on ASK and HALT and `routed` on ROUTE — and touch no other file for it.
+Nothing is written when you stay silent (section 1); a workspace you cannot write to gets one
+sentence after the fence, never a halt. The field reference and the `.intent/` convention are in
+`references/intentspec.md`; the machine-checkable contract is `schema/intentspec.schema.json`.
 
 ## 7. Ungrillable questions
 
