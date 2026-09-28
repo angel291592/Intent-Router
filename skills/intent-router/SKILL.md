@@ -271,7 +271,8 @@ sufficient — infer it visibly and route.
 **Eliminating options is not resolving the unknown.** If only one option remains *because you ruled
 the others out by reasoning* — "stale reads are unacceptable, so fall through is the only choice" —
 the surviving option is itself the preference the user should confirm (fail fast with 5xx, serve
-uncached, queue and retry…). Infer it only when the user's own words or the workspace state it.
+uncached, queue and retry…). Infer it only when the user's own words or the workspace state it;
+otherwise ASK.
 
 - **Budget: 3 questions per request** by default. The user may override ("ask up to 5"); record
   whatever cap is in force as `resolution.ask_budget`. In no-ask mode the budget is `0`.
@@ -416,19 +417,18 @@ trace:
 `confidence` is a self-reported ordinal, not a calibrated probability; `resolution` is a diagnostic,
 not a score to push up. Before emitting, reread the block and check it against these three:
 
-1. **Counts, by attribution and not from memory.** Walk the decision-bearing unknowns you listed
-   in Pass 1, plus any the probing turned up, and attribute each one to exactly one outcome: closed
-   by a lookup, by an answer the user gave, by a value you supplied, or still open — the four
-   partition `unknowns_found`, which counts the closed ones too. **Count unknowns, not
-   constraints**: two probed constraints settling one unknown add 1, not 2, and a fact recorded
-   because it constrains the work but closing no unknown adds nothing to any counter — it is still
-   a constraint with its evidence. A probe that settled something you never listed in Pass 1 does
-   count: add it to both `resolved_by_probe` and `unknowns_found`, and name the attributed unknowns
-   in the `parse` and `probe` trace steps, so the scorecard can be checked rather than trusted.
-2. **Evidence** — every `probed` and `inferred` constraint carries an `evidence` token (section 2):
-   an unsourced claim about a workspace cannot be told apart from a guess.
-3. **Language** — the question, its `why_human` and every option in the user's language, whatever
-   language your runtime instructions or the workspace happen to use (section 4.3).
+1. **Counts, by attribution and not from memory.** Attribute each decision-bearing unknown — those
+   listed in Pass 1 plus any probing turned up — to exactly one outcome: closed by a lookup, by an
+   answer, by a value you supplied, or still open. The four partition `unknowns_found`, which counts
+   the closed ones too, so `unknowns_found = resolved_by_probe + asked + inferred + len(unknown)`
+   must hold. **Count unknowns, not constraints**: two probed constraints settling one unknown add 1,
+   not 2, and a fact recorded because it constrains the work but closing no unknown adds nothing to
+   any counter — it is still a constraint with its evidence. A probe that settled something unlisted
+   does count, in both `resolved_by_probe` and `unknowns_found`; the attributed unknowns belong in
+   the `parse` and `probe` trace steps, so the scorecard can be checked rather than trusted.
+2. **Evidence** — every `probed` and `inferred` constraint carries an `evidence` token; one missing
+   pointer invalidates the spec — an unsourced claim is indistinguishable from a guess.
+3. **Language** — the question, its `why_human` and every option in the user's language (4.3).
 
 Every `trace` step is exactly one of `parse`, `probe`, `ask`, `typecheck`, `emit` — there is no
 `infer`, `resolve` or `decide` step; an unknown closed by inference is a constraint with
