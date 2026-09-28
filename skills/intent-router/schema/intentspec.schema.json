@@ -21,6 +21,33 @@
       "const": "0.1",
       "description": "Version of this schema the document targets."
     },
+    "verification_status": {
+      "type": "string",
+      "enum": ["asked", "routed", "verified", "superseded"],
+      "description": "Lifecycle of the saved .intent/ file: asked = a question is outstanding; routed = the contract is settled and handed off; verified = the check after the hand-off ran and its result was written back; superseded = this contract was replaced by another piece of work."
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": { "type": "string", "enum": ["verified", "partial", "not_checkable"] },
+        "results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["constraint", "verdict"],
+            "properties": {
+              "constraint": { "type": "string", "description": "The constraint text this line checks, verbatim or unambiguously identified." },
+              "verdict": { "type": "string", "enum": ["met", "not_met", "not_checkable"] },
+              "pointer": { "type": "string", "description": "path:line into the delivered work. Required when verdict is met." }
+            }
+          }
+        },
+        "checked_at": { "type": "string" }
+      }
+    },
     "request": {
       "type": "string",
       "minLength": 1,

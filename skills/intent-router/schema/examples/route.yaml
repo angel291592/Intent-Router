@@ -4,6 +4,7 @@
 # an irreversible trade-off — was put to the human. This is the state emitted
 # after the human answered, so unknown is empty and the predicate holds.
 spec_version: "0.1"
+verification_status: routed
 request: add caching to the user API
 intent: add_caching
 objects:

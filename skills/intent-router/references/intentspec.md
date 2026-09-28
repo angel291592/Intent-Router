@@ -13,6 +13,8 @@ should meet the request before the conclusions.
 | field | required | notes |
 |---|---|---|
 | `spec_version` | yes | `"0.1"`. |
+| `verification_status` | no | Lifecycle of the saved `.intent/` file: `asked` \| `routed` \| `verified` \| `superseded`. A spec written before this field existed has none — read it conservatively. |
+| `verification` | no | The result of the check that runs after a hand-off, written only once that check has run. |
 | `request` | yes | The user's own words, truncated to 500 characters. Never paraphrased. |
 | `intent` | yes | snake_case verb-object, matching `^[a-z][a-z0-9_]*$`. |
 | `objects` | yes | What the intent acts on. At least one entry when the state is `ROUTE`; may be empty while the target is genuinely unknown. |
@@ -21,6 +23,35 @@ should meet the request before the conclusions.
 | `decision` | yes | Exactly one outcome; shape depends on `state`. |
 | `resolution` | yes | The run's scorecard. |
 | `trace` | yes | Replayable record, including failed lookups. |
+
+## `verification_status` and `verification`
+
+These two are the file's lifecycle, not its content: `decision.state` says what this run decided
+(route, ask or halt), `verification_status` says where the work the spec describes has got to since.
+They are separate because a `ROUTE` file can be unverified, verified, or replaced later on, and an
+`ASK` file is neither.
+
+`verification_status` is one of four values:
+
+| value | the file is | what a reader should do |
+|---|---|---|
+| `asked` | a question is outstanding | answer it; do not ask again what it already records |
+| `routed` | the contract is settled and handed off | implement it, then check the work against it |
+| `verified` | the check after the hand-off ran | treat the work as done unless asked to redo it |
+| `superseded` | replaced by another piece of work | ignore |
+
+Both fields are optional, and neither is in the schema's root `required`: a spec that predates them
+is still a valid spec, and a spec that has not been checked yet has nothing to put in `verification`.
+
+`verification` appears only after the check. Its `status` is `verified` when every line came back
+`met`, `partial` when at least one line did not, and `not_checkable` when nothing could be checked
+in that environment; `results` mirrors the `Intent check` lines of the reply one for one, and
+`checked_at` is a free-form timestamp.
+
+The `pointer` rule is **not** in the schema: an `if`/`then` there would apply to every document,
+including the five examples and any spec written by hand. It is enforced where the check happens —
+a constraint is never marked `met` without a `path:line` into the delivered work — and the schema
+deliberately allows a `not_checkable` line to carry no pointer at all.
 
 ## `constraints[]`
 

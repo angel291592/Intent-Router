@@ -6,6 +6,7 @@
 # records and a policy section, not files: record:<system>/<id> and
 # doc:<slug>#<section> are the reserved non-file namespaces.
 spec_version: "0.1"
+verification_status: routed
 request: this customer is furious about order 8821 — sort it out
 intent: resolve_customer_complaint
 objects:

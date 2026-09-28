@@ -4,6 +4,7 @@
 # one question and stops. Note that `asked` is still 0: a question that has been
 # emitted but not yet answered stays in `unknown` and is not counted as resolved.
 spec_version: "0.1"
+verification_status: asked
 request: add caching to the user API
 intent: add_caching
 objects:

@@ -4,6 +4,7 @@
 # the iron law and would also disguise a broken environment as a vague request.
 # This cause is an operations signal and must never be merged with underspecified.
 spec_version: "0.1"
+verification_status: asked
 request: add caching to the user API
 intent: add_caching
 objects: []

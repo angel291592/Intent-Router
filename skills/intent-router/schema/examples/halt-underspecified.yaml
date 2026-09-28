@@ -4,6 +4,7 @@
 # are still dangling instead of picking a scope. This cause is the requester's
 # next move, not a failure of the run — compare halt-degraded.yaml.
 spec_version: "0.1"
+verification_status: asked
 request: make it better. no questions.
 intent: improve_codebase
 objects: []
