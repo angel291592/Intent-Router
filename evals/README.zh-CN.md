@@ -163,12 +163,17 @@ uv run --with pyyaml --with jsonschema python evals/run.py \
 `reports/raw/delivery/<harness>/<arm>/`（不入库）；报告 `reports/<date>-delivery-<harness>.md`
 入库。
 
-评分是快照（`diff.patch` + 拷贝的 `src/` 与 `tests/`）上的纯函数，六个二值项：
+评分是快照（`diff.patch` + 拷贝的 `src/` 与 `tests/`）上的纯函数，七个评分项：
 1 `reuses_shared_redis`（用 fixture 的共享 Redis helper，绝不进程内缓存——ADR 0007 陷阱）、
 2 `uses_default_ttl`（`src/cache/redis.ts` 之外不得硬编码 TTL）、3 `invalidates_on_write`
 （POST 与 DELETE 要失效缓存键）、4 `covers_all_reads`（三个 GET handler 全部走缓存）、
-5 `states_failure_policy`（有明确的缓存失败行为）、6 `contract_preserved`（响应形状与
-`src/db/users.ts` 不被改动）。没有产出 diff 的运行记 0/6。另有两个 aux 标记随得分一起记录、
+5 `declares_failure_policy`（被评运行自己产出的 spec 里有一条非空的 `failure_behavior` 约束）、
+6 `handles_failure_in_code`（diff 里结构上存在异常处理——纯关键词扫描，不代表意图）、
+7 `contract_preserved`（响应形状与 `src/db/users.ts` 不被改动）。第 5 与第 6 项是刻意分开评的：
+声明失败时怎么办、与代码里含有 `try`/`catch`，是两层不同的增益，合并的旧项曾让一次运行只靠写
+`try`/`catch` 就拿分。没有产出 diff 的运行记 0/6——无 diff 可判的项都是 ✗，只有
+`declares_failure_policy` 在被评运行完全没产出 spec 时是 n/a（无 spec 的臂上限为 6，读作
+`5.0/6`，逐次表里显示 `n/a`，其评分项行显示 `0/5 (5 n/a)`）。另有两个 aux 标记随得分一起记录、
 但从不参与判定：`adr_read`（转录里提到了 ADR）与 `intent_check`（最终 session 的回复里含字面量
 标记行 `Intent check`，只有 skill 臂的 Verify 步骤会输出它）。skill 臂是显式调用，因此触发概率
 不在本测量的范围——触发率由 `add-caching-auto` 单独度量。
