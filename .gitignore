@@ -1,6 +1,7 @@
-# 内部文档：不入公开仓库（HANDOFF.md 是调研档案，docs/plans/ 是中文执行计划，agent.md 是本地项目入口文档，MAINTENANCE.md 是维护手册，pr.md 是推广台账）
+# 内部文档：不入公开仓库（HANDOFF.md 是调研档案，docs/plans/ 是中文执行计划，docs/reviews/ 是本地审查报告，agent.md 是本地项目入口文档，MAINTENANCE.md 是维护手册，pr.md 是推广台账）
 HANDOFF.md
 docs/plans/
+docs/reviews/
 agent.md
 test.md
 after-test.md
