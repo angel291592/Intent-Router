@@ -40,13 +40,10 @@ Start when **both** hold:
 2. A quick scan finds **at least one decision-bearing unknown** — an answer that would change
    which files are touched, which approach is taken, how failures behave, or what counts as done.
 
-Do not start when:
-
-- the request asks you to explain existing state ("what does X do", "why is Y slow") rather than
-  to find something out and produce a deliverable;
-- the silence check below passes and its premise check finds no contradiction — the request
-  already states every decision-bearing item, so there is nothing to converge;
-- the request is trivially scoped and reversible (fix a typo, bump a patch version).
+Do not start when: the request asks you to explain existing state ("what does X do", "why is Y
+slow") rather than to find something out and produce a deliverable; the silence check below passes
+and its premise check finds no contradiction — every decision-bearing item is already stated, so
+there is nothing to converge; or the request is trivially scoped and reversible (fix a typo).
 
 **Look for a saved contract first.** Before probing, look for earlier work on this same request:
 `<workspace>/.intent/<intent>.intent.yaml`, stem = the `intent` slug, matching on
@@ -120,10 +117,9 @@ treat the text after the name as the request.
 - **evidence** — a pointer to where a value came from: one **token with no whitespace**, naming
   something you actually opened, in one of these forms only: `path`, `path:line`, `path:line-line`,
   `path#heading`, `git:<short-sha>`, `git:#<pr-number>`, `user:delegated` (a decision handed back),
-  `record:<system>/<id>` (a record in a system of record) or `doc:<slug>#<section>` (a section with
-  no path). Not evidence: the repository root (`.`), paths under `.git/`, `.claude/`, `.agents/`
-  or `.intent/`, the harness config file, and above all a reasoning sentence — that goes in the
-  constraint `text`. Anything else is a defect, even if the thing it names exists.
+  `record:<system>/<id>`, `doc:<slug>#<section>`. Not evidence: the repository root (`.`), anything
+  under `.git/`, `.claude/`, `.agents/` or `.intent/`, the harness config file, and above all a
+  reasoning sentence — that goes in `text`. Anything else is a defect, even if it exists.
 - **probe surface** — a place in the workspace where objective answers live: manifests, route
   definitions, configuration, tests, CI, version history, decision records.
 - **ASK budget** — the hard cap on questions for one request. Default **3**.
@@ -314,9 +310,10 @@ The stopping condition is computed, not felt:
 Then exactly one of three outcomes:
 
 - **ROUTE** — sufficient. Emit the complete IntentSpec with `decision.state: ROUTE` and a
-  `target`: `implement`, `plan`, `research`, `respond`, `escalate`, `prototype`, or whatever
-  the user named. State the hand-off and stop; do not start implementing inside this skill.
-  When the handed-off work is then carried out in this conversation, verify it (below).
+  `target`: `implement`, `plan`, `research`, `respond`, `escalate`, `prototype`, or whatever the
+  user named. Name the saved spec file in the hand-off and ask for every constraint to be checked
+  before the work is called done, then stop — do not implement inside this skill. When the
+  handed-off work is carried out in this conversation, verify it and report (below).
 - **ASK** — not sufficient and the budget still allows a question. Emit the current spec snapshot
   with `decision.state: ASK` and `decision.question` set to the one question you are asking, then
   the question itself, then wait. The unresolved field stays in `unknown` and `resolution.asked`
@@ -347,8 +344,14 @@ that line stays in English whatever the language; the lines under it use the use
 - **not checkable here** — with the reason (it needs a running service, a person, live data).
 
 Never mark a constraint met without a pointer into the delivered work. The check reads the spec;
-it does not reopen it — a decided constraint is checked, not asked again. It writes nothing to
-`.intent/`.
+it does not reopen it — a decided constraint is checked, not asked again.
+
+Write the result back into the same `.intent/` file, replacing its earlier snapshot:
+`verification_status: verified`, plus `verification` with its `status`, a `checked_at`, and one
+`results` line per constraint carrying `constraint`, `verdict` and — when met — `pointer`. The reply
+keeps the same lines under `Intent check`: the file is the next session's copy, never a substitute
+for telling this user. A delegated check carries the spec path and runs in an agent with a fresh
+context — a check sharing the implementer's context is not a check.
 
 ## 6. Output format
 
@@ -357,9 +360,9 @@ goes inside the fence; prose goes after it.
 
 **Quote every dirty scalar.** Any value containing `:`, `#`, `{`, `}`, `[`, `]`, `,`, `"` or `'`,
 or starting with a character that is not a letter, must be wrapped in **single** quotes — an inner
-`'` is written `''`. Multi-line text uses the block scalar `>` instead. Single quotes are required
-rather than double quotes because the offending characters are usually double quotes themselves
-(`"ioredis": "^5.4.1"`), and single-quoting needs no escaping. The dangerous case is a value with a
+`'` is written `''`. Multi-line text uses the block scalar `>` instead. Single quotes, not double:
+the offending characters are usually double quotes themselves (`"ioredis": "^5.4.1"`), and
+single-quoting needs no escaping. The dangerous case is a value with a
 space and a `#` (a pull-request reference like `reverted in #412`): unquoted, YAML treats it as an
 inline comment and **silently truncates the value** — the fence still parses, so a corrupted spec
 survives a review that a hard error would have caught.
@@ -455,11 +458,12 @@ decision:
 ```
 
 **Every emitted spec is also saved.** Before replying, write it to `.intent/<intent>.intent.yaml`
-— on ASK, ROUTE and HALT alike, replacing this request's earlier snapshot — and touch no other
-file for it; the fenced block still goes in the reply. Nothing is written when you stay silent
-(section 1), and a workspace you cannot write to gets one sentence after the fence, never a halt.
-Field-by-field documentation, the cross-field invariants and the file convention are in
-`references/intentspec.md`; the machine-checkable contract is `schema/intentspec.schema.json`.
+— on ASK, ROUTE and HALT alike, replacing this request's earlier snapshot, with
+`verification_status: asked` on ASK and HALT and `routed` on ROUTE — and touch no other file for
+it; the fenced block still goes in the reply. Nothing is written when you stay silent (section 1),
+and a workspace you cannot write to gets one sentence after the fence, never a halt. Field-by-field
+documentation, the cross-field invariants and the file convention are in `references/intentspec.md`;
+the machine-checkable contract is `schema/intentspec.schema.json`.
 
 ## 7. Ungrillable questions
 

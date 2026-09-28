@@ -175,7 +175,9 @@ concluded, including the values that run inferred; citing it would turn an old i
 probed fact. Probe the sources it was built from instead.
 
 The check after a hand-off (main instructions, section 5, *verify*) reads the saved spec and writes
-nothing under `.intent/`: its result goes in the reply only.
+its result back into that same file — `verification_status: verified`, and one `verification.results`
+line per constraint — while still reporting the same lines in the reply. A check that only reached
+the reply would leave the next session reading a contract that claims nothing was ever carried out.
 
 The file is written before the reply because some environments keep only a turn's final message,
 and the fence has to be in it. The point of the file is that the next session, agent or teammate
