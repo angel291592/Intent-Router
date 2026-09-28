@@ -7,6 +7,47 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
 
 ## [Unreleased]
 
+The saved contract becomes a two-way artifact. It gains an optional `verification_status`
+(`asked` / `routed` / `verified` / `superseded`) and an optional `verification` object holding the
+result of the check that runs after a hand-off; both are optional, so every spec 1.2.0 wrote still
+validates. A session now looks for `<workspace>/.intent/<intent>.intent.yaml` before probing
+anything and follows that status: a question already answered is not asked again, a settled contract
+is carried out as written, and one already carried out is not reopened unless the user asks. The
+inheritance is by source and never wholesale — an `asked` constraint carries over, a `probed` one is
+re-checked at its evidence pointer and drops back to an unknown when it no longer holds, and an
+`inferred` one is never inherited, so an old inference cannot be laundered into a fact. The hand-off
+now names the spec file, and asks for every constraint to be checked before the work is called done;
+that check writes its result back into the same file instead of only reporting it in the reply.
+Replies lead with 3-6 lines of prose before the fenced spec — the fence itself stays, because some
+environments keep only a turn's final message and the eval reads the spec from the reply.
+/
+存下来的契约从此是双向的。它新增可选字段 `verification_status`（`asked` / `routed` / `verified` /
+`superseded`）与可选对象 `verification`，用来装交接之后那次核对的结果；两者都可选，因此 1.2.0 写出的
+每份 spec 依然通过校验。session 现在会在探测任何东西之前先找
+`<workspace>/.intent/<intent>.intent.yaml`，按该状态分流：已答过的问题不再问，已定的契约照写实施，
+已做过的不重开（除非用户明确要求重做）。继承按来源、绝不整体照搬——`asked` 约束直接继承，`probed`
+约束必须回到它的 evidence 指针重新核实、不再成立就退回未知项，`inferred` 约束一律不继承，于是一次
+旧推断不会被洗成事实。交接现在会点名 spec 文件路径，并要求在宣布完成前逐条核对；核对结果写回同一份
+文件，而不再只出现在回复里。回复改为先用 3–6 行散文说人话，再给围栏 spec；围栏本身保留，因为有些
+环境只留一轮的最终消息，评测也正是从回复里读 spec。
+
+**Upgrade notes / 升级提示**
+
+- A `.intent/` file written before this version has no `verification_status`. Read it conservatively:
+  use it to avoid asking an answered question and to know what was done, but treat nothing in it as a
+  decision. / 本版本之前写出的 `.intent/` 文件没有 `verification_status`。保守处理：只用于避免重复
+  提问和了解做过什么，不要把其中任何内容当作已决定。
+- The check after a hand-off now writes into `.intent/` where 1.2.0 wrote nothing. If you track that
+  directory, expect the saved spec to change once the work has been verified. / 交接后的核对现在会写入
+  `.intent/`，而 1.2.0 什么都不写。如果你把该目录纳入版本控制，核对完成后契约文件会变动。
+- Evals: `states_failure_policy` is replaced by two items — `declares_failure_policy` (the run's own
+  spec carries a `failure_behavior` constraint) and `handles_failure_in_code` (the diff structurally
+  contains exception handling). They are reported separately because they measure different layers,
+  and the merged item let a run win it by writing `try`/`catch` alone. / 评测：`states_failure_policy`
+  拆成两项——`declares_failure_policy`（被评运行自己的 spec 里有 `failure_behavior` 约束）与
+  `handles_failure_in_code`（diff 里存在异常处理结构）。分开报是因为两者衡量不同层次；合并的旧项曾
+  让一次运行只靠写 `try`/`catch` 就拿分。
+
 ## [1.2.0] — 2026-09-27
 
 A feature release with a backward-compatible contract: the schema gains one optional field, so
