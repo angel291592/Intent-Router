@@ -19,9 +19,10 @@
   的每次运行问的正是这一个问题，3/3 的交付写明了缓存失败策略，不装的 5 次交付一次都没有写
   （[报告](evals/reports/2026-09-24-delivery-opencode.md)）。
 - 活儿干得更好，而且能被接续。每次运行都以一份机器可读的 `IntentSpec` 收尾，并先存进
-  `.intent/<intent>.intent.yaml`，凡探测过的字段都带 evidence 指针，产出建立在你的项目实际说了
-  什么之上，而不是一个没说出口的假设；下一个 agent、下一个 session、下一个同事，从这份契约文件
-  接着干，而不是从零开始。
+  `.intent/<intent>.intent.yaml`，凡探测过的字段都带 evidence 指针，文件里还记着它自己的状态：
+  仍在等问题、已定契约、还是已经做过。**下一个 session 在探测任何东西之前会先读这份文件**——
+  问过并答过的问题不再问，已定的契约照写实施；交付结果与该契约逐条核对的结论，也写回同一份文件。
+  于是下一个 agent、下一个 session、下一个同事，是从你真正拍过的板接着干，而不是从零开始。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/angel291592/Intent-Router)](https://github.com/angel291592/Intent-Router/releases)
@@ -390,6 +391,10 @@ npx skills add angel291592/Intent-Router
 ```
 
 它会探测你装了哪些 agent 并逐个装进去。skill 名字是 `intent-router`。
+
+不需要任何配置：`.intent/` 由 skill 自己读写。如果你有项目级指令文件，加一句话就能让契约在
+skill 没自动触发的 session 里也被读到：*"若 `.intent/` 里有未结的 spec，开工前先读它；声称完成前
+按它逐条核对。"* 这只是给你自己那份文件的建议——skill 从不会去改它。
 
 <details>
 <summary>手动安装，或安装器不认识的 agent</summary>

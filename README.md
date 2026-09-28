@@ -25,9 +25,11 @@ What that buys you:
   ([report](evals/reports/2026-09-24-delivery-opencode.md)).
 - The work carries further. Every run ends in a machine-readable `IntentSpec`, saved to
   `.intent/<intent>.intent.yaml` before the reply that carries it, whose probed fields carry
-  evidence pointers — so the output rests on what your project actually says rather than on an
-  unstated guess, and the next agent, session or teammate starts from that contract file instead
-  of zero.
+  evidence pointers and which records its own state: still waiting on a question, settled, or
+  already carried out. A later session **reads that file before probing anything** — an answered
+  question is never asked again, a settled contract is implemented as written — and the result of
+  checking the delivered work against it is written back into the same file. So the next agent,
+  session or teammate starts from what you actually decided instead of zero.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/angel291592/Intent-Router)](https://github.com/angel291592/Intent-Router/releases)
@@ -431,6 +433,11 @@ npx skills add angel291592/Intent-Router
 ```
 
 That detects the agents you have and installs into each. The skill lands as `intent-router`.
+
+Nothing needs configuring: the skill reads and writes `.intent/` itself. If you keep a project-wide
+instruction file, one sentence makes the contract load even in a session where the skill does not
+fire on its own: *"If `.intent/` holds an open spec, read it before starting; check the work against
+it before claiming done."* That is a suggestion for your own file — the skill never edits it.
 
 <details>
 <summary>Manual install, or an agent the installer doesn't know</summary>
