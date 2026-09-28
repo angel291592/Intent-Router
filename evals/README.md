@@ -186,13 +186,20 @@ field reference. A case carries the weak `prompt`, the fixture, the scripted use
 the scorer to run over the snapshot. Snapshots land in `reports/raw/delivery/<harness>/<arm>/`
 and are not tracked; the report `reports/<date>-delivery-<harness>.md` is.
 
-Scoring is a pure function over the snapshot (`diff.patch` + the copied `src/` and `tests/`), six
-binary items: 1 `reuses_shared_redis` (uses the fixture's shared Redis helpers, never an
+Scoring is a pure function over the snapshot (`diff.patch` + the copied `src/` and `tests/`), seven
+items: 1 `reuses_shared_redis` (uses the fixture's shared Redis helpers, never an
 in-process cache — the ADR 0007 trap), 2 `uses_default_ttl` (no hardcoded TTL outside
 `src/cache/redis.ts`), 3 `invalidates_on_write` (POST and DELETE drop cache keys), 4
-`covers_all_reads` (all three GET handlers go through the cache), 5 `states_failure_policy`
-(some explicit cache-failure behaviour), 6 `contract_preserved` (response shapes and
-`src/db/users.ts` untouched). A run that produces no diff scores 0/6. Two aux flags are recorded
+`covers_all_reads` (all three GET handlers go through the cache), 5 `declares_failure_policy`
+(the run's own spec carries a `failure_behavior` constraint with text in it), 6
+`handles_failure_in_code` (the diff structurally contains exception handling — the keyword scan,
+which says nothing about intent), 7 `contract_preserved` (response shapes and
+`src/db/users.ts` untouched). Items 5 and 6 are scored separately on purpose: declaring what
+happens on failure and containing a `try`/`catch` are two different layers of gain, and merging
+them let a run win the item by writing `try`/`catch` alone. A run that produces no diff scores
+0/6 — the items with no diff to judge are ✗, and only `declares_failure_policy` is n/a when the
+run emitted no spec at all (a maximum of 6 for a spec-less arm reads as `5.0/6`, `n/a` in the
+per-run table, and `0/5 (5 n/a)` in its item row). Two aux flags are recorded
 alongside the score but never judged: `adr_read` (the transcript mentions the ADR) and
 `intent_check` (the final session's reply contains the literal marker line `Intent check`, which
 only the skill arm's Verify step emits). The skill arm is invoked explicitly, so trigger

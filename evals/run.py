@@ -2145,7 +2145,7 @@ def selftest() -> int:
 
     print("delivery scoring")
     # The delivery scorer is a pure function over a snapshot directory, so the
-    # offline check builds synthetic snapshots and asserts the 6-item verdicts.
+    # offline check builds synthetic snapshots and asserts the 7-item verdicts.
     tmp_root = Path(tempfile.mkdtemp(prefix="delivery-selftest-"))
 
     def fake_diff(path: str, added: list[str]) -> str:
@@ -2232,8 +2232,10 @@ def selftest() -> int:
     )
     outcome = score_user_api_caching(ideal)
     expect(
-        f"ideal delivery scores 6/6: {outcome['items']}",
-        outcome["score"] == 6 and all(outcome["items"].values()),
+        f"ideal delivery scores 6/6 with the declaration n/a: {outcome['items']}",
+        outcome["score"] == 6 and outcome["obtainable"] == 6
+        and outcome["items"]["declares_failure_policy"] is None
+        and not any(value is False for value in outcome["items"].values()),
     )
 
     trap_routes = ideal_routes('const cache = new Map<string, unknown>();\n')
@@ -2510,6 +2512,50 @@ def selftest() -> int:
     outcome = score_user_api_caching(ideal)
     expect("a snapshot without a transcript leaves intent_check None", outcome["aux"]["intent_check"] is None)
 
+    print("declares_failure_policy reads the spec the run emitted")
+    # The layer the prompt arm used to win by writing try/catch: it has to come
+    # from the run's own spec, and a run that emitted no spec must read n/a.
+    def spec_session(constraints: list[str]) -> str:
+        spec = "\n".join(
+            ["spec_version: '0.1'", "request: add caching to the user API",
+             "intent: add_caching", "objects:", "  - GET /api/users", "constraints:"]
+            + [f"  - {line}" for line in constraints]
+        )
+        return session_block(json.dumps({"text": "Here it is.\n\n```yaml\n" + spec + "\n```\n"}))
+
+    for name, constraints, expected in (
+        (
+            "spec-declares-failure",
+            ["source: asked\n"
+             "    text: serve uncached data rather than a stale copy\n"
+             "    irreversible: true\n"
+             "    category: failure_behavior"],
+            True,
+        ),
+        (
+            "spec-stays-silent",
+            ["source: probed\n"
+             "    text: reuse the Redis client already in the dependencies\n"
+             "    evidence: src/cache/redis.ts\n"
+             "    category: approach"],
+            False,
+        ),
+    ):
+        snap = make_snapshot(
+            name,
+            diff_parts=[fake_diff("src/routes/users.ts", ideal_added)],
+            routes_text=ideal_routes(),
+        )
+        (snap / "transcript.txt").write_text(spec_session(constraints), encoding="utf-8")
+        outcome = score_user_api_caching(snap)
+        expect(
+            f"{name}: declares_failure_policy is {expected} and all 7 items are "
+            f"obtainable: {outcome['items']}",
+            outcome["items"]["declares_failure_policy"] is expected
+            and outcome["obtainable"] == 7
+            and outcome["score"] == (7 if expected else 6),
+        )
+
     print("delivery case validation, prepare() arms and claude tools")
     good = yaml.safe_load(DELIVERY_CASES_PATH.read_text(encoding="utf-8"))
     expect("the real delivery.yaml validates clean", validate_delivery_cases(good) == [])
@@ -2635,11 +2681,16 @@ def selftest() -> int:
 
     print("delivery report rendering: the prompt arm and the pinned README line")
     delivery_items = ("reuses_shared_redis", "uses_default_ttl", "invalidates_on_write",
-                      "covers_all_reads", "states_failure_policy", "contract_preserved")
+                      "covers_all_reads", "declares_failure_policy",
+                      "handles_failure_in_code", "contract_preserved")
 
     def delivery_result(arm: str, n: int, *, failure_policy: bool = True, intent_check=None) -> dict:
         items = {name: True for name in delivery_items}
-        items["states_failure_policy"] = failure_policy
+        items["handles_failure_in_code"] = failure_policy
+        # n/a, not False: the 2026-09-24 snapshots carry no spec, so the seventh
+        # item was never measured for these runs and the pinned README line's
+        # `5.0/6` / `6.0/6` maxima stay exactly as filed.
+        items["declares_failure_policy"] = None
         return {
             "case": "add-caching-delivery",
             "arm": arm,
@@ -2650,7 +2701,8 @@ def selftest() -> int:
             "no_delivery": False,
             "answers_used": 0,
             "items": items,
-            "score": sum(items.values()),
+            "score": sum(1 for value in items.values() if value),
+            "obtainable": sum(1 for value in items.values() if value is not None),
             "aux": {"adr_read": True, "intent_check": intent_check, "diff_files": 1, "diff_added_lines": 30},
         }
 
@@ -3198,7 +3250,14 @@ TWO_ARG_SET_CACHE = re.compile(
 )
 EXPIRES_LITERAL = re.compile(r'"EX",\s*\d+')
 TTL_VARIABLE = re.compile(r"\b(?:ttl|TTL|expire|expires|maxAge)\w*\s*[:=]\s*\d{2,}")
-FAILURE_POLICY = re.compile(
+# Structural failure handling in the added source: a try/catch, a fallback, a
+# stale-serving path. Deliberately keyword-level, and deliberately NOT a
+# declaration of intent — it says the diff contains an error-handling structure,
+# never that the run said what should happen on failure. The prompt arm once won
+# this item by writing try/catch and nothing else. The two layers are scored as
+# two items (handles_failure_in_code / declares_failure_policy) so a report can
+# show which layer a skill actually improves.
+FAILURE_HANDLING_IN_CODE = re.compile(
     r"try\s*\{|\.catch\(|fall\s*back|fallthrough|best[- ]effort|fail[- ]fast|uncached|stale",
     re.IGNORECASE,
 )
@@ -3304,13 +3363,40 @@ def handler_sections(routes_text: str) -> dict[tuple[str, str], str]:
     return sections
 
 
+DELIVERY_SESSION_SEP = "\n\n$ "
+
+
+def delivery_spec(snapshot: Path) -> dict | None:
+    """The IntentSpec a delivery run emitted, or None when it emitted no fence.
+
+    Sessions are scanned last-first: the final spec is the one the work was
+    handed off under. The transcript is split with the same separator
+    persist_snapshot joins it with, and each session goes through
+    harness_texts()/extract_spec() unchanged — a second fence parser here would
+    drift from the one that decided the run's state. Extracting from the whole
+    transcript blob instead is not equivalent: the blob's last fence-spanning
+    text parses as degraded output, so the spec would read as absent.
+    """
+    path = snapshot / "transcript.txt"
+    if not path.exists():
+        return None
+    text = path.read_text(encoding="utf-8", errors="replace")
+    for session in reversed(text.split(DELIVERY_SESSION_SEP)):
+        spec, _status, _text = extract_spec(harness_texts(session))
+        if spec is not None:
+            return spec
+    return None
+
+
 def score_user_api_caching(snapshot: Path) -> dict:
     """Score one delivery snapshot for the user-api fixture. Pure function.
 
     Reads only snapshot files (diff.patch, src/**, tests/**, meta.json) — no
-    network, no npm, no transcript (the exceptions are the aux `adr_read` and
-    `intent_check` flags). A snapshot with no added lines at all is a run that delivered
-    nothing (§5.3: no_delivery counts into N as 0/6), so every item is False.
+    network, no npm, no transcript (the exceptions are the aux `adr_read` /
+    `intent_check` flags and the `declares_failure_policy` item, which needs the
+    spec the run emitted). A snapshot with no added lines at all is a run that delivered
+    nothing (§5.3: no_delivery counts into N as 0), so every item is False — except
+    `declares_failure_policy`, which stays n/a when the run emitted no spec at all.
     """
     diff_path = snapshot / "diff.patch"
     diff_text = diff_path.read_text(encoding="utf-8") if diff_path.exists() else ""
@@ -3333,6 +3419,7 @@ def score_user_api_caching(snapshot: Path) -> dict:
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             meta = {}
+    produced_spec = delivery_spec(snapshot)
 
     def segment(method: str, path: str) -> str:
         return sections.get((method, path), "")
@@ -3374,8 +3461,38 @@ def score_user_api_caching(snapshot: Path) -> dict:
                 return False
         return True
 
-    def item_states_failure_policy() -> bool:
-        return any(FAILURE_POLICY.search(ln) for ln in added_src)
+    def item_declares_failure_policy() -> bool | None:
+        """Did the run DECLARE what happens on failure? True / False / None.
+
+        - spec emitted with a `failure_behavior` constraint whose text is
+          non-empty → True
+        - spec emitted without one → False
+        - no spec emitted at all (the bare and prompt arms) → None, reported as
+          `n/a`, never as False
+
+        None is not False and the two must not be merged: "declared nothing" is a
+        finding about the run, "had no spec to declare in" is a finding about the
+        arm, and collapsing them hides which one a report is looking at. The
+        constraints come from the same extract_spec() result the runner used to
+        decide the run's state — no second YAML parser.
+        """
+        if produced_spec is None:
+            return None
+        return any(
+            isinstance(constraint, dict)
+            and constraint.get("category") == "failure_behavior"
+            and str(constraint.get("text") or "").strip()
+            for constraint in (produced_spec.get("constraints") or [])
+        )
+
+    def item_handles_failure_in_code() -> bool:
+        """Did the diff structurally handle failure? The renamed old regex.
+
+        Narrowed to "an exception-handling structure exists in the added source".
+        It says nothing about whether the run declared what should happen, which
+        is why item_declares_failure_policy exists next to it.
+        """
+        return any(FAILURE_HANDLING_IN_CODE.search(ln) for ln in added_src)
 
     def item_contract_preserved() -> bool:
         if re.search(r"^diff --git a/tests/users\.test\.ts\b", diff_text, re.M):
@@ -3394,7 +3511,8 @@ def score_user_api_caching(snapshot: Path) -> dict:
         "uses_default_ttl": item_uses_default_ttl,
         "invalidates_on_write": item_invalidates_on_write,
         "covers_all_reads": item_covers_all_reads,
-        "states_failure_policy": item_states_failure_policy,
+        "declares_failure_policy": item_declares_failure_policy,
+        "handles_failure_in_code": item_handles_failure_in_code,
         "contract_preserved": item_contract_preserved,
     }
     delivered = any(file.startswith(("src/", "tests/")) for file in added)
@@ -3402,7 +3520,15 @@ def score_user_api_caching(snapshot: Path) -> dict:
         items = {name: judge() for name, judge in judges.items()}
     else:
         items = {name: False for name in judges}
-    score = sum(items.values())
+        # A run that delivered nothing still tells n/a from "declared nothing".
+        items["declares_failure_policy"] = item_declares_failure_policy()
+    # `obtainable` is the number of items this run could have earned: a dimension
+    # that is n/a for a run does not count against it. Reports pair the two
+    # (`score`/`obtainable`) instead of hardcoding one denominator, so an arm that
+    # emits no spec is not silently marked down for a dimension it has no way to
+    # populate — while the item row still shows how many runs were n/a.
+    score = sum(1 for value in items.values() if value)
+    obtainable = sum(1 for value in items.values() if value is not None)
     sessions_meta = meta.get("sessions") or []
     aux = {
         "adr_read": None,
@@ -3427,7 +3553,7 @@ def score_user_api_caching(snapshot: Path) -> dict:
         # "$ "; the harness JSON escapes newlines inside texts, so that
         # separator occurs only between sessions.
         aux["intent_check"] = "Intent check" in text.split("\n\n$ ")[-1]
-    return {"items": items, "score": score, "aux": aux}
+    return {"items": items, "score": score, "obtainable": obtainable, "aux": aux}
 
 
 DELIVERY_SCORERS = {"user-api-caching": score_user_api_caching}
@@ -3697,17 +3823,55 @@ def render_delivery_report(
             if not (r["environmental"] or r["skill_not_loaded"])
         ]
 
-    def arm_line(arm: str, pick) -> str:
+    def arm_mean(arm: str, pick) -> float | None:
         runs = judged(arm)
-        if not runs:
-            return "—"
         values = [pick(r) for r in runs if pick(r) is not None]
         if not values:
+            return None
+        return sum(values) / len(values)
+
+    def arm_line(arm: str, pick) -> str:
+        value = arm_mean(arm, pick)
+        return "—" if value is None else f"{value:.1f}"
+
+    def arm_max(arm: str) -> int:
+        """Items the arm's runs could have earned; n/a items are not counted."""
+        mean = arm_mean(arm, lambda r: r.get("obtainable", len(item_names)))
+        return len(item_names) if mean is None else round(mean)
+
+    def arm_score(arm: str) -> str:
+        """`<mean score>/<items obtainable>` — the maximum is per-arm, not fixed.
+
+        An arm whose runs emit no spec cannot populate declares_failure_policy, so
+        that item is n/a there and excluded from its maximum. A hardcoded `/{len}`
+        would read as if the arm had been measured on a dimension it never had.
+        """
+        score = arm_mean(arm, lambda r: r["score"])
+        if score is None:
             return "—"
-        return f"{sum(values) / len(values):.1f}"
+        return f"{score:.1f}/{arm_max(arm)}"
 
     def row(label: str, cell) -> str:
         return f"| {label} | " + " | ".join(str(cell(arm)) for arm in arms) + " |"
+
+    def item_row_cell(arm: str, name: str) -> str:
+        """`earned/judged`, plus the n/a count when a run could not be judged on it.
+
+        Without the suffix `0/5` reads as "five runs declared nothing" when it may
+        mean "five runs emitted no spec" — exactly the conflation the split into
+        declares_failure_policy / handles_failure_in_code exists to prevent.
+        """
+        runs = judged(arm)
+        if not runs:
+            return "—"
+        values = [r["items"].get(name) for r in runs]
+        not_applicable = sum(1 for value in values if value is None)
+        cell = f"{sum(1 for value in values if value)}/{len(runs)}"
+        return f"{cell} ({not_applicable} n/a)" if not_applicable else cell
+
+    def item_mark(value) -> str:
+        """✓ / ✗ / n/a. n/a is not ✗: no spec was emitted to declare in."""
+        return ITEM_MARK[value] if isinstance(value, bool) else "n/a"
 
     if env_section is not None:
         preamble = [f"# Delivery-quality report — {harness}", "", env_section.rstrip(), ""]
@@ -3772,23 +3936,18 @@ def render_delivery_report(
             ]
 
     item_names = ["reuses_shared_redis", "uses_default_ttl", "invalidates_on_write",
-                  "covers_all_reads", "states_failure_policy", "contract_preserved"]
+                  "covers_all_reads", "declares_failure_policy", "handles_failure_in_code",
+                  "contract_preserved"]
     lines = preamble + [
         "## 2. Summary",
         "",
         "| metric | " + " | ".join(arms) + " |",
         "|---|" + "---|" * len(arms),
         row("runs judged (environmental excluded)", lambda arm: len(judged(arm))),
-        row("mean score /6", lambda arm: arm_line(arm, lambda r: r["score"])),
+        row("mean score / obtainable", lambda arm: arm_score(arm)),
     ]
     for name in item_names:
-        lines.append(
-            row(
-                name,
-                lambda arm: f"{sum(1 for r in judged(arm) if r['items'].get(name))}"
-                f"/{len(judged(arm)) or '—'}",
-            )
-        )
+        lines.append(row(name, lambda arm, name=name: item_row_cell(arm, name)))
     # The per-run table's delimiter row is built from the same column list as its
     # header: GitHub renders a table only when the two cell counts match.
     columns = (
@@ -3825,11 +3984,12 @@ def render_delivery_report(
             str(s.get("state") or "-") for s in r["sessions"]
         ) or "-"
         wall = round(sum(s.get("wall_s") or 0 for s in r["sessions"]), 1)
-        cells = " | ".join(ITEM_MARK[r["items"].get(name, False)] for name in item_names)
+        cells = " | ".join(item_mark(r["items"].get(name)) for name in item_names)
         files = f"{r['aux'].get('diff_files', 0)} ({r['aux'].get('diff_added_lines', 0)}+)"
         lines.append(
             f"| {r['arm']} | {r['n']}{flags} | {len(r['sessions'])} | {states} | {wall} | "
-            f"{r['answers_used']} | {r['score']}/6 | {cells} | "
+            f"{r['answers_used']} | {r['score']}/{r.get('obtainable', len(item_names))} | "
+            f"{cells} | "
             f"{ITEM_MARK.get(r['aux'].get('adr_read'), '—')} | "
             f"{ITEM_MARK.get(r['aux'].get('intent_check'), '—')} | {files} |"
         )
@@ -3843,18 +4003,19 @@ def render_delivery_report(
             "_Facts only, one line each: skill defects seen (not fixed, P5), "
             "runner anomalies, environmental reruns._",
         ]
-    mean = lambda arm: arm_line(arm, lambda r: r["score"])
     adr = lambda arm: sum(1 for r in judged(arm) if r["items"].get(item_names[0]))
     # Without a prompt arm this line must stay byte-identical to the format the
-    # 2026-09-24 report and the README evals block already carry.
+    # 2026-09-24 report and the README evals block already carry. arm_score
+    # renders `5.0/6` for those runs: the seventh item is n/a there, so the
+    # maximum stays 6 and the historical line is reproduced unchanged.
     summary = (
         f"{today} · {harness} · {model} · delivery {case_id} · "
-        f"bare {mean('bare')}/6 (N={len(judged('bare'))}) · "
+        f"bare {arm_score('bare')} (N={len(judged('bare'))}) · "
     )
     if with_prompt:
-        summary += f"one-line prompt {mean('prompt')}/6 (N={len(judged('prompt'))}) · "
+        summary += f"one-line prompt {arm_score('prompt')} (N={len(judged('prompt'))}) · "
     summary += (
-        f"with skill {mean('skill')}/6 (N={len(judged('skill'))}) · "
+        f"with skill {arm_score('skill')} (N={len(judged('skill'))}) · "
         f"ADR trap avoided bare {adr('bare')}/{len(judged('bare')) or 1} "
     )
     if with_prompt:
@@ -3917,6 +4078,7 @@ def run_delivery(args: argparse.Namespace) -> int:
             "n": n,
             "items": scored["items"],
             "score": scored["score"],
+            "obtainable": scored["obtainable"],
             "aux": scored["aux"],
         }
 
@@ -3994,10 +4156,11 @@ def rescore_delivery(raw_dir: Path, out_dir: Path, date_str: str | None) -> int:
                     "answers_used": int(meta.get("answers_used") or 0),
                     "items": scored["items"],
                     "score": scored["score"],
+                    "obtainable": scored["obtainable"],
                     "aux": scored["aux"],
                 }
             )
-            print(f"  [{case_id}/{arm}] {snap_dir.name}: {scored['score']}/6")
+            print(f"  [{case_id}/{arm}] {snap_dir.name}: {scored['score']}/{scored['obtainable']}")
     if not results:
         raise SystemExit(f"no delivery snapshots found in {raw_dir}")
 
