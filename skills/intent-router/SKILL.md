@@ -334,31 +334,32 @@ reaches ROUTE with an inferred *irreversible* constraint is a bug.
 ### After the hand-off: verify
 
 When the work a ROUTEd spec handed off is carried out in this same conversation, verify it before
-reporting it done. Reread the saved spec (or the fenced block, if it could not be saved) and check
-the finished work against every constraint that says what the work must or must not do. Report
-one line per constraint, after the work summary, under a line reading exactly `Intent check` —
-that line stays in English whatever the language; the lines under it use the user's language:
+reporting it done. Reread the saved spec — or the fenced block, if it could not be saved — and check
+the finished work against every constraint on what it must or must not do. Report one line per
+constraint, after the work summary, under a line reading exactly `Intent check`, which stays in
+English whatever the language; the lines under it use the user's language:
 
 - **met** — with the one pointer (`path:line`) where the delivered work satisfies it;
 - **not met** — then fix it before reporting, or say why it stays unmet;
 - **not checkable here** — with the reason (it needs a running service, a person, live data).
 
-Never mark a constraint met without a pointer into the delivered work. The check reads the spec;
-it does not reopen it — a decided constraint is checked, not asked again.
+Never mark a constraint met without a pointer into the delivered work — and the pointer must be the
+line that satisfies *that* constraint, not a neighbouring branch or a similar handler. Work that
+does not implement the constraint is `not met`, however plausible the file looks. The check reads
+the spec; it does not reopen it — a decided constraint is checked, not asked again.
 
 Write the result back into the same `.intent/` file, replacing its earlier snapshot:
 `verification_status: verified`, plus `verification` with its `status`, a `checked_at`, and one
 `results` line per constraint carrying `constraint`, `verdict` and — when met — `pointer`. The reply
-keeps the same lines under `Intent check`: the file is the next session's copy, never a substitute
-for telling this user. A delegated check carries the spec path and runs in an agent with a fresh
-context — a check sharing the implementer's context is not a check.
+keeps the same lines under `Intent check`: the file is for the next session, not a substitute for
+telling this user. A delegated check carries the spec path and runs in a fresh context — a check
+sharing the implementer's is not a check.
 
 ## 6. Output format
 
-**Lead with the human part.** Before the fence, 3–6 lines of prose: what you looked up, above all
-the finding that changed the approach; what you decided for the user, one line each, so any single
-line can be vetoed; and the one question, when there is one. Then the fenced `yaml` block holding
-the whole spec, in exactly this field order — nothing else inside it.
+**Lead with the human part.** Before the fence, 3–6 lines of prose: what you looked up, above all the
+finding that changed the approach; what you decided for the user, one line each, so any line can be
+vetoed; and the one question, if any. Then the fenced `yaml` block, whole spec, in field order.
 
 **The fence stays.** Some environments keep only a turn's final message, and the eval reads the spec
 from the reply, so the block is never dropped in favour of the prose; a workspace that cannot be
