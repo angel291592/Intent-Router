@@ -12,7 +12,11 @@
   #   - once the agent has stopped (ROUTE / HALT / plain text) and the workspace
   #     still has no diff: send `implement_prompt` once;
   #   - stop when a diff exists, or the session budget is spent.
-  answer_when_asked: "A"
+  # `answer_when_asked` must NOT be the option the run itself recommends: if the
+  # scripted user picks the model's own default, an arm that would have chosen it
+  # anyway cannot be told apart from an arm that followed the answer. The
+  # 2026-09-27 run recommended A, so the scripted answer is B.
+  answer_when_asked: "B"
   max_answers: 3
   implement_prompt: >-
     Implement it now in this repository, exactly as decided above. Do not ask

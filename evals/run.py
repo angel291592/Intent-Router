@@ -2640,6 +2640,26 @@ def selftest() -> int:
     expect("a trailing question is a question", looks_like_question("Sure.\n\nWhich strategy should I use?"))
     expect("an option list is a question", looks_like_question("Options:\n\n- A) stale\n- B) uncached\n- C) hybrid"))
     expect("a plain statement is not", not looks_like_question("Done. The cache is in place."))
+    # The widened window: a question in the second-to-last paragraph, followed by
+    # a closing line that is not itself a question.
+    question_then_closer = "Which cache should I use?\n\nTell me and I'll start."
+    expect(
+        "a question in the second-to-last paragraph still counts",
+        looks_like_question(question_then_closer)
+        and question_evidence(question_then_closer) == "question mark in paragraph -2 of 2",
+    )
+    # ...but not from any further back than the window.
+    far_back = (
+        "Which cache should I use?\n\nHere is the rest of the plan.\n\n"
+        "It has several parts.\n\nAnd a closing line."
+    )
+    expect("a question further back than the window does not count", not looks_like_question(far_back))
+    for text, expected in (
+        ("Sure.\n\nWhich strategy should I use?", "question mark in paragraph -1 of 2"),
+        ("Options:\n\n- A) stale\n- B) uncached\n- C) hybrid", "option list in paragraph -1 of 2"),
+        ("Done. The cache is in place.", None),
+    ):
+        expect(f"question_evidence is {expected!r} for {text[:24]!r}", question_evidence(text) == expected)
     # The 2026-09-27 prompt-arm shape: a preamble event, then a final message
     # that asks. The question check must see the final message.
     two_texts = "\n".join(
@@ -3168,23 +3188,34 @@ def final_reply(stdout: str) -> str:
     return texts[-1] if texts else ""
 
 
-def looks_like_question(text: str) -> bool:
-    """Heuristic for a bare-arm reply that ends by asking the user something.
+def question_evidence(text: str) -> str | None:
+    """Why the reply counts as asking, or None when it does not.
 
-    Only used when the reply carries no spec (state is None); the skill arm is
-    judged by its ASK state alone.
+    Returned instead of a bare bool so the snapshot records *which* paragraph
+    tripped the check. The 2026-09-27 loss was not "the agent never asked" but
+    "the check read the wrong line", and the two are indistinguishable in a
+    snapshot that stores only the verdict.
     """
     paragraphs = [p.strip() for p in (text or "").split("\n\n") if p.strip()]
-    if not paragraphs:
-        return False
-    tail = paragraphs[-1]
-    if "?" in tail or "？" in tail:
-        return True
-    return any(
-        re.match(r"^\s*[-*]?\s*[A-C][\.\):]", line)
-        for line in tail.splitlines()
-        if line.strip()
-    )
+    for offset, paragraph in enumerate(reversed(paragraphs[-QUESTION_WINDOW:]), start=1):
+        if "?" in paragraph or "？" in paragraph:
+            return f"question mark in paragraph -{offset} of {len(paragraphs)}"
+        if any(OPTION_LINE.match(line) for line in paragraph.splitlines() if line.strip()):
+            return f"option list in paragraph -{offset} of {len(paragraphs)}"
+    return None
+
+
+def looks_like_question(text: str) -> bool:
+    """Heuristic for a reply that ends by asking the user something.
+
+    Only used when the reply carries no spec (state is None); the skill arm is
+    judged by its ASK state alone. The window is the last QUESTION_WINDOW
+    paragraphs, not only the last one: a reply that states "Four things the repo
+    does not settle", lists them, and closes with "Which way do you want each of
+    these?" is a question however the closing line is worded, and one courtesy
+    line after the question must not hide it either.
+    """
+    return question_evidence(text) is not None
 
 
 def harness_run_metrics(stdout: str) -> tuple[int | None, int | None]:
@@ -3261,6 +3292,11 @@ FAILURE_HANDLING_IN_CODE = re.compile(
     r"try\s*\{|\.catch\(|fall\s*back|fallthrough|best[- ]effort|fail[- ]fast|uncached|stale",
     re.IGNORECASE,
 )
+# How far back from the end of a reply the question check looks. One paragraph is
+# the common shape; a reply that closes with a courtesy line after its question
+# needs more.
+QUESTION_WINDOW = 3
+OPTION_LINE = re.compile(r"^\s*[-*]?\s*[A-C][\.\):]")
 RES_JSON = {
     "users": re.compile(r"res\.json\(\{\s*users\s*\}\)"),
     "user": re.compile(r"res\.json\(\{\s*user\s*\}\)"),
@@ -3542,6 +3578,14 @@ def score_user_api_caching(snapshot: Path) -> dict:
         "sessions": len(sessions_meta),
         "wall_s_total": round(sum(s.get("wall_s") or 0 for s in sessions_meta), 1),
         "no_delivery": not delivered,
+        # Recorded by the runner when a prompt-arm first turn asked in prose but
+        # was not recognised as a question. Read from meta.json so a rescore
+        # keeps showing it.
+        "question_maybe_missed": bool(meta.get("question_maybe_missed")),
+        # Why the run's reply counted as a question, or None. Kept per run so a
+        # later reader can tell "it never asked" from "the check read the wrong
+        # paragraph" — the two looked identical in the 2026-09-27 snapshot.
+        "question_evidence": meta.get("question_evidence"),
     }
     transcript_path = snapshot / "transcript.txt"
     if transcript_path.exists():
@@ -3595,6 +3639,8 @@ def run_delivery_once(
     implement_sent = False
     environmental = False
     skill_not_loaded = False
+    question_maybe_missed = False
+    question_note: str | None = None
     resume: str | None = None
     prompt = str(case["prompt"]).strip()
     if arm == "skill":
@@ -3657,11 +3703,26 @@ def run_delivery_once(
             # Judge the final message: on 2026-09-27 the prompt arm ended its
             # first session with four questions, but the check read the
             # session's opening line, so the scripted user never answered.
-            asked = (state == "ASK") or (state is None and looks_like_question(final_reply(stdout)))
+            reply = final_reply(stdout)
+            evidence = None if state == "ASK" else question_evidence(reply)
+            asked = state == "ASK" or evidence is not None
+            if asked:
+                question_note = evidence or "decision.state == ASK"
             if asked and answers_used < int(case["max_answers"]):
                 prompt = str(case["answer_when_asked"])
                 answers_used += 1
                 continue
+            if (
+                arm == "prompt"
+                and len(sessions) == 1
+                and evidence is None
+                and reply.count("?") + reply.count("？") >= 2
+            ):
+                # Guard for the 2026-09-27 loss: a prompt-arm first turn that asks
+                # in prose and is not recognised would silently be reported as
+                # "it never asked". Two or more question marks is enough to make
+                # that visible in the report instead of in a footnote months later.
+                question_maybe_missed = True
             if not implement_sent:
                 prompt = str(case["implement_prompt"])
                 implement_sent = True
@@ -3681,6 +3742,8 @@ def run_delivery_once(
             implement_sent=implement_sent,
             environmental=environmental,
             skill_not_loaded=skill_not_loaded,
+            question_maybe_missed=question_maybe_missed,
+            question_evidence=question_note,
         )
     finally:
         rm_tree(workspace)
@@ -3691,6 +3754,7 @@ def run_delivery_once(
         "skill_not_loaded": skill_not_loaded,
         "no_delivery": not any(s["has_diff"] for s in sessions),
         "answers_used": answers_used,
+        "question_maybe_missed": question_maybe_missed,
     }
 
 
@@ -3709,6 +3773,8 @@ def persist_snapshot(
     implement_sent: bool = False,
     environmental: bool = False,
     skill_not_loaded: bool = False,
+    question_maybe_missed: bool = False,
+    question_evidence: str | None = None,
 ) -> Path:
     """Snapshot the workspace under raw/delivery/<harness>/<arm>/<case>-<n>/.
 
@@ -3772,6 +3838,8 @@ def persist_snapshot(
         "no_delivery": not any(s["has_diff"] for s in sessions),
         "environmental": environmental,
         "skill_not_loaded": skill_not_loaded,
+        "question_maybe_missed": question_maybe_missed,
+        "question_evidence": question_evidence,
     }
     (target / "meta.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
     return target
@@ -3961,6 +4029,12 @@ def render_delivery_report(
             "Intent check reported (aux)",
             lambda arm: sum(1 for r in judged(arm) if r["aux"].get("intent_check")),
         ),
+        row(
+            "asked in prose, question not recognised (WARNING)",
+            lambda arm: sum(
+                1 for r in judged(arm) if r["aux"].get("question_maybe_missed")
+            ),
+        ),
         row("no_delivery runs", lambda arm: sum(1 for r in judged(arm) if r["no_delivery"])),
         row("mean sessions", lambda arm: arm_line(arm, lambda r: len(r["sessions"]))),
         row(
@@ -3980,6 +4054,8 @@ def render_delivery_report(
             flags = " (environmental)"
         elif r["skill_not_loaded"]:
             flags = " (skill_not_loaded)"
+        if r["aux"].get("question_maybe_missed"):
+            flags += " ⚠ question_maybe_missed"
         states = " → ".join(
             str(s.get("state") or "-") for s in r["sessions"]
         ) or "-"
