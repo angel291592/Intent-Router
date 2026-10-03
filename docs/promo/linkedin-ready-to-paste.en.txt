@@ -1,0 +1,26 @@
+What actually changes when you give an agent a spec instead of a prompt
+
+I ran the same task through an agent twice — once bare, once with an intent layer in front of it. Same model, same repo, same task ("add caching to the user API"), 5 bare runs and 3 skill runs.
+
+Four of the six delivery checks passed on both arms. The bare runs were not bad: every one reused the shared Redis, used the default TTL, invalidated on write, and covered all reads.
+
+One check separated them completely.
+
+"State the failure policy of the cache you just added."
+
+→ Bare: 0 out of 5 runs
+→ With the skill: 3 out of 3 runs
+
+Not "worse" — zero. Five independent runs, and not one of them wrote down what happens when the cache is unreachable. The code was correct and silently fragile.
+
+The cost is real and I'll state it: the skill arm takes +2 sessions and about +90 seconds per run. You are buying one property — the run tells you how it fails before you find out in production.
+
+One more thing worth knowing. Every run on both arms read the repo's own ADR, so the bare model avoided the in-process-cache trap through its own read-before-write habit. The skill didn't win that one by being smarter. It won the one the model had no habit for.
+
+The interesting part was building the benchmark. My first full run was thrown away: the "bare" arm had silently loaded the skill from a user-level config directory, and its first turn emitted the skill's output format verbatim. 105 transcript hits confirmed it. A benchmark that can't detect contamination measures nothing.
+
+Methodology, the discarded run, and the scoring bug I fixed (the first scorer missed both wrapper shapes the runs actually produced) are all in the repo.
+
+https://github.com/angel291592/Intent-Router
+
+#AIagents #LLM #SoftwareEngineering #AItools
