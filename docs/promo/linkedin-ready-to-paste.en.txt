@@ -19,8 +19,6 @@ One more thing worth knowing. Every run on both arms read the repo's own ADR, so
 
 The interesting part was building the benchmark. My first full run was thrown away: the "bare" arm had silently loaded the skill from a user-level config directory, and its first turn emitted the skill's output format verbatim. 105 transcript hits confirmed it. A benchmark that can't detect contamination measures nothing.
 
-Methodology, the discarded run, and the scoring bug I fixed (the first scorer missed both wrapper shapes the runs actually produced) are all in the repo.
-
-https://github.com/angel291592/Intent-Router
+Methodology, the discarded run, and the scoring bug I fixed (the first scorer missed both wrapper shapes the runs actually produced) are all in the repo — link in the first comment.
 
 #AIagents #LLM #SoftwareEngineering #AItools
