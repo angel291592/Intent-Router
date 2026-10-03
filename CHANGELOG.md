@@ -64,6 +64,16 @@ environments keep only a turn's final message and the eval reads the spec from t
   GitHub Pages 从 `docs/` 发布站点（入口 `docs/index.md`），Discussions 已开启。两者都是仓库设置
   而非代码，不改变 skill 的行为。
 
+**Documentation / 文档**
+
+- Two write-ups land under `docs/articles/`: why agents guess intent, built entirely out of the
+  numbers already committed in `evals/reports/`. English and Chinese. Nothing in them is an
+  estimate, and every claim carries its source. The Chinese copy names the 2026-09-22 claude-code
+  channel as the origin of the ~1/3 figure, so the number is not read as settled. /
+  `docs/articles/` 下新增两篇文章（中英各一）：agent 为什么会猜错意图，全部素材取自
+  `evals/reports/` 里已提交的数字。没有估计值，每条结论都标了出处。中文版注明 ~1/3 那个数字来自
+  2026-09-22 的 claude-code 通道，避免它被当成定论。
+
 ## [1.2.0] — 2026-09-27
 
 A feature release with a backward-compatible contract: the schema gains one optional field, so

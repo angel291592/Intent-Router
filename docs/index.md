@@ -15,6 +15,12 @@ This page is the site entry point. The authoritative sources live in the reposit
 | **[Evals](https://github.com/angel291592/Intent-Router/tree/main/evals)** | Cases, runner, and the published reports |
 | **[CHANGELOG](https://github.com/angel291592/Intent-Router/blob/main/CHANGELOG.md)** | Release history and verification results |
 
+## Writing
+
+- **[Why agents guess your intent: seventeen decidable cases](articles/why-agents-guess-intent.en.md)** —
+  how "it guessed wrong" becomes decidable, why one hallucinated citation fails the whole suite, and the
+  contamination check that invalidated an entire run. ([中文](articles/why-agents-guess-intent.zh-CN.md))
+
 ## What it looks like
 
 Three passes, in compiler order: **Parse** the request into a draft spec, **Resolve** every open
