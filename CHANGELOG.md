@@ -48,6 +48,22 @@ environments keep only a turn's final message and the eval reads the spec from t
   `handles_failure_in_code`（diff 里存在异常处理结构）。分开报是因为两者衡量不同层次；合并的旧项曾
   让一次运行只靠写 `try`/`catch` 就拿分。
 
+**Repository / 仓库运维**
+
+- `main` is now protected with `offline-gate` as a required status check, linear history, and
+  force-pushes and deletions refused. The gate is enforced for everyone except administrators:
+  with a single maintainer, `enforce_admins` would have blocked the maintainer's own commits
+  behind a check that only runs after a push. Everyone else cannot merge or push red. /
+  `main` 现在受保护：`offline-gate` 是必需状态检查，历史必须线性，拒绝强推与删除。门禁对管理员
+  以外的人一律生效：单人维护下 `enforce_admins` 会把维护者自己的提交挡在一个「推送后才运行」的
+  检查之后。其他人无法合入或推送未通过的改动。
+
+- GitHub Pages serves `docs/` at https://angel291592.github.io/Intent-Router/ , entered through
+  `docs/index.md`; Discussions is enabled. Both are repository settings, not code, and neither
+  changes what the skill does. /
+  GitHub Pages 从 `docs/` 发布站点（入口 `docs/index.md`），Discussions 已开启。两者都是仓库设置
+  而非代码，不改变 skill 的行为。
+
 ## [1.2.0] — 2026-09-27
 
 A feature release with a backward-compatible contract: the schema gains one optional field, so
