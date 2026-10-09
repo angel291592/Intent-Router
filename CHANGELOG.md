@@ -7,6 +7,8 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-10-09
+
 The saved contract becomes a two-way artifact. It gains an optional `verification_status`
 (`asked` / `routed` / `verified` / `superseded`) and an optional `verification` object holding the
 result of the check that runs after a hand-off; both are optional, so every spec 1.2.0 wrote still
@@ -73,6 +75,25 @@ environments keep only a turn's final message and the eval reads the spec from t
   `docs/articles/` 下新增两篇文章（中英各一）：agent 为什么会猜错意图，全部素材取自
   `evals/reports/` 里已提交的数字。没有估计值，每条结论都标了出处。中文版注明 ~1/3 那个数字来自
   2026-09-22 的 claude-code 通道，避免它被当成定论。
+
+**Verification / 核验**
+
+- Verification for this release is **incomplete**, and this entry records that rather than
+  leaving it implicit. The delivery run on opencode (harness default) reached ASK and then
+  ROUTE with a schema-valid spec that carried the new `verification_status: routed`, but its
+  third session — the scripted user's "implement it now" turn — hit the runner's 480-second
+  ceiling and was killed, so no diff was produced and the arm counted N=0
+  (`evals/reports/2026-10-09-delivery-opencode.md`). The same turn took 354 s on 2026-09-28 and
+  passed, so this is a timing edge rather than a behaviour verdict — but it means no
+  verification run of the final skill text exists, and this release therefore claims nothing
+  about the 2026-09-28 changes beyond what those two reports already carry. /
+  本版的**核验未完成**，此条把这件事记下来，而不是让它含糊过去。opencode（harness 默认模型）
+  上的交付运行走到了 ASK、再到 ROUTE，spec 通过 schema 校验并带上新的
+  `verification_status: routed`；但它的第三个会话——scripted user 的"立即实施"那轮——撞上
+  runner 的 480 秒上限被杀，没有产出 diff，该臂计为 N=0
+  （`evals/reports/2026-10-09-delivery-opencode.md`）。同一轮在 2026-09-28 用时 354 秒并通过，
+  因此这是时序临界而非行为判定——但这也意味着**没有**针对最终 skill 文本的核验运行，本版对
+  2026-09-28 那批改动不作任何超出上述两份报告已有内容的声称。
 
 ## [1.2.0] — 2026-09-27
 
@@ -632,7 +653,8 @@ First release. L0 only: a prompt-only skill with no dependencies and no keys. /
 - L1 and L2 backends are declared and not implemented.
 - L1 与 L2 后端只做声明，未实现。
 
-[Unreleased]: https://github.com/angel291592/Intent-Router/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/angel291592/Intent-Router/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/angel291592/Intent-Router/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/angel291592/Intent-Router/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/angel291592/Intent-Router/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/angel291592/Intent-Router/compare/v0.3.0...v1.0.0
