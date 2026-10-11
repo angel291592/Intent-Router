@@ -3,6 +3,8 @@ HANDOFF.md
 docs/plans/
 docs/reviews/
 agent.md
+# harness 指令文件名（AGENT*.md 这一类会被部分 harness 自动加载）：本机工作用，不属于公开白名单
+AGENT*.md
 test.md
 after-test.md
 MAINTENANCE.md
