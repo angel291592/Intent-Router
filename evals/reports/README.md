@@ -8,6 +8,12 @@ top-level README may come from. The reports currently committed are:
 - `2026-09-24-opencode.md` (v1.1.0 release verification, 4-case subset)
 - `2026-09-24-opencode-2.md` (bash permission key-order fix verification, 1-case subset)
 - `2026-09-24-delivery-opencode.md` (delivery-quality comparison)
+- `2026-09-27-opencode.md` (verification run for the clarification-depth change, 6-case subset)
+- `2026-09-27-delivery-opencode.md` (delivery-quality comparison, bare / one-line prompt / skill)
+- `2026-09-28-opencode.md` (2-case subset on the harness default model)
+- `2026-09-28-delivery-opencode.md` (delivery-quality comparison, harness default model)
+- `2026-10-09-delivery-opencode.md` (v1.3.0 verification attempt; its single run exceeded the
+  runner's 480-second ceiling and is recorded as environmental, so nothing in it is scored)
 
 claude-code run records are kept locally but not committed: the channel they ran through restricted
 the model in ways that make the results unattributable to the skill, so publishing them would be
