@@ -35,6 +35,12 @@ question by looking it up or asking, then **Typecheck and emit** — route, ask,
 ## Get it
 
 ```bash
+npx skills add angel291592/Intent-Router
+```
+
+Or clone it and copy `skills/intent-router/` into your harness's skills directory:
+
+```bash
 git clone https://github.com/angel291592/Intent-Router.git
 ```
 
