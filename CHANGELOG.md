@@ -7,6 +7,8 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-10-16
+
 The description now fits the harness that renders the smallest slice of it, and the eval runner can
 measure DeepSeek Harness alongside the two harnesses it already ran. A description is what a harness
 matches a request against, and dsh renders `name` plus a normalized description capped at 500
@@ -763,7 +765,8 @@ First release. L0 only: a prompt-only skill with no dependencies and no keys. /
 - L1 and L2 backends are declared and not implemented.
 - L1 与 L2 后端只做声明，未实现。
 
-[Unreleased]: https://github.com/angel291592/Intent-Router/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/angel291592/Intent-Router/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/angel291592/Intent-Router/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/angel291592/Intent-Router/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/angel291592/Intent-Router/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/angel291592/Intent-Router/compare/v1.0.0...v1.1.0
