@@ -1,4 +1,4 @@
-# Why agents guess your intent: seventeen decidable cases
+# Why agents guess your intent: eighteen decidable cases
 
 > Written 2026-10-03. Every number here comes from a committed report in `evals/reports/`; nothing is an
 > estimate. Methodology: [`evals/README.md`](../../evals/README.md). Case definitions:
@@ -84,9 +84,9 @@ your judgement".
 
 ---
 
-## 3. Seventeen cases cover four states, not four difficulty levels
+## 3. Eighteen cases cover four states, not four difficulty levels
 
-Case count is not the metric; coverage is. The seventeen cases fall into four groups.
+Case count is not the metric; coverage is. The eighteen cases fall into four groups.
 
 **Should ask** (`add-caching-auto`, `partially-specified-auto`, `chinese-ambiguous`, …)
 The request carries a decision-bearing unknown → it must ask, and ask only that.
@@ -246,6 +246,7 @@ The boundaries matter more than the conclusions, so here they are:
   compatibility docs (its docs say it loads standard `SKILL.md`; not exercised here). The runner
   supports `claude-code`, `opencode` and `dsh`; the dsh channel cannot score a case that needs to
   read the workspace's git history, because the Windows sandbox denies the shell that access.
+- **The full-suite threshold is 15/18**, but **no full-suite run at that size has been published**.
   The most recent committed report is a subset run.
 - **The delivery comparison is small** (bare N=5, skill N=3). It can show that the skill arm states a
   failure policy; it cannot give you a precise effect size.
@@ -276,6 +277,6 @@ measures how much was asked, and asking more is not asking better.
 | 105 contamination hits; bash key-order issue (36 hits); one-hop scorer fix | same report, §4 Observations |
 | 8/10 full suite, probe ratio 0.56 | [`2026-09-23-opencode.md`](../../evals/reports/2026-09-23-opencode.md) |
 | the `fully-specified-auto-quiet` design decision | [`evals/cases.yaml`](../../evals/cases.yaml) |
-| 17 cases, 14/17 threshold, five cost tiers, failure-mode split | [`evals/README.md`](../../evals/README.md) |
+| 18 cases, 15/18 threshold, five cost tiers, failure-mode split | [`evals/README.md`](../../evals/README.md) |
 | why the Claude Code report was withdrawn | [issue #1](https://github.com/angel291592/Intent-Router/issues/1) |
 | decision-state instability (~1/3 of runs miss the expected ASK; measured on the withdrawn 2026-09-22 claude-code channel, so it is itself pending clean-channel re-verification) | [issue #2](https://github.com/angel291592/Intent-Router/issues/2) |

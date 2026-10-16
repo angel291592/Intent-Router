@@ -102,16 +102,23 @@ skill 在安装位置是否可见、以及实际应答的 harness 版本与模�
   `tool_result` 永不参与。
 - **成本**：dsh 的预检是 **4 次会话**（版本、污染、技能可见性、隔离），而不是其他 harness 的 2 次。
 - **覆盖范围之外**：`--delivery` 与 `--rescore-delivery` 对 `--harness dsh` 直接拒绝——交付对比的每臂
-  配置与报告段落尚不存在，否则报告会用 opencode 的措辞描述自己。
+  配置与报告段落尚不存在，否则报告会用 opencode 的措辞描述自己。声明 `writable: true` 的用例出于同类
+  理由也被拒绝：上面那份补丁把本通道钉死在只读，没有可写姿态可给它，而按只读跑出来的会是"一次根本没
+  机会避开的断言失败"。
 - **CI**：CI 只跑离线档（`--selftest`、`--check-frontmatter`、`--check-docs`）——不需要二进制、密钥和
   网络；dsh 通道与其它付费档一样属于维护者机器上的一档。
 
 ## 3. 成本
 
-全量一轮是**每 harness 21 次会话**：17 例 + 两个两轮用例的第二轮 = 19 次用例会话，外加
-**2 次预检会话**（dsh 为 4 次，多一次隔离实测）。10 例套件实测 `--jobs 4` 下约 16 分钟，17 例按此估算约 27 分钟。
-同一轮还可用 `--smoke`（1 用例会话 + 2 预检）与 Tier 3 定向重跑（受影响用例 × 2 次 + 2 预检）。
-Tier 0 与 Tier 1 零成本。迭代时用 `--cases <id> --repeat 2`，只在真的需要出数字时跑全量。
+全量一轮是**每 harness 24 次会话**：18 例 + 两个两轮用例的第二轮 + 跨会话用例的两轮 = 22 次用例
+会话，外加 **2 次预检会话**（dsh 为 4 次，多一次隔离实测）。10 例套件实测 `--jobs 4` 下约 16 分钟，
+18 例按此估算约 29 分钟。同一轮还可用 `--smoke`（1 用例会话 + 2 预检）与 Tier 3 定向重跑
+（受影响用例 × 2 次 + 2 预检）。Tier 0 与 Tier 1 零成本。迭代时用 `--cases <id> --repeat 2`，
+只在真的需要出数字时跑全量。
+
+有一个用例的耗时超过默认、并且自己声明了这一点：`add-caching-cross-session` 设了 `timeout: 1200`。
+它的最后一轮要把已保存的契约读回来、照做、再核验结果——它是套件里唯一会改动工作区的用例——装不进
+其余 17 例所依据的 480 秒上限。
 
 再加一档，**发版核验**：改了 skill 之后，受影响路径的用例各跑一次——不是为了迭代，而是确认这次改动
 没有弄坏已经通过的行为。它不替代迭代期的 Tier 3（×2）；两者分开书写，"两轮重跑、绝不单轮"的规则
@@ -126,7 +133,7 @@ Tier 0 与 Tier 1 零成本。迭代时用 `--cases <id> --repeat 2`，只在真
 单个用例默认单次运行即判定；`--repeat N`（N > 1）时过半通过即通过。套件达标条件是**至少
 `ceil(0.8 × 用例数)` 例通过，且幻觉 evidence 恰好为 0**——只要出现一条指向不存在文件的 evidence，
 无论其它指标多好都算不达标：错答会被评审发现，凭空编造的引用不会。阈值随用例数自动跟随，不写死
-数字，因此 17 例套件需要通过 14 例。
+数字，因此 18 例套件需要通过 15 例。
 
 四种失败与"判错决策态"分开计数，因为它们说明的是不同的事：`not triggered`（预期应触发却没产出
 spec）、`degraded output`（产出了但解析不了）、`timeouts`、`harness errors`。evidence 失败又分两
@@ -148,9 +155,12 @@ spec）、`degraded output`（产出了但解析不了）、`timeouts`、`harnes
 | `prompt` | 用户原样输入的内容 |
 | `mode` | `auto`（靠 description 自动触发）或 `explicit`（点名 skill，调用语法由 runner 按 harness 映射） |
 | `fixture` | `user-api`（TypeScript 假项目）或 `empty`（无来源）；`support-queue` 承载非代码用例 |
-| `turns` | 可选的后续回答；有它时 `expect` 作用于最后一轮、`expect_turn1` 作用于第一轮 |
+| `turns` | 可选的后续轮次。纯字符串是一句提示；`{prompt: …, new_session: true}` 表示这一轮必须在**对之前会话毫无记忆**的会话里发出——该轮的 resume 旗标会被丢弃。有它时 `expect` 作用于最后一轮、`expect_turn1` 作用于第一轮 |
+| `writable` | 可选；`true` 让本用例跑在交付臂那套姿态下（允许编辑）。默认是其余每个用例都被测量的只读姿态 |
+| `timeout` | 可选的每会话上限（秒）；默认 480。只有需要"真干活"的用例才需要加大 |
 | `expect` | 断言，必须全部成立 |
 | `expect_turn1` | 多轮用例第一轮的可选断言 |
+| `expect_final` | 可选：针对**整轮运行**而非某一轮的断言——最后一轮自己的话，与它留下的那个工作区 |
 | `metrics` | 只统计不判定；每个值是要查找的 evidence 前缀 |
 
 断言键：`state`、`state_in`、`cause`、`should_trigger`、`asked_eq`、`max_asked`、
@@ -160,7 +170,21 @@ spec）、`degraded output`（产出了但解析不了）、`timeouts`、`harnes
 （不区分大小写）、`question_lang`、`not_target`、`open_field_regex`（匹配每个开放 unknown 的
 `field` 与 `category`，是 `question_keywords` 的语言无关对应物；只在期望 ASK 的用例上有意义，
 因为 ROUTE 的 spec 没有开放 unknown）、`open_issue`（匹配任一开放 unknown 上的 `issue` 值——
-`ambiguous`、`conflict` 或 `premise`；同样只在期望 ASK 的用例上有意义）。
+`ambiguous`、`conflict` 或 `premise`；同样只在期望 ASK 的用例上有意义）、`spec_optional`（这一轮
+不负责任产出围栏：核验轮交的是一个文件加一行 `Intent check`，所以静默算通过，而不是算"该触发却没
+触发"——一旦真的产出了 spec，仍然照常逐条检查）、`no_new_question`（问题已经定了，此时再吐 ASK
+就是这一轮失败；放进 `expect_final` 同样有效，那时读的是最后一轮的状态）。
+
+`expect_final` 的键，由 `check_final()` 在最后一轮之后一次性判定：`read_back`（一列字面量，必须
+全部出现在**最后一轮自己的话**里——工具回显里的技能正文不算，正是这条让它成为"契约是被读回来的、
+不是被记住的"证据）、`no_new_question`、`intent_check`（最后一轮的最终回复里出现字面量那一行
+`Intent check`）、`verification_status`（工作区里恰好有一份 `.intent/*.intent.yaml`，且其
+`verification_status` 等于该值；0 份或 2 份都判失败，并打印实际找到的文件名）、`workspace_diff`
+（自第一轮之前取的基线以来，工作树发生了变化——只写了一份报告的运行不算通过）。
+
+`--rescore` 以零会话重判已存 transcript，因此无法重判 `expect_final`——那些断言要读用例的工作区，
+而工作区在运行结束时就删掉了。含 `expect_final` 的用例的 transcript 会被带着理由直接拒绝，而不是
+交出一份"少了一半断言"的报告；这类用例请用 `--harness` 重跑。
 
 `triggered`、`schema_valid`、`invariants_ok`、`evidence_valid`、`evidence_form` 在"预期应产出
 spec"时恒被检查，用例无需列出。运行上报的失败名还包括 `timeout`、`harness_error`、`turn1_not_ask`

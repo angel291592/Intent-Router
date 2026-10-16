@@ -84,6 +84,39 @@ skill 的**：要跟随一条"只有版本历史能解释"的引用，需要一�
 的那份 `SKILL.md` 的 SHA-256，因为未提交的工作树上"提交号"不足以定位内容。上面那些 OpenCode 数字没有针对
 新描述重测。
 
+The suite gains a case for the contract's round trip across sessions. `add-caching-cross-session`
+settles a contract in one session, answers its question, then sends a bare "continue" into a
+**fresh** session on the same workspace, and judges what that session does with it: the tree it
+leaves behind, the `Intent check` line it reports, and whether the saved contract was read back off
+disk rather than remembered. It is the first case that changes the workspace, so it declares
+`writable: true` — the delivery arms' posture, where every other case stays read-only — and a
+`timeout: 1200` of its own, because carrying work out does not fit the 480-second default. Four case
+keys are new (a `turns` entry may now be a mapping carrying `new_session`; plus `writable`, `timeout`
+and the `expect_final` block) and two assertion keys are (`spec_optional`, because a verification
+turn owes a file and an `Intent check` line rather than a second fence; and `no_new_question`,
+because a settled question must not come back as an ASK). `--rescore` refuses a transcript of a case
+that declares `expect_final` rather than reporting a verdict with half its assertions missing. The
+suite is eighteen cases and the full-suite threshold is 15 of 18. Measured on `dp/deepseek-flash`
+(`evals/reports/2026-10-16-opencode.md`); the two cases that share its fixture still pass after the
+change. The first attempt at this case is recorded in that report too, and it is the reason the case
+looks the way it does: under the suite's read-only posture a run cannot save
+`.intent/<intent>.intent.yaml` at all, so the fresh session had nothing to read back and correctly
+asked again instead of guessing.
+/
+套件新增了一个守护契约跨会话往返的用例。`add-caching-cross-session` 先在会话 1 里谈定契约、回答它
+的问题，然后往**全新会话**发一句裸的「继续」（同一工作区），再判定那个会话拿它做了什么：留下的工作
+树、报出的那行 `Intent check`，以及保存的契约到底是从盘上读回来的、还是靠记忆续写的。它是套件里
+第一个会改动工作区的用例，因此声明 `writable: true`（交付臂那套姿态，其余用例一律保持只读）并自带
+`timeout: 1200`——因为"真干活"装不进 480 秒的默认上限。新增四个用例键（`turns` 的条目现在可以是带
+`new_session` 的映射，外加 `writable`、`timeout` 与 `expect_final` 断言块）与两个断言键
+（`spec_optional`：核验轮交的是一个文件加一行 `Intent check`，不是第二个围栏；`no_new_question`：
+已定的问题不得以 ASK 回来）。`--rescore` 遇到声明 `expect_final` 的用例的 transcript 会直接拒绝，
+而不是交出一份"少了一半断言"的判定。套件现为 18 例，全量阈值为 18 例中至少通过 15 例。已在
+`dp/deepseek-flash` 上实测（`evals/reports/2026-10-16-opencode.md`）；与它共用 fixture 的两个用例
+在改动后仍全部通过。这份报告里也记着这个用例的第一次尝试，而它正是本用例长成现在这样的原因：在套件的
+只读姿态下，运行根本存不下 `.intent/<intent>.intent.yaml`，于是全新会话没有任何东西可读回，只能正确
+地再问一次，而不是猜。
+
 ## [1.3.0] — 2026-10-09
 
 The saved contract becomes a two-way artifact. It gains an optional `verification_status`

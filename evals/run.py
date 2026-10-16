@@ -84,6 +84,14 @@ FIXTURES = EVALS / "fixtures"
 # check_turn() — which turned the case into an empty assertion that could never
 # fail. The README's numbers rest on these keys, so an unknown one is a hard
 # error, reported by validate_cases() at load time.
+#
+# Two of them constrain what a turn is allowed to be rather than what a spec must
+# say. `spec_optional` marks a turn whose contract does not ask for a fence — the
+# verification turn, where a saved contract is read back and only the file and
+# the `Intent check` line are owed — so a correct silent turn is not scored as a
+# missing spec. `no_new_question` marks a turn where the question is already
+# settled: emitting ASK there is the failure. Neither keys loosens any assertion
+# about a spec that is present.
 EXPECT_KEYS = frozenset(
     {
         "should_trigger",
@@ -108,6 +116,8 @@ EXPECT_KEYS = frozenset(
         "not_target",
         "open_field_regex",
         "open_issue",
+        "spec_optional",
+        "no_new_question",
     }
 )
 CASE_KEYS = frozenset(
@@ -117,12 +127,34 @@ CASE_KEYS = frozenset(
         "mode",
         "fixture",
         "turns",
+        "writable",
+        "timeout",
         "expect",
         "expect_turn1",
+        "expect_final",
         "metrics",
     }
 )
+# Assertion keys check_final() knows how to evaluate. They sit apart from
+# EXPECT_KEYS because they are judged against the final workspace and the last
+# session's own output, never against a spec: declared inside `expect` they would
+# be keys check_turn() could not honour, which is the silent-empty-assertion
+# failure the EXPECT_KEYS comment above exists to prevent. `no_new_question`
+# appears in both sets on purpose — it is one rule, enforced in the two places a
+# turn can be judged.
+FINAL_KEYS = frozenset(
+    {
+        "read_back",
+        "no_new_question",
+        "intent_check",
+        "verification_status",
+        "workspace_diff",
+    }
+)
 
+# The per-session ceiling. It is calibrated for cases that emit a spec: those run
+# 200-470 s on this machine. A case that also carries work out declares its own
+# ceiling with `timeout: <seconds>` — see case_timeout().
 TIMEOUT = 480
 HARNESSES = ("claude-code", "opencode", "dsh")
 
@@ -193,6 +225,14 @@ OPENCODE_DELIVERY_CONFIG = {
     "permission": {**OPENCODE_CONFIG["permission"], "edit": "allow"},
 }
 
+# A suite case that declares `writable: true` gets the same posture: it has to
+# save a contract to disk and is then judged on the tree it leaves behind, which
+# the read-only suite config forbids on purpose. Measured 2026-10-16: with `edit`
+# denied, a run cannot save `.intent/<intent>.intent.yaml` at all, so a
+# cross-session case has nothing to read back and no assertion about the
+# workspace can ever hold.
+OPENCODE_WRITE_CONFIG = OPENCODE_DELIVERY_CONFIG
+
 # Bare-arm variant of the delivery config. opencode loads skills not only from
 # the workspace but also from the user-level ~/.config/opencode/skills — and
 # this machine has an intent-router copy there from an installer test, so a
@@ -228,6 +268,9 @@ DELIVERY_ARMS = ("bare", "prompt", "skill")
 # CLAUDE_TOOLS_READONLY`, so the default behaviour is unchanged.
 CLAUDE_TOOLS_READONLY = ("Read", "Grep", "Glob", "Bash(git log:*)", "Bash(git show:*)")
 CLAUDE_TOOLS_DELIVERY = CLAUDE_TOOLS_READONLY + ("Edit", "Write")
+# The claude-code half of the writable posture above: the same two capabilities,
+# for the same reason.
+CLAUDE_TOOLS_WRITE = CLAUDE_TOOLS_DELIVERY
 
 # --------------------------------------------------------------------------- #
 # dsh channel
@@ -236,14 +279,6 @@ CLAUDE_TOOLS_DELIVERY = CLAUDE_TOOLS_READONLY + ("Edit", "Write")
 # prints the result (@deepseek-ai/dsh-headless). Verified against
 # @deepseek-ai/dsh 0.2.0-rc.2; the CLI is resolved from $DSH_EXE, then PATH.
 DSH_PROFILE = "headless"
-
-# Events of the `--json` projection that are not assistant prose. `thinking` is
-# model reasoning, and `tool_result` embeds whatever the run just read — the
-# SKILL.md body among it, whose own fenced examples would otherwise win
-# extract_spec's reversed scan on a run that correctly stayed silent. Applied
-# only to events without a `part` key, which is how opencode's JSONL and
-# claude-code's result envelope stay untouched.
-DSH_NON_PROSE_EVENTS = ("session", "status", "thinking", "tool_call", "tool_result")
 
 # Events of the `--json` projection that are not assistant prose. `thinking` is
 # model reasoning, and `tool_result` embeds whatever the run just read — the
@@ -329,6 +364,9 @@ RATE_LIMIT_RE = re.compile(r"\b429\b|rate[\s_-]?limit|quota|overloaded", re.IGNO
 # timestamps. Used only to order the suite cheap-first so the 3rd-failure abort
 # saves the most expensive cases. ungrillable is always last: it is the only
 # case that can hit the timeout ceiling, on either harness.
+# add-caching-cross-session is the one estimate rather than a measurement: it
+# runs one session more than add-caching-two-turn, so it is priced at 1.5x that
+# case's measured value.
 CASE_COST: dict[str, dict[str, float]] = {
     "claude-code": {
         "question-not-trigger": 23,
@@ -338,6 +376,7 @@ CASE_COST: dict[str, dict[str, float]] = {
         "partially-specified-auto": 140,
         "git-only-fact": 171,
         "add-caching-two-turn": 171,
+        "add-caching-cross-session": 257,
         "add-caching-explicit": 171,
         "vague-no-ask": 200,
         "no-repo": 245,
@@ -355,6 +394,7 @@ CASE_COST: dict[str, dict[str, float]] = {
         "no-repo": 246,
         "chinese-ambiguous": 357,
         "add-caching-two-turn": 386,
+        "add-caching-cross-session": 579,
         "question-not-trigger": 630,
         "ungrillable": float("inf"),
     },
@@ -399,14 +439,50 @@ def validate_cases(cases: list[dict]) -> list[str]:
         for key in case:
             if key not in CASE_KEYS:
                 problems.append(f"{label}: unknown case key {key!r}")
-        for block in ("expect", "expect_turn1"):
+        # `writable` selects the posture a case runs under. A non-boolean would
+        # read as truthy and silently grant the write access the case asked not
+        # to have, so it is checked rather than coerced.
+        if "writable" in case and not isinstance(case["writable"], bool):
+            problems.append(f"{label}.writable: must be a boolean")
+        # `timeout` raises one session's ceiling. A zero, a negative or a string
+        # would either disable the ceiling or reach subprocess.communicate as a
+        # bad type, so the shape is checked here rather than at the first turn.
+        declared_timeout = case.get("timeout")
+        if declared_timeout is not None and (
+            isinstance(declared_timeout, bool)
+            or not isinstance(declared_timeout, int)
+            or declared_timeout <= 0
+        ):
+            problems.append(f"{label}.timeout: must be a positive whole number of seconds")
+        for block in ("expect", "expect_turn1", "expect_final"):
+            allowed = FINAL_KEYS if block == "expect_final" else EXPECT_KEYS
             block_value = case.get(block) or {}
             if not isinstance(block_value, dict):
                 problems.append(f"{label}.{block}: must be a mapping of assertion keys")
                 continue
             for key in block_value:
-                if key not in EXPECT_KEYS:
+                if key not in allowed:
                     problems.append(f"{label}.{block}: unknown assertion key {key!r}")
+        # A turn is either a bare prompt string or a mapping that can also open a
+        # new session. The mapping form is validated here because a misspelled
+        # `new_session` would otherwise resume the old session and the case would
+        # quietly measure something other than what it says it measures.
+        for turn_index, turn in enumerate(case.get("turns") or [], start=1):
+            if isinstance(turn, str):
+                continue
+            if not isinstance(turn, dict):
+                problems.append(
+                    f"{label}.turns[{turn_index}]: must be a prompt string or a mapping"
+                )
+                continue
+            for key in turn:
+                if key not in ("prompt", "new_session"):
+                    problems.append(f"{label}.turns[{turn_index}]: unknown turn key {key!r}")
+            prompt = turn.get("prompt")
+            if not isinstance(prompt, str) or not prompt.strip():
+                problems.append(f"{label}.turns[{turn_index}]: needs a non-empty prompt string")
+            if "new_session" in turn and not isinstance(turn["new_session"], bool):
+                problems.append(f"{label}.turns[{turn_index}].new_session: must be a boolean")
     return problems
 
 
@@ -593,7 +669,19 @@ def session_id_of(stdout: str) -> str | None:
 
 
 def install_skill(workspace: Path) -> None:
-    """Copy, never symlink: Windows restricts links and harnesses follow them badly."""
+    """Copy, never symlink: Windows restricts links and harnesses follow them badly.
+
+    Known defect, deliberately not fixed here (found 2026-10-16): prepare()
+    installs these copies and seed_history() then commits the whole tree, so the
+    skill sits in the workspace's *git history* — `git show <sha>:.agents/skills/`
+    reads it back, which was observed on this machine. RUNNER_PATHS keeps the
+    same paths out of the delivered diff only; it does not touch history. Any
+    "no skill" control arm therefore has to guarantee `.agents/` is absent from
+    the commits too, not just from the diff.
+    `evals/fixtures/user-api/README.md` is the same leak in prose — it names this
+    suite and lives inside every user-api workspace, which can only muddy trigger
+    and attribution cases. Left as it is on purpose.
+    """
     for target in (
         workspace / ".claude" / "skills" / "intent-router",
         workspace / ".agents" / "skills" / "intent-router",
@@ -896,7 +984,9 @@ def kill_process_tree(proc: subprocess.Popen) -> None:
     proc.kill()
 
 
-def _invoke_once(cmd: list[str], cwd: Path, harness: str | None = None) -> tuple[str, str, int]:
+def _invoke_once(
+    cmd: list[str], cwd: Path, harness: str | None = None, timeout: int = TIMEOUT
+) -> tuple[str, str, int]:
     proc = subprocess.Popen(
         cmd,
         cwd=cwd,
@@ -908,7 +998,7 @@ def _invoke_once(cmd: list[str], cwd: Path, harness: str | None = None) -> tuple
         env=harness_env(cwd, harness),
     )
     try:
-        stdout, stderr = proc.communicate(timeout=TIMEOUT)
+        stdout, stderr = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
         kill_process_tree(proc)
         # The pipes close once the tree is gone; the second timeout only stops a
@@ -921,7 +1011,13 @@ def _invoke_once(cmd: list[str], cwd: Path, harness: str | None = None) -> tuple
     return stdout or "", stderr or "", proc.returncode
 
 
-def invoke(cmd: list[str], cwd: Path, retries: int = 2, harness: str | None = None) -> tuple[str, str, int]:
+def invoke(
+    cmd: list[str],
+    cwd: Path,
+    retries: int = 2,
+    harness: str | None = None,
+    timeout: int = TIMEOUT,
+) -> tuple[str, str, int]:
     # This machine keeps the Claude Code credentials in the user-level
     # settings.json env block, which --setting-sources project does not load;
     # run.py is launched with those variables exported, and os.environ passes
@@ -934,7 +1030,7 @@ def invoke(cmd: list[str], cwd: Path, retries: int = 2, harness: str | None = No
     delay = 5.0
     stdout, stderr, code = "", "", 0
     for attempt in range(retries + 1):
-        stdout, stderr, code = _invoke_once(cmd, cwd, harness)
+        stdout, stderr, code = _invoke_once(cmd, cwd, harness, timeout)
         if code == 0 or not RATE_LIMIT_RE.search(stderr or ""):
             return stdout, stderr, code
         if attempt < retries:
@@ -965,6 +1061,19 @@ def classify_turn(
     return spec_status
 
 
+def case_timeout(case: dict) -> int:
+    """The per-session ceiling for one case: its own `timeout`, else TIMEOUT.
+
+    TIMEOUT is calibrated for cases that emit a spec and stop. A case that also
+    carries work out — it saves a contract, implements it, verifies the result —
+    needs longer and says so, rather than forcing every case's ceiling up with
+    it. Measured 2026-10-16: the cross-session case's fresh session was killed at
+    480 s while still working, so the case could not be measured at all.
+    """
+    declared = case.get("timeout")
+    return int(declared) if declared else TIMEOUT
+
+
 def run_case_once(case: dict, harness: str, model: str | None) -> dict:
     """One full run of one case: one session per turn, each turn kept separately.
 
@@ -972,9 +1081,26 @@ def run_case_once(case: dict, harness: str, model: str | None) -> dict:
     yields one verdict per session instead of only the last one. The second turn
     is only sent when the first actually ASKed: a follow-up "answer" to a spec
     that already ROUTEd measures nothing and costs a session.
+
+    A `turns` entry may be a bare prompt string or a mapping, which is how a case
+    asks for a session with no memory of the ones before it (`new_session: true`).
+    The final workspace is judged once, after the last turn and before it is
+    deleted: `check_final` needs the delivered tree and the saved contract at the
+    same time, and neither survives the end of this function. A case with
+    ``writable: true`` runs where the model may edit files; the default is the
+    read-only posture every other case is measured under.
     """
     case_id = case["id"]
-    workspace = prepare(case, harness)
+    # A case that declares `writable: true` runs under the delivery arms'
+    # posture: everything the read-only suite config allows, plus edits. Without
+    # it a run cannot save a contract to `.intent/` at all (measured 2026-10-16),
+    # so there is nothing for a later session to read back and `expect_final`
+    # would be judging a workspace the run was never allowed to touch.
+    writable = bool(case.get("writable"))
+    turn_timeout = case_timeout(case)
+    workspace = prepare(
+        case, harness, opencode_config=OPENCODE_WRITE_CONFIG if writable else None
+    )
     pending = list(case.get("turns") or [])
     transcript: list[str] = []
     turns: list[dict] = []
@@ -982,6 +1108,18 @@ def run_case_once(case: dict, harness: str, model: str | None) -> dict:
     base_sha: str | None = None
     record: dict = {}
     try:
+        if case.get("expect_final"):
+            # The baseline has to be read before the first session: a baseline
+            # read after it already contains whatever the model wrote, which
+            # makes workspace_diff false no matter what the run did — a silently
+            # unfalsifiable assertion rather than a failing one.
+            base_sha = subprocess.run(
+                ["git", *GIT_ID, "rev-parse", "HEAD"],
+                cwd=workspace,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
         cmd = build_command(
             harness,
             executable(harness),
@@ -989,8 +1127,9 @@ def run_case_once(case: dict, harness: str, model: str | None) -> dict:
             model,
             keep_session=bool(pending),
             resume=None,
+            tools=CLAUDE_TOOLS_WRITE if writable else None,
         )
-        stdout, stderr, code = invoke(cmd, workspace)
+        stdout, stderr, code = invoke(cmd, workspace, harness=harness, timeout=turn_timeout)
         transcript.append(f"$ {' '.join(cmd)}\n[exit {code}]\n{stdout}\n[stderr]\n{stderr}")
         session = session_id_of(stdout)
         spec, status, text = extract_spec(harness_texts(stdout))
@@ -1028,9 +1167,10 @@ def run_case_once(case: dict, harness: str, model: str | None) -> dict:
                 next_prompt,
                 model,
                 keep_session=True,
-                resume=session or "-c",
+                resume=None if new_session else (session or "-c"),
+                tools=CLAUDE_TOOLS_WRITE if writable else None,
             )
-            stdout, stderr, code = invoke(cmd, workspace)
+            stdout, stderr, code = invoke(cmd, workspace, harness=harness, timeout=turn_timeout)
             transcript.append(f"$ {' '.join(cmd)}\n[exit {code}]\n{stdout}\n[stderr]\n{stderr}")
             # A new session's own id replaces the previous one, so a later turn
             # that resumes resumes this session and not the one before it.
@@ -1050,6 +1190,13 @@ def run_case_once(case: dict, harness: str, model: str | None) -> dict:
         }
         return record
     finally:
+        if case.get("expect_final") and record:
+            # Judged here because the workspace is itself an assertion subject:
+            # it has to happen after the last turn wrote what it was going to
+            # write, and before rm_tree below deletes the evidence.
+            outcome = check_final(case, record, workspace, base_sha)
+            record["final_failures"] = outcome["failures"]
+            record["final_measured"] = outcome["measured"]
         rm_tree(workspace)
         if harness == "dsh":
             # The isolated home holds this workspace's copy of the credential
@@ -1158,6 +1305,20 @@ def check_turn(
         measured["triggered"] = triggered
         if triggered:
             failures.append("should_trigger")
+        return {"failures": failures, "measured": measured}
+
+    # Settled questions stay settled: a turn that re-opens one with ASK has
+    # failed, and the turn is still judged on everything else below. A turn with
+    # no spec at all passes, matching the check_final half of the same rule.
+    if expect.get("no_new_question") and ((spec or {}).get("decision") or {}).get("state") == "ASK":
+        failures.append("no_new_question")
+
+    # A verification turn owes a file and an `Intent check` line, not a second
+    # fence (SKILL.md section 5), so "no spec" is the correct outcome rather than
+    # a missing trigger. This excuses silence only: every assertion that applies
+    # once a spec is present still applies to one that is.
+    if spec is None and expect.get("spec_optional"):
+        measured["triggered"] = False
         return {"failures": failures, "measured": measured}
 
     if spec is None:
@@ -1374,13 +1535,22 @@ def check(
     always-checked assertions. Returns ``measured`` as one dict per turn so the
     report can show per-turn states. A single-turn record — or the synthetic
     records used by --selftest — is handled as a one-turn list. ``manifest``
-    defaults to None, which falls back to the source fixture tree (the 9
-    selftest call sites rely on that default); the suite and --rescore pass the
-    real workspace manifest.
+    defaults to None, which falls back to the source fixture tree, and that is
+    the default the selftest call sites rely on; the suite and --rescore pass the
+    real workspace manifest. A record written by run_case_once may also carry
+    ``final_failures`` and ``final_measured`` from check_final(); the failures
+    join this verdict, the measurements are returned beside ``measured`` and
+    never inside it.
     """
     turns = record.get("turns") or [record]
     multi = bool(case.get("turns")) or len(turns) > 1
-    failures: list[str] = list(record.get("runner_failures") or [])
+    # Whole-run failures belong to the record rather than to any one turn: they
+    # are judged once, against the end state. Both sides are `list(...) or []`
+    # so a record predating the key — every transcript already on disk — reads
+    # as an empty list instead of raising.
+    failures: list[str] = list(record.get("runner_failures") or []) + list(
+        record.get("final_failures") or []
+    )
     measured_turns: list[dict] = []
     for index, turn in enumerate(turns):
         last = index == len(turns) - 1
@@ -1393,7 +1563,15 @@ def check(
         outcome = check_turn(case, turn, validator, manifest, expect_keys, index, multi)
         failures.extend(outcome["failures"])
         measured_turns.append(outcome["measured"])
-    return {"pass": not failures, "failures": failures, "measured": measured_turns}
+    return {
+        "pass": not failures,
+        "failures": failures,
+        "measured": measured_turns,
+        # Deliberately not appended to measured_turns: that list is read as one
+        # entry per turn by the probe ratio, the not-triggered count and the exit
+        # verdict, so a workspace-level entry inside it would invent a turn.
+        "final_measured": record.get("final_measured"),
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -2153,6 +2331,335 @@ def selftest() -> int:
         "the real cases.yaml validates clean",
         validate_cases(load_cases()) == [],
     )
+
+    print("the cross-session keys are validated where they belong")
+    expect(
+        "validate_cases accepts expect_final, spec_optional, no_new_question and a dict turn",
+        validate_cases(
+            [
+                {
+                    "id": "x",
+                    "expect": {"spec_optional": True, "no_new_question": True},
+                    "expect_final": {"read_back": [], "intent_check": True},
+                    "turns": ["B", {"prompt": "继续", "new_session": True}],
+                }
+            ]
+        )
+        == [],
+    )
+    problems = validate_cases([{"id": "x", "expect_final": {"intent_checkk": True}}])
+    expect(
+        "a typo inside expect_final is reported",
+        len(problems) == 1 and "intent_checkk" in problems[0],
+    )
+    expect(
+        "a spec key inside expect_final is reported, not silently ignored",
+        bool(validate_cases([{"id": "x", "expect_final": {"state": "ASK"}}])),
+    )
+    problems = validate_cases([{"id": "x", "turns": [{"prompt": "继续", "new_sesion": True}]}])
+    expect(
+        "a typo in a turn mapping is reported (else the turn resumes the old session)",
+        len(problems) == 1 and "new_sesion" in problems[0],
+    )
+    expect(
+        "a turn mapping with no prompt string is reported",
+        bool(validate_cases([{"id": "x", "turns": [{"new_session": True}]}])),
+    )
+    expect(
+        "a turn mapping's new_session must be a boolean",
+        bool(validate_cases([{"id": "x", "turns": [{"prompt": "go", "new_session": "yes"}]}])),
+    )
+    expect(
+        "a writable case is accepted",
+        validate_cases([{"id": "x", "writable": True}]) == [],
+    )
+    expect(
+        "writable must be a boolean, not a truthy string",
+        bool(validate_cases([{"id": "x", "writable": "yes"}])),
+    )
+    expect(
+        "a per-case timeout is accepted only as a positive whole number",
+        validate_cases([{"id": "x", "timeout": 1200}]) == []
+        and bool(validate_cases([{"id": "x", "timeout": 0}]))
+        and bool(validate_cases([{"id": "x", "timeout": "1200"}]))
+        and bool(validate_cases([{"id": "x", "timeout": True}])),
+    )
+    expect(
+        "case_timeout() falls back to TIMEOUT and takes the declared value otherwise",
+        case_timeout({"id": "x"}) == TIMEOUT and case_timeout({"id": "x", "timeout": 1200}) == 1200,
+    )
+    # The ceiling has to reach the process, not just the case dict: a 1-second
+    # ceiling on a sleeping interpreter must come back as a timeout, and say
+    # which ceiling it used. Offline, no harness, no network.
+    started = time.monotonic()
+    out_text, err_text, out_code = _invoke_once(
+        [sys.executable, "-c", "import time; time.sleep(30)"], Path.cwd(), None, 2
+    )
+    expect(
+        f"a per-invocation timeout kills the process and names its own ceiling ({out_code})",
+        out_code == 124 and out_text == "" and err_text == "timeout after 2s"
+        and time.monotonic() - started < 30,
+    )
+    expect(
+        "the writable posture is the delivery posture: edits allowed, nothing else changed",
+        OPENCODE_WRITE_CONFIG == OPENCODE_DELIVERY_CONFIG
+        and OPENCODE_WRITE_CONFIG["permission"]["edit"] == "allow"
+        and OPENCODE_CONFIG["permission"]["edit"] == "deny"
+        and {k: v for k, v in OPENCODE_WRITE_CONFIG["permission"].items() if k != "edit"}
+        == {k: v for k, v in OPENCODE_CONFIG["permission"].items() if k != "edit"},
+    )
+    expect(
+        "the writable claude-code tool set adds exactly Edit and Write",
+        set(CLAUDE_TOOLS_WRITE) - set(CLAUDE_TOOLS_READONLY) == {"Edit", "Write"},
+    )
+    expect(
+        "the shipped suite declares the cross-session case with expect_final and writable",
+        any(
+            c["id"] == "add-caching-cross-session" and c.get("expect_final") and c.get("writable")
+            for c in load_cases()
+        ),
+    )
+
+    print("spec_optional and no_new_question: what a turn is allowed to be")
+    cross = cases["add-caching-cross-session"]
+
+    def silent_turn() -> dict:
+        return {"spec": None, "status": "no_fence", "text": "", "stderr": "", "exit": 0}
+
+    def spec_turn(spec) -> dict:
+        return {"spec": spec, "status": "ok", "text": "", "stderr": "", "exit": 0}
+
+    outcome = check_turn(cross, silent_turn(), validator, None, {"spec_optional": True}, 2, True)
+    expect(
+        "spec_optional: a verification turn emitting no fence is not 'triggered'",
+        outcome["failures"] == [] and outcome["measured"]["triggered"] is False,
+    )
+    outcome = check_turn(cross, silent_turn(), validator, None, {}, 2, True)
+    expect(
+        "without spec_optional the same silent turn still fails",
+        outcome["failures"] == ["triggered"],
+    )
+    outcome = check_turn(
+        cross, spec_turn({"decision": {"state": "ASK"}}), validator, None, {"spec_optional": True}, 2, True
+    )
+    expect(
+        "spec_optional excuses silence only: a spec that is present is still schema-checked",
+        "schema_valid" in outcome["failures"],
+    )
+
+    for label, spec, expected in (("ASK", ask, ["no_new_question"]), ("ROUTE", route, [])):
+        outcome = check_turn(cross, spec_turn(spec), validator, None, {"no_new_question": True}, 2, True)
+        expect(
+            f"no_new_question: a {label} turn -> {expected or 'passes'}",
+            outcome["failures"] == expected,
+        )
+    outcome = check_turn(cross, silent_turn(), validator, None, {"no_new_question": True}, 2, True)
+    expect(
+        "no_new_question: a turn with no spec at all still passes it",
+        "no_new_question" not in outcome["failures"],
+    )
+
+    outcome = check(cross, {"turns": [spec_turn(route)]}, validator)
+    expect(
+        "check(): a record with no final keys passes and measures one turn",
+        outcome["pass"] and len(outcome["measured"]) == 1,
+    )
+    outcome = check(
+        cross,
+        {
+            "turns": [spec_turn(route)],
+            "final_failures": ["workspace_diff"],
+            "final_measured": {"workspace_diff": False},
+        },
+        validator,
+    )
+    expect(
+        "check() folds final_failures into the verdict",
+        not outcome["pass"] and "workspace_diff" in outcome["failures"],
+    )
+    expect(
+        "final_measured is not appended to measured (one entry per turn)",
+        len(outcome["measured"]) == 1 and outcome["final_measured"] == {"workspace_diff": False},
+    )
+    outcome = check(cross, {"turns": [spec_turn(route)], "final_failures": None}, validator)
+    expect(
+        "final_failures: None reads as an empty list, not a TypeError",
+        outcome["pass"] and outcome["final_measured"] is None,
+    )
+
+    print("check_final judges the workspace, not a turn")
+    final_case = {
+        "id": "final-probe",
+        "expect_final": {
+            "read_back": [".intent/add_caching.intent.yaml"],
+            "no_new_question": True,
+            "intent_check": True,
+            "verification_status": "verified",
+            "workspace_diff": True,
+        },
+    }
+
+    def assistant_text(text: str) -> str:
+        return json.dumps({"type": "text", "part": {"type": "text", "text": text}})
+
+    with tempfile.TemporaryDirectory() as tmp:
+        # A real repository: workspace_diff stages the tree and diffs it against a
+        # baseline read before the run. There is no honest way to check that
+        # without one, so this one section writes and runs git — the same thing
+        # prepare() already makes the selftest do for the fixture workspaces.
+        workspace = Path(tmp)
+        subprocess.run(["git", *GIT_ID, "init", "-q"], cwd=workspace, check=True)
+        (workspace / "src").mkdir()
+        (workspace / "src" / "users.ts").write_text("// baseline\n", encoding="utf-8")
+        subprocess.run(["git", *GIT_ID, "add", "-A"], cwd=workspace, check=True)
+        subprocess.run(["git", *GIT_ID, "commit", "-q", "-m", "seed"], cwd=workspace, check=True)
+        base = subprocess.run(
+            ["git", *GIT_ID, "rev-parse", "HEAD"],
+            cwd=workspace,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+        outcome = check_final(final_case, {"turns": [{"stdout": ""}]}, workspace, base)
+        expect(
+            "a run that read, verified and changed nothing fails all but no_new_question",
+            outcome["failures"]
+            == ["read_back", "intent_check", "verification_status", "workspace_diff"],
+        )
+
+        tool_marker_only = "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "tool_use",
+                        "part": {"type": "tool", "tool": "read", "state": {"output": "Intent check"}},
+                    }
+                ),
+                assistant_text("done, nothing to report"),
+            ]
+        )
+        outcome = check_final(final_case, {"turns": [{"stdout": tool_marker_only}]}, workspace, base)
+        expect(
+            "a marker that appears only in tool output does not satisfy intent_check",
+            "intent_check" in outcome["failures"],
+        )
+
+        (workspace / ".intent").mkdir()
+        (workspace / ".intent" / "add_caching.intent.yaml").write_text(
+            "spec_version: '0.1'\nrequest: add caching to the user API\nverification_status: verified\n",
+            encoding="utf-8",
+        )
+        (workspace / "src" / "users.ts").write_text("// baseline\n// cached\n", encoding="utf-8")
+        delivered = "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "tool_use",
+                        "part": {
+                            "type": "tool",
+                            "tool": "read",
+                            "state": {"output": ".intent/add_caching.intent.yaml"},
+                        },
+                    }
+                ),
+                assistant_text(
+                    ".intent/add_caching.intent.yaml\n\nIntent check\n- met: src/users.ts:1"
+                ),
+            ]
+        )
+        outcome = check_final(final_case, {"turns": [{"stdout": delivered}]}, workspace, base)
+        expect(f"the delivered run passes all five: {outcome['failures']}", outcome["failures"] == [])
+
+        # The 2026-10-16 run's false pass, reproduced: the skill body echoed by a
+        # tool result names the contract path, and the session's own words do not.
+        # Matching the whole stdout passed that; matching the model's words must
+        # not.
+        echoed = "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "tool_use",
+                        "part": {
+                            "type": "tool",
+                            "tool": "read",
+                            "state": {
+                                "output": "the filename stem is the `intent` value, so "
+                                "`add_caching` becomes .intent/add_caching.intent.yaml"
+                            },
+                        },
+                    }
+                ),
+                assistant_text("Done — see the diff."),
+            ]
+        )
+        outcome = check_final(final_case, {"turns": [{"stdout": echoed}]}, workspace, base)
+        expect(
+            "a contract path echoed by tool output does not satisfy read_back",
+            "read_back" in outcome["failures"]
+            and ".intent/add_caching.intent.yaml" in echoed,
+        )
+
+        (workspace / ".intent" / "second.intent.yaml").write_text(
+            "verification_status: verified\n", encoding="utf-8"
+        )
+        outcome = check_final(final_case, {"turns": [{"stdout": delivered}]}, workspace, base)
+        expect(
+            "two saved contracts fail verification_status and both are named",
+            outcome["failures"] == ["verification_status"]
+            and outcome["measured"]["intent_files"]
+            == ["add_caching.intent.yaml", "second.intent.yaml"],
+        )
+        (workspace / ".intent" / "second.intent.yaml").unlink()
+
+        (workspace / ".intent" / "add_caching.intent.yaml").write_text(
+            "verification_status: unverified\n", encoding="utf-8"
+        )
+        outcome = check_final(final_case, {"turns": [{"stdout": delivered}]}, workspace, base)
+        expect(
+            "the contract's own verification_status is read, not the reply's wording",
+            outcome["failures"] == ["verification_status"]
+            and outcome["measured"]["verification_status"] == "unverified",
+        )
+
+        (workspace / "src" / "users.ts").write_text("// baseline\n", encoding="utf-8")
+        outcome = check_final(final_case, {"turns": [{"stdout": delivered}]}, workspace, base)
+        expect(
+            "a run that only wrote a report has no delivered work",
+            "workspace_diff" in outcome["failures"],
+        )
+
+    print("--rescore refuses only what it cannot replay")
+    with tempfile.TemporaryDirectory() as tmp:
+        blocked_raw = Path(tmp) / "blocked" / "opencode"
+        blocked_raw.mkdir(parents=True)
+        (blocked_raw / "add-caching-cross-session-1.txt").write_text(
+            "$ opencode run x\n[exit 0]\n", encoding="utf-8"
+        )
+        try:
+            rescore(blocked_raw, Path(tmp) / "blocked", None)
+        except SystemExit as exc:
+            expect(
+                "a transcript of a case with expect_final is refused, not half-judged",
+                "add-caching-cross-session" in str(exc) and "expect_final" in str(exc),
+            )
+        else:
+            expect("a transcript of a case with expect_final is refused, not half-judged", False)
+
+        replayable_raw = Path(tmp) / "replayable" / "opencode"
+        replayable_raw.mkdir(parents=True)
+        (replayable_raw / "add-caching-auto-1.txt").write_text(
+            "$ opencode run x\n[exit 0]\n", encoding="utf-8"
+        )
+        try:
+            rescore(replayable_raw, Path(tmp) / "replayable" / "reports", None)
+        except SystemExit as exc:
+            expect(
+                "another case's expect_final does not block a replayable transcript",
+                "expect_final" not in str(exc),
+            )
+        else:
+            expect("another case's expect_final does not block a replayable transcript", False)
 
     print("open_field_regex is language-independent (2026-09-23 case fix)")
     zh_ask = json.loads(json.dumps(ask))
@@ -3286,6 +3793,21 @@ def run_suite(args: argparse.Namespace) -> int:
     if not cases:
         raise SystemExit("no cases selected")
 
+    if args.harness == "dsh":
+        # The dsh channel pins its sandbox to read-only in DSH_ISOLATION_PATCH,
+        # because the shipped workspace-write mode cannot read the runner's
+        # temporary workspaces on Windows — that is why read-only is the
+        # published posture. There is no writable overlay to hand a case, so a
+        # writable case is refused here instead of being run read-only and
+        # reported as a behaviour failure it never committed.
+        writable_cases = sorted(c["id"] for c in cases if c.get("writable"))
+        if writable_cases:
+            raise SystemExit(
+                "the dsh channel has no writable posture: "
+                + ", ".join(writable_cases)
+                + " declares `writable: true`; run those cases on opencode or claude-code."
+            )
+
     out_dir = Path(args.out)
     raw_dir = out_dir / "raw" / args.harness
     raw_dir.mkdir(parents=True, exist_ok=True)
@@ -3316,7 +3838,12 @@ def run_suite(args: argparse.Namespace) -> int:
     abort = threading.Event()
 
     def spec_expected(case: dict) -> bool:
-        return (case.get("expect") or {}).get("should_trigger") is not False
+        expect = case.get("expect") or {}
+        # A turn that declares its spec optional is not a run that failed to
+        # emit one: the verification turn owes a file and an `Intent check` line
+        # (SKILL.md section 5). Counting it as "spec expected but missing" would
+        # put a false entry in the not-triggered diagnostic.
+        return expect.get("should_trigger") is not False and not expect.get("spec_optional")
 
     def not_run_result(case: dict) -> dict:
         return {
@@ -3433,6 +3960,10 @@ def rescore(raw_dir: Path, out_dir: Path, date_str: str | None) -> int:
     and rewrites the matching report in place. Environment text and the
     iteration log are inherited verbatim from the report being replaced; the
     per-case denominators come from the actual transcript counts (decision 10).
+
+    check_final() cannot be replayed here — it reads the case's workspace, which
+    is deleted when the run ends — so a transcript of a case declaring
+    `expect_final` is refused rather than judged on half its assertions.
     """
     harness = raw_dir.name
     if harness not in HARNESSES:
@@ -3449,6 +3980,20 @@ def rescore(raw_dir: Path, out_dir: Path, date_str: str | None) -> int:
         by_case.setdefault(case_id, []).append(transcript)
     if not by_case:
         raise SystemExit(f"no transcripts found in {raw_dir}")
+
+    # Only the cases this rescore actually replays are checked, and not every
+    # case in cases.yaml: the suite now contains a case that declares
+    # expect_final, and refusing on that alone would make --rescore unusable for
+    # every report in evals/reports/, including the ones whose transcripts
+    # predate it.
+    blocked = sorted(case_id for case_id in by_case if cases[case_id].get("expect_final"))
+    if blocked:
+        raise SystemExit(
+            "--rescore cannot judge "
+            + ", ".join(blocked)
+            + ": expect_final needs the case's workspace, and the workspace is deleted "
+            "when the run ends. Re-run those cases with --harness."
+        )
 
     if date_str:
         original = out_dir / f"{date_str}-{harness}.md"
@@ -3507,7 +4052,10 @@ def rescore(raw_dir: Path, out_dir: Path, date_str: str | None) -> int:
                 "statuses": statuses,
                 "environmental": environmental,
                 "turn_statuses": turn_statuses,
-                "spec_expected": (case.get("expect") or {}).get("should_trigger") is not False,
+                # Same rule as run_suite's spec_expected(), which a rescore must
+                # reproduce or the report it rewrites moves the diagnostic.
+                "spec_expected": expect.get("should_trigger") is not False
+                and not expect.get("spec_optional"),
                 "measured": measured,
             }
         )
@@ -3652,6 +4200,19 @@ def workspace_has_diff(workspace: Path, base_sha: str) -> bool:
     return done.returncode != 0
 
 
+def assistant_texts(stdout: str) -> list[str]:
+    """Every assistant prose block of one run, in order.
+
+    harness_texts() keeps harness-specific envelopes and appends the raw stdout
+    blob last; a tool result carries whatever the run just read, the SKILL.md body
+    among it. Anything judged as "what the model said" must filter the same way
+    extract_spec filters its candidates, or the skill's own text inside a tool
+    result answers for the model — which is exactly how the first cross-session
+    run's read_back passed while the contract file did not exist (2026-10-16).
+    """
+    return [t for t in harness_texts(stdout) if not t.lstrip().startswith("{")]
+
+
 def final_reply(stdout: str) -> str:
     """The last assistant text of one harness run.
 
@@ -3660,8 +4221,94 @@ def final_reply(stdout: str) -> str:
     question sits in the final message. The raw stdout blob, which
     harness_texts appends last, is skipped the same way extract_spec skips it.
     """
-    texts = [t for t in harness_texts(stdout) if not t.lstrip().startswith("{")]
+    texts = assistant_texts(stdout)
     return texts[-1] if texts else ""
+
+
+def check_final(case: dict, record: dict, workspace: Path, base_sha: str | None) -> dict:
+    """Judge the whole run rather than a turn: what the last session read back,
+    and what the workspace holds once it is over.
+
+    This is where a cross-session case is decided — a fresh session that only
+    says "continue" has to find the saved contract on disk, act on it, and write
+    the verification back. The assertions cannot live in check_turn():
+    `verification_status` and `workspace_diff` read the workspace, which
+    run_case_once deletes when the run ends, and `read_back` and `intent_check`
+    read the last session's own output rather than any spec it emitted. Declared
+    inside `expect` they would be keys check_turn() could never honour, which is
+    the empty-assertion failure the EXPECT_KEYS comment exists to prevent.
+
+    Keys are judged only when the case declares them; `expect_final` as a whole
+    is what run_case_once and --rescore key off.
+    """
+    expect = case.get("expect_final") or {}
+    failures: list[str] = []
+    measured: dict[str, object] = {}
+    turns = record.get("turns") or []
+    stdout = str(turns[-1].get("stdout") or "") if turns else ""
+    # What the model said, never what it read: a tool result echoing the skill
+    # body names the contract path too, and that is not evidence of a read-back.
+    prose = "\n".join(assistant_texts(stdout))
+
+    for needle in expect.get("read_back") or []:
+        # Every literal must appear in the last session's own words: proof that
+        # the contract file was named by the session that had no memory of it,
+        # not that the conversation was remembered.
+        if str(needle) not in prose:
+            failures.append("read_back")
+
+    if expect.get("no_new_question"):
+        spec = turns[-1].get("spec") if turns else None
+        state = ((spec or {}).get("decision") or {}).get("state")
+        measured["state"] = state
+        if state == "ASK":
+            failures.append("no_new_question")
+
+    if expect.get("intent_check"):
+        # final_reply() is the last assistant prose, never the whole stdout: a
+        # tool result echoing SKILL.md also contains "Intent check", and
+        # matching the blob would let the assertion pass for free.
+        measured["intent_check"] = "Intent check" in final_reply(stdout)
+        if not measured["intent_check"]:
+            failures.append("intent_check")
+
+    if "verification_status" in expect:
+        wanted = expect["verification_status"]
+        spec_files = sorted((workspace / ".intent").glob("*.intent.yaml"))
+        measured["intent_files"] = [p.name for p in spec_files]
+        actual: object = None
+        if len(spec_files) != 1:
+            # No guessing which file "should" have been the contract, and no
+            # regex out of the raw text: an unexpected number of saved contracts
+            # is a red assertion whose message names what was actually there.
+            print(
+                f"  [{case['id']}] verification_status: expected exactly one "
+                f".intent/*.intent.yaml, found {[p.name for p in spec_files]}"
+            )
+        else:
+            try:
+                doc = yaml.safe_load(spec_files[0].read_text(encoding="utf-8"))
+            except (OSError, yaml.YAMLError) as exc:
+                print(f"  [{case['id']}] verification_status: unreadable contract: {exc}")
+                doc = None
+            if isinstance(doc, dict):
+                actual = doc.get("verification_status")
+        measured["verification_status"] = actual
+        if actual != wanted:
+            failures.append("verification_status")
+
+    if expect.get("workspace_diff"):
+        # A missing baseline means the run never reached the point of reading
+        # HEAD; that is recorded as no delivered work rather than crashing the
+        # report. workspace_has_diff stages the tree, which is why this runs
+        # before the workspace is deleted and nowhere else.
+        measured["workspace_diff"] = bool(base_sha) and workspace_has_diff(
+            workspace, str(base_sha)
+        )
+        if not measured["workspace_diff"]:
+            failures.append("workspace_diff")
+
+    return {"failures": failures, "measured": measured}
 
 
 def question_evidence(text: str) -> str | None:

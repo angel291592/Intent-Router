@@ -50,6 +50,48 @@
   metrics:
     adr_found: docs/adr/0007
 
+# The contract a first session settles has to survive into a session that never
+# saw it. Session 2 below is a bare "continue" in a fresh session on the same
+# workspace, so passing means the saved contract was read back off disk and acted
+# on — the promise README.md and references/intentspec.md make. `expect_final`
+# judges that last session and the workspace it leaves behind; see evals/README.md.
+#
+# `writable: true` is what makes that observable at all: the suite's default
+# posture denies edits, and a run that cannot save `.intent/<intent>.intent.yaml`
+# leaves the next session nothing to read back. Measured 2026-10-16 — under the
+# read-only posture the fresh session correctly refused to guess and asked again.
+#
+# `timeout` raises this case's per-session ceiling above the runner's 480 s.
+# Session 2 is not a spec-emitting turn: it reads the contract back, implements
+# it and verifies the result. Measured 2026-10-16 — that session was still
+# working when 480 s cut it off, so the case could not be measured at all.
+- id: add-caching-cross-session
+  prompt: add caching to the user API
+  mode: explicit
+  fixture: user-api
+  writable: true
+  timeout: 1200
+  turns:
+    - "B"                  # session 1, turn 2: pick the non-default option (delivery.yaml's design)
+    - prompt: "继续"        # session 2: fresh session, same workspace, bare prompt
+      new_session: true
+  expect_turn1:
+    state: ASK
+    question_keywords: [invalidation, stale, fail]
+    open_field_regex: "invalid|stale|fail"
+    min_resolved_by_probe: 2
+    evidence_must_include: [src/cache/redis.ts, src/routes/users.ts]
+    max_asked: 1
+  expect:
+    spec_optional: true
+    no_new_question: true
+  expect_final:
+    read_back: [".intent/add_caching.intent.yaml"]
+    no_new_question: true
+    intent_check: true
+    verification_status: verified
+    workspace_diff: true
+
 - id: fully-specified
   prompt: >-
     Add Redis caching with the existing ioredis client to GET /api/users and

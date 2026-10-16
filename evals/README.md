@@ -124,20 +124,28 @@ prints the answer, and exits. It was verified against `@deepseek-ai/dsh` **0.2.0
   isolation) instead of the other harnesses' 2.
 - **What it does not cover.** `--delivery` and `--rescore-delivery` refuse `--harness dsh`: the
   delivery comparison writes per-arm configuration and a harness-specific report section that do
-  not exist for dsh yet, and a dsh report would otherwise describe itself in opencode's words.
+  not exist for dsh yet, and a dsh report would otherwise describe itself in opencode's words. A
+  case that declares `writable: true` is refused for the same kind of reason: the overlay above
+  pins this channel to read-only, so there is no writable posture to run it under, and running it
+  read-only would report an assertion failure the run never had a chance to avoid.
 - **CI.** Only the offline tiers (`--selftest`, `--check-frontmatter`, `--check-docs`) run in
   CI — they need no binary, no key and no network; the dsh channel is a maintainer-machine tier
   like every other paid tier.
 
 ## 3. Cost
 
-A full suite is **21 sessions per harness**: 17 cases + the second turn for the two two-turn
-cases = 19 case sessions, plus **2 preflight sessions** (4 on dsh, which adds the isolation
-probe). The ten-case suite measured about 16
-minutes with `--jobs 4`, so budget roughly 27 minutes for seventeen. The same run also has
+A full suite is **24 sessions per harness**: 18 cases + the second turn for the two two-turn
+cases + both turns of the cross-session case = 22 case sessions, plus **2 preflight sessions**
+(4 on dsh, which adds the isolation probe). The ten-case suite measured about 16
+minutes with `--jobs 4`, so budget roughly 29 minutes for eighteen. The same run also has
 `--smoke` (1 case session + 2 preflight) and Tier 3 re-runs (affected cases × 2, plus 2
 preflight). Tier 0 and Tier 1 cost nothing. Iterate on `--cases <id> --repeat 2` and keep a full
 suite for the moment you need numbers.
+
+One case buys more time than the default and declares it: `add-caching-cross-session` sets
+`timeout: 1200`. Its last session reads a saved contract back, implements it and verifies the
+result — it is the only case in the suite that changes the workspace — which does not fit the
+480-second ceiling the other seventeen are sized for.
 
 One more tier, **release verification**: after a change to the skill, run each affected-path case
 once — not to iterate, but to confirm the change did not break behaviour that already passed.
@@ -155,7 +163,7 @@ must pass. The suite meets its threshold when **at least `ceil(0.8 × cases)` of
 hallucinated evidence is exactly 0** — a single evidence pointer to a file that does not exist
 fails the suite regardless of everything else, because an invented citation survives review in a
 way a wrong answer does not. The threshold tracks the case count automatically rather than a
-hard-coded number, so the seventeen-case suite needs 14.
+hard-coded number, so the eighteen-case suite needs 15.
 
 Four failure modes are counted separately from wrong decisions, because they say something
 different: `not triggered` (expected to fire but no spec was emitted), `degraded output` (a spec
@@ -180,9 +188,12 @@ Cases live in `cases.yaml`. Keys:
 | `prompt` | exactly what the user types |
 | `mode` | `auto` (rely on the description firing) or `explicit` (name the skill; the runner maps the syntax per harness) |
 | `fixture` | `user-api` (TypeScript project) or `empty` (no sources); `support-queue` holds the non-code cases |
-| `turns` | optional follow-up answers; `expect` then applies to the last turn, and `expect_turn1` to the first |
+| `turns` | optional follow-up turns. A plain string is a prompt; `{prompt: …, new_session: true}` states that the prompt must be sent with no memory of the sessions before it — the harness's resume flag is dropped for that turn. `expect` then applies to the last turn, and `expect_turn1` to the first |
+| `writable` | optional; `true` runs the case under the delivery arms' posture (edits allowed). Default is the read-only posture every other case is measured under |
+| `timeout` | optional per-session ceiling in seconds; default 480. Only a case that carries work out needs more |
 | `expect` | assertions, all of which must hold |
 | `expect_turn1` | optional assertions for the first turn of a multi-turn case |
+| `expect_final` | optional assertions about the whole run rather than one turn: the last session's own words and the workspace it left behind |
 | `metrics` | measured but never judged; each value is an evidence prefix to look for |
 
 Assertion keys: `state`, `state_in`, `cause`, `should_trigger`, `asked_eq`, `max_asked`,
@@ -193,7 +204,26 @@ Assertion keys: `state`, `state_in`, `cause`, `should_trigger`, `asked_eq`, `max
 `category` of each open unknown — the language-independent counterpart of `question_keywords`,
 and only meaningful on a case that expects ASK, since a ROUTE spec has no open unknown),
 `open_issue` (matches the `issue` value — `ambiguous`, `conflict` or `premise` — on any open
-unknown; same ASK-only caveat as `open_field_regex`).
+unknown; same ASK-only caveat as `open_field_regex`), `spec_optional` (this turn owes no fence: a
+verification turn reports a file and an `Intent check` line, so silence passes instead of counting
+as a missing trigger — a spec that *is* emitted is still checked as usual), `no_new_question` (the
+question is settled, so emitting ASK fails the turn; also valid inside `expect_final`, where it
+reads the last turn's state).
+
+`expect_final` keys, judged once after the last turn by `check_final()`: `read_back` (a list of
+literals that must all appear in the **last session's own words** — a tool result echoing the skill
+body does not count, which is what makes it evidence that a saved contract was read rather than
+remembered), `no_new_question`, `intent_check` (the literal line `Intent check` in the last
+session's final reply), `verification_status` (the workspace holds exactly one
+`.intent/*.intent.yaml` and its `verification_status` equals the value; zero or two saved contracts
+fail the assertion and the filenames actually found are printed), `workspace_diff` (the tree
+changed since a baseline read before the first session — a run that only wrote a report does not
+pass).
+
+`--rescore` re-judges persisted transcripts with zero sessions, so it cannot rejudge
+`expect_final` — those assertions read the case's workspace, and the workspace is deleted when the
+run ends. A transcript of a case that declares `expect_final` is refused with that reason rather
+than reported with half its assertions missing; re-run those cases with `--harness`.
 
 `triggered`, `schema_valid`, `invariants_ok`, `evidence_valid` and `evidence_form` are always
 checked whenever a spec is expected, so no case needs to list them. Failure names reported for a run

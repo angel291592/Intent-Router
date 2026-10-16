@@ -405,7 +405,7 @@ way this project states harness compatibility — measured, specified, or neithe
 
 | Domain | PROBE reaches | The question worth asking | Status |
 |---|---|---|---|
-| **Coding agents** | repo, deps, version history, tests, CI, ADRs | irreversible technical trade-offs | ✅ **measured** — [eval suite](#evals), 17 cases |
+| **Coding agents** | repo, deps, version history, tests, CI, ADRs | irreversible technical trade-offs | ✅ **measured** — [eval suite](#evals), 18 cases |
 | **Support & service triage** | ticket history, order and event logs, entitlements, the policy in force | refund vs. replace, when both are allowed and one forecloses the other | ✅ **measured** — 1 case (`support-delegate-irreversible`), [subset run](evals/reports/2026-09-23-opencode-2.md) |
 | **Research & analysis** | prior notes, previous reports, the source allow-list, cached retrievals | depth vs. breadth, when the deliverable changes shape | 📋 **specified** |
 | **Ops & data work** | schema, dashboards, last run's output, deploy and incident history, retention policy | may a backfill rewrite historical rows | 📋 **specified** |
@@ -498,7 +498,7 @@ itself stays English-only):
 
 ## Evals
 
-Seventeen cases against fixture workspaces built as probe targets, run in a real harness with
+Eighteen cases against fixture workspaces built as probe targets, run in a real harness with
 nothing mocked. Cases assert the decision state, the counters, and that every evidence pointer
 names a file that exists — a single invented citation fails the suite regardless of everything
 else.
@@ -524,7 +524,8 @@ cases are the evidence for the description rewrite. Its sixth case, `git-only-fa
 the failure is the sandbox's rather than the skill's: reaching a fact that lives only in version
 history needs a shell that can read the repository, and on Windows the dsh sandbox cannot read the
 runner's own temporary workspaces — the same case passes on dsh with confinement off. Probe ratio
-is a diagnostic metric, never judged. The suite is seventeen cases,
+is a diagnostic metric, never judged. The suite is eighteen cases,
+which puts the full-suite threshold at 15 of 18 with zero hallucinated evidence; no full-suite
 run at that size has been published yet. Every published report is in
 [`evals/reports/`](evals/reports/).
 

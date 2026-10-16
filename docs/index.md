@@ -17,7 +17,7 @@ This page is the site entry point. The authoritative sources live in the reposit
 
 ## Writing
 
-- **[Why agents guess your intent: seventeen decidable cases](articles/why-agents-guess-intent.en.md)** —
+- **[Why agents guess your intent: eighteen decidable cases](articles/why-agents-guess-intent.en.md)** —
   how "it guessed wrong" becomes decidable, why one hallucinated citation fails the whole suite, and the
   contamination check that invalidated an entire run. ([中文](articles/why-agents-guess-intent.zh-CN.md))
 

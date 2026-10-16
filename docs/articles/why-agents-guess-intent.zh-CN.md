@@ -71,9 +71,9 @@
 
 ---
 
-## 三、17 个用例，覆盖的是四种状态而不是四种难度
+## 三、18 个用例，覆盖的是四种状态而不是四种难度
 
-用例数量不是指标，覆盖面才是。这 17 个用例分布在四类上：
+用例数量不是指标，覆盖面才是。这 18 个用例分布在四类上：
 
 **该问的**（`add-caching-auto`、`partially-specified-auto`、`chinese-ambiguous`…）
 请求有决策性未知项 → 必须问，且只问该问的。
@@ -199,8 +199,8 @@
 
 - **有两个 harness 出过可发布的报告**（opencode + `dp/deepseek-flash`；DeepSeek Harness（dsh）+ `opencode-go3/deepseek-v4.1-flash`，6 例子集），两者都由同一个模型家族应答。
 - **Claude Code 的报告被撤回了。** 2026-09-22 那次跑在一个强制关闭 `thinking`、且对英文提问用中文回答的通道上，失败无法归因于 skill 本身。报告已从仓库移除，Claude Code 降级为 `spec-compatible`。方法学和用例保持公开，**只有报告被扣下**——一个无法归因的数字，不该被发布。
-- **`codex` 从未被评测。** 它只在兼容性文档里被列为 `spec-compatible`（文档声称支持标准 `SKILL.md`，本项目未实测）。runner 支持的目标只有 `claude-code` 和 `opencode`。
-- **完整套件的门槛是 14/17**，但**这个规模的完整套件运行还没有发布过**。已提交的最新报告是子集运行。
+- **`codex` 从未被评测。** 它只在兼容性文档里被列为 `spec-compatible`（文档声称支持标准 `SKILL.md`，本项目未实测）。runner 支持 `claude-code`、`opencode` 与 `dsh`；dsh 通道无法给"需要读工作区 git 历史"的用例评分，因为 Windows 沙箱不允许 shell 读那里。
+- **完整套件的门槛是 15/18**，但**这个规模的完整套件运行还没有发布过**。已提交的最新报告是子集运行。
 - **交付对比的样本很小**（裸跑 N=5，技能组 N=3）。它能证明"技能组会写出失败策略"，不能给出精确的效应量。
 
 `probe ratio` 是诊断指标，**从不参与判定**。把它当成绩看会误导——它衡量的是"问的比例"，而问得多不等于问得对。
@@ -224,6 +224,6 @@
 | 105 处污染命中；bash key-order 问题（36 处）；评分器一跳修复 | 同上，§4 Observations |
 | 8/10 完整套件、probe ratio 0.56 | [`2026-09-23-opencode.md`](../../evals/reports/2026-09-23-opencode.md) |
 | `fully-specified-auto-quiet` 的设计决策注释 | [`evals/cases.yaml`](../../evals/cases.yaml) |
-| 17 用例、门槛 14/17、五档成本、失败模式分类 | [`evals/README.md`](../../evals/README.md) |
+| 18 用例、门槛 15/18、五档成本、失败模式分类 | [`evals/README.md`](../../evals/README.md) |
 | Claude Code 报告撤回的原因 | [issue #1](https://github.com/angel291592/Intent-Router/issues/1) |
 | 决策态不稳定（~1/3 运行漏触发 ASK，数据来自 2026-09-22 那个已被撤回的 claude-code 通道，因此本身也是 issue #2 待干净通道复核的对象） | [issue #2](https://github.com/angel291592/Intent-Router/issues/2) |

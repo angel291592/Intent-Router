@@ -17,6 +17,10 @@ top-level README may come from. The reports currently committed are:
 - `2026-10-15-dsh.md` (first DeepSeek Harness run: 6-case subset on the dsh headless profile,
   covering four auto-trigger cases after the description was rewritten to fit dsh's 500-character
   catalog cap)
+- `2026-10-16-opencode.md` (first measured run of `add-caching-cross-session`, a 1-case subset on
+  `dp/deepseek-flash`: the harness-default route stalled repeatedly that day, so the run moved to
+  the route the other opencode reports use. The case carries work out and declares a
+  1200-second ceiling of its own)
 
 claude-code run records are kept locally but not committed: the channel they ran through restricted
 the model in ways that make the results unattributable to the skill, so publishing them would be
