@@ -21,7 +21,8 @@
 
 ## 2. 怎么跑
 
-需要 `python` 3.13+、[`uv`](https://docs.astral.sh/uv/)，以及 harness 在 `PATH` 上。
+需要 `python` 3.13+、[`uv`](https://docs.astral.sh/uv/)，以及 harness 在 `PATH` 上——
+`claude`、`opencode` 或 `dsh`（最后一个可用 `$DSH_EXE` 覆盖，见 [dsh 通道](#dsh-通道)）。
 
 五档闸门，由便宜到昂贵，前一档不绿不进下一档、不要花任何一次会话。
 
@@ -65,13 +66,50 @@ skill 在安装位置是否可见、以及实际应答的 harness 版本与模�
 预检、不起会话。
 
 在此之前，若用户级 skills 目录（`~/.config/opencode/skills`、`~/.claude/skills`、
-`~/.agents/skills`）里存在 intent-router 副本，runner 会拒绝启动：harness 会把它和工作区副本
-一起加载，实际测到的是碰巧生效的那一份。先移走副本再跑。
+`~/.agents/skills`、`~/.dsh/skills`）里存在 intent-router 副本，runner 会拒绝启动：harness 会把它
+和工作区副本一起加载，实际测到的是碰巧生效的那一份。先移走副本再跑。唯一的例外是
+`--harness dsh`：它的运行会被搬进隔离 home（见下），同样的副本会被记入报告，并由第 4 次预检会话
+**实测**它们确实够不着，而不是靠信任。
+
+### dsh 通道
+
+`--harness dsh` 驱动 `dsh --profile headless`——随包的一次性 profile：回答一个任务、打印答案、退出。
+验证基准是 `@deepseek-ai/dsh` **0.2.0-rc.2**。
+
+- **找 CLI**：先 `$DSH_EXE`，再 `PATH` 上的 `dsh`。`DSH_EXE` 只接受一个可执行文件，所以要钉住装在
+  非常规位置的构建，用一层 wrapper 脚本。
+- **模型路由**：headless profile 的随包默认走 DeepSeek 官方路由，需要 `DEEPSEEK_API_KEY`；真实路由在
+  别的渠道/中转时用 `DSH_EVAL_PATCH=<补丁路径>` 提供。headless app 没有 `--model` 旗标，因此
+  `--harness dsh --model …` 会被直接拒绝而不是静默忽略；报告里的模型标签来自
+  `DSH_EVAL_MODEL_LABEL`（未设置时为 `(headless profile default)`）。
+- **隔离是实测的**：每次运行都在工作区旁拿到空的 `DSH_HOME` 与 `DSH_AGENTS_HOME`，因此用户级技能根
+  与操作者自己的 `$DSH_HOME/AGENTS.md` 都在会话之外；`.credentials.yaml` 与 `.env` 以文件形式复制进去
+  （绝不进环境变量，所以已导出的 key 依然优先）。自动生成的 `--patch` 补丁设置
+  `includeDefaultRoots: false` 与 `customSkillDirs: ['.dsh/skills']`，把技能面钉在工作区上——于是
+  `with_skill=False` 的工作区是真的"裸"。第 4 次预检会在没有技能的工作区里重跑显式调用，只要有东西
+  应答就整体失败：这就是报告里的 `isolation_ok`。
+- **权限姿态由补丁钉住**：自动生成的补丁同时设置 `sandbox-policy.mode: read-only` 与
+  `approval.policy: never`，环境里带 `DSH_PERMISSION_MODE=read-only`——与其他 harness 拿到的只读姿态
+  一致：`write`/`edit` 被拒，非交互运行不会卡在没人能回答的审批上。之所以不用随包默认，有实测理由：
+  在 Windows 上沙箱根本读不到 runner 自己的临时工作区。`workspace-write` 下每次 shell 调用都回
+  `[sandbox: file access denied under workspace-write mode]`，一次运行会把预算花在诊断沙箱而不是探测上；
+  `read-only` 下是同样的拒绝（`…under read-only mode`）。实际后果：**`git-only-fact` 在本通道失败**，
+  因为"只在版本历史里存在的事实"需要能读仓库的 shell。该用例在关闭限权的 dsh 下通过——用 `DSH_EVAL_PATCH`
+  提供一份把 `sandbox-policy.mode` 设为 `danger-full-access`、`approval.policy` 设为 `never` 的补丁（环境
+  变量由 runner 写入，不能覆盖该补丁）——正是这一步把失败定位到沙箱而不是 skill；两种姿态
+  各修好一个用例又弄坏另一个（不设限时，完整指定的请求会被直接执行，`fully-specified-auto-quiet` 会跑过
+  480 秒上限），所以公开的是只读姿态。解析 `--json` 事件流时，只有 assistant 正文进入候选，`thinking` 与
+  `tool_result` 永不参与。
+- **成本**：dsh 的预检是 **4 次会话**（版本、污染、技能可见性、隔离），而不是其他 harness 的 2 次。
+- **覆盖范围之外**：`--delivery` 与 `--rescore-delivery` 对 `--harness dsh` 直接拒绝——交付对比的每臂
+  配置与报告段落尚不存在，否则报告会用 opencode 的措辞描述自己。
+- **CI**：CI 只跑离线档（`--selftest`、`--check-frontmatter`、`--check-docs`）——不需要二进制、密钥和
+  网络；dsh 通道与其它付费档一样属于维护者机器上的一档。
 
 ## 3. 成本
 
 全量一轮是**每 harness 21 次会话**：17 例 + 两个两轮用例的第二轮 = 19 次用例会话，外加
-**2 次预检会话**。10 例套件实测 `--jobs 4` 下约 16 分钟，17 例按此估算约 27 分钟。
+**2 次预检会话**（dsh 为 4 次，多一次隔离实测）。10 例套件实测 `--jobs 4` 下约 16 分钟，17 例按此估算约 27 分钟。
 同一轮还可用 `--smoke`（1 用例会话 + 2 预检）与 Tier 3 定向重跑（受影响用例 × 2 次 + 2 预检）。
 Tier 0 与 Tier 1 零成本。迭代时用 `--cases <id> --repeat 2`，只在真的需要出数字时跑全量。
 

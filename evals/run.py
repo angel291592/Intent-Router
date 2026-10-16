@@ -2,11 +2,11 @@
 """Run the intent-router evaluation suite against a real agent harness.
 
     uv run --with pyyaml --with jsonschema python evals/run.py \
-        --harness claude-code|opencode [--cases all|id,id] [--repeat 1] \
+        --harness claude-code|opencode|dsh [--cases all|id,id] [--repeat 1] \
         [--jobs 4] [--out evals/reports] [--model <id>]
 
     uv run --with pyyaml --with jsonschema python evals/run.py \
-        --smoke --harness claude-code|opencode [--out evals/reports]
+        --smoke --harness claude-code|opencode|dsh [--out evals/reports]
 
     uv run --with pyyaml --with jsonschema python evals/run.py \
         --rescore evals/reports/raw/<harness> [--date YYYY-MM-DD]
@@ -51,6 +51,7 @@ replays it with zero sessions.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -123,7 +124,7 @@ CASE_KEYS = frozenset(
 )
 
 TIMEOUT = 480
-HARNESSES = ("claude-code", "opencode")
+HARNESSES = ("claude-code", "opencode", "dsh")
 
 # Commit subjects for the fixture history, with the CHANGELOG markers that must
 # NOT yet be present at that commit. The reason ioredis is pinned appears only
@@ -228,6 +229,64 @@ DELIVERY_ARMS = ("bare", "prompt", "skill")
 CLAUDE_TOOLS_READONLY = ("Read", "Grep", "Glob", "Bash(git log:*)", "Bash(git show:*)")
 CLAUDE_TOOLS_DELIVERY = CLAUDE_TOOLS_READONLY + ("Edit", "Write")
 
+# --------------------------------------------------------------------------- #
+# dsh channel
+#
+# The dsh channel runs the shipped `headless` profile, which answers one task and
+# prints the result (@deepseek-ai/dsh-headless). Verified against
+# @deepseek-ai/dsh 0.2.0-rc.2; the CLI is resolved from $DSH_EXE, then PATH.
+DSH_PROFILE = "headless"
+
+# Events of the `--json` projection that are not assistant prose. `thinking` is
+# model reasoning, and `tool_result` embeds whatever the run just read — the
+# SKILL.md body among it, whose own fenced examples would otherwise win
+# extract_spec's reversed scan on a run that correctly stayed silent. Applied
+# only to events without a `part` key, which is how opencode's JSONL and
+# claude-code's result envelope stay untouched.
+DSH_NON_PROSE_EVENTS = ("session", "status", "thinking", "tool_call", "tool_result")
+
+# Events of the `--json` projection that are not assistant prose. `thinking` is
+# model reasoning, and `tool_result` embeds whatever the run just read — the
+# SKILL.md body among it, whose own fenced examples would otherwise win
+# extract_spec's reversed scan on a run that correctly stayed silent. Applied
+# only to events without a `part` key, which is how opencode's JSONL and
+# claude-code's result envelope stay untouched.
+DSH_NON_PROSE_EVENTS = ("session", "status", "thinking", "tool_call", "tool_result")
+
+# Launcher `--patch` overlay that pins the run's surfaces. The skill roots: the
+# provider's project, custom, user and bundled roots are dropped, so a
+# with_skill=False workspace is genuinely bare — the same intent as opencode's
+# `skill: deny` on its bare arm. `customSkillDirs` is relative because `--patch`
+# overlays reject the `!!js` tag, and a relative root resolves against the
+# session cwd, which is the workspace.
+#
+# The posture rows replace the shipped default (workspace-write + approval `ask`)
+# with the read-only suite posture the other harnesses get. Measured 2026-10-15
+# on Windows: with a read-only sandbox the shell still reads the workspace
+# (`git log` answers) while `write`/`edit` are denied, and approval `never`
+# stops a non-interactive run from waiting on a prompt nobody can answer. The
+# shipped default was unusable here in the other direction — its
+# `workspace-write` token could not even list the runner's temporary workspace
+# (`[sandbox: file access denied under workspace-write mode]`).
+DSH_ISOLATION_PATCH = """\
+- id: skill-filesystem
+  config:
+    includeDefaultRoots: false
+    customSkillDirs:
+      - .dsh/skills
+- id: sandbox-policy
+  config:
+    mode: read-only
+- id: approval
+  config:
+    policy: never
+"""
+
+# A failed dsh run reports `dsh: <code>: <message>` on stderr and, under --json,
+# the same code on a `turn_end` reason or an `error` event. Auth and quota
+# failures are environment faults, never behaviour verdicts (decision 5).
+DSH_FAILURE_RE = re.compile(r'"code"\s*:\s*"(?:AUTH|RATE|QUOTA)', re.IGNORECASE)
+
 CJK = re.compile(r"[㐀-䶿一-鿿豈-﫿]")
 FENCE = re.compile(r"```ya?ml[^\n]*\n(.*?)```", re.DOTALL)
 
@@ -251,7 +310,15 @@ EVIDENCE_TOKEN_OK = re.compile(
 # never as a prefix — a dotfile such as .github/workflows/ci.yml is a
 # legitimate workspace pointer.
 NON_POINTER_EXACT = (".",)
-NON_POINTER_PREFIXES = ("./", ".git/", ".claude/", ".agents/", ".intent/", "opencode.json")
+NON_POINTER_PREFIXES = (
+    "./",
+    ".git/",
+    ".claude/",
+    ".agents/",
+    ".dsh/",
+    ".intent/",
+    "opencode.json",
+)
 
 # Rate limiting / quota exhaustion is an environment fault, never a behaviour
 # verdict: a run that hits it must be retried and, if still failing, recorded as
@@ -403,6 +470,22 @@ def is_tool_payload(event) -> bool:
     return isinstance(part, dict) and part.get("type") == "tool"
 
 
+def is_non_prose_event(event) -> bool:
+    """True for an event that carries no assistant prose.
+
+    opencode marks tool payloads on `part.type`; claude-code's envelope has
+    neither. dsh's `--json` stream names the event kind on a top-level `type`
+    (and has no `part` key), so that branch applies only to events without one —
+    a `thinking` event is model reasoning, and a `tool_result` embeds whatever
+    the run just read, the skill's own fenced examples included.
+    """
+    if not isinstance(event, dict):
+        return False
+    if is_tool_payload(event):
+        return True
+    return "part" not in event and event.get("type") in DSH_NON_PROSE_EVENTS
+
+
 def harness_texts(stdout: str) -> list[str]:
     """Candidate transcript texts for a harness run, in event order, raw stdout last.
 
@@ -417,7 +500,7 @@ def harness_texts(stdout: str) -> list[str]:
     texts: list[str] = []
     try:
         single = json.loads(stdout)
-        if not is_tool_payload(single):
+        if not is_non_prose_event(single):
             texts.extend(json_strings(single))
     except (json.JSONDecodeError, TypeError):
         for line in stdout.splitlines():  # JSONL output
@@ -427,7 +510,7 @@ def harness_texts(stdout: str) -> list[str]:
                     event = json.loads(line)
                 except json.JSONDecodeError:
                     continue
-                if is_tool_payload(event):
+                if is_non_prose_event(event):
                     continue
                 texts.extend(json_strings(event))
     # Event order preserved (deduped): extract_spec scans from the END, so the final
@@ -514,6 +597,7 @@ def install_skill(workspace: Path) -> None:
     for target in (
         workspace / ".claude" / "skills" / "intent-router",
         workspace / ".agents" / "skills" / "intent-router",
+        workspace / ".dsh" / "skills" / "intent-router",
     ):
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(SKILL_DIR, target)
@@ -611,7 +695,10 @@ def prompt_for(case: dict, harness: str) -> str:
     text = str(case["prompt"]).strip()
     if case.get("mode") != "explicit":
         return text
-    if harness == "claude-code":
+    if harness in ("claude-code", "dsh"):
+        # Both document the same explicit gesture: a whitespace-bounded `/name`
+        # token in the user message (Claude Code's slash command, dsh's
+        # user-explicit injection, which loads the skill body into that step).
         return f"/intent-router {text}"
     return f"Use the intent-router skill on this request: {text}"
 
@@ -621,11 +708,38 @@ def prompt_for(case: dict, harness: str) -> str:
 
 
 def executable(harness: str) -> str:
+    if harness == "dsh":
+        # $DSH_EXE first: a wrapper script is the portable way to pin one CLI
+        # build on a machine that keeps its product copy inside an application.
+        override = os.environ.get("DSH_EXE")
+        if override:
+            return override
+        found = shutil.which("dsh")
+        if not found:
+            raise SystemExit(
+                "dsh is not on PATH and DSH_EXE is unset; install the CLI "
+                "(`npm i -g @deepseek-ai/dsh@0.2.0-rc.2`) or point DSH_EXE at one"
+            )
+        return found
     name = "claude" if harness == "claude-code" else "opencode"
     found = shutil.which(name)
     if not found:
         raise SystemExit(f"{name} is not on PATH; cannot run --harness {harness}")
     return found
+
+
+def dsh_isolation_overlay() -> Path:
+    """Path of the launcher overlay, rewritten on first dsh use.
+
+    Called lazily rather than at import time: --selftest, --check-frontmatter and
+    --check-docs are the offline CI gates, and they must stay side-effect free.
+    Rewritten every time rather than cached, so a stale file from an earlier
+    version of this constant can never configure a run.
+    """
+    target = Path(tempfile.gettempdir()) / "intent-router-dsh" / "headless-isolation.yml"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(DSH_ISOLATION_PATCH, encoding="utf-8")
+    return target
 
 
 def build_command(
@@ -638,6 +752,21 @@ def build_command(
     resume: str | None,
     tools: tuple[str, ...] | None = None,
 ) -> list[str]:
+    if harness == "dsh":
+        # Launcher flags first, then the headless app's own args (dsh README:
+        # "the first token the launcher does not recognize starts the app's
+        # arguments"). `model` is deliberately unused: the headless app has no
+        # --model flag, so a pinned route can only come from the profile or an
+        # overlay — --model is rejected before the suite runs.
+        cmd = [exe, "--profile", DSH_PROFILE, "--patch", str(dsh_isolation_overlay())]
+        extra = os.environ.get("DSH_EVAL_PATCH")
+        if extra:
+            cmd += ["--patch", extra]
+        cmd += ["--json"]
+        if resume:
+            cmd += ["--session-id", resume]
+        cmd.append(prompt)
+        return cmd
     if harness == "claude-code":
         cmd = [exe, "-p"]
         if resume:
@@ -667,9 +796,58 @@ def build_command(
     return cmd
 
 
-def harness_env(cwd: Path) -> dict[str, str]:
-    """The environment every harness process runs with, for a session in cwd."""
+def dsh_home_for(cwd: Path) -> Path:
+    """The isolated DSH home belonging to one workspace (pure derivation)."""
+    digest = hashlib.sha1(str(cwd).encode("utf-8")).hexdigest()[:12]
+    return Path(tempfile.gettempdir()) / "intent-router-dsh-homes" / f"{cwd.name}-{digest}"
+
+
+def dsh_env(cwd: Path) -> dict[str, str]:
+    """The dsh environment: the workspace is the only surface the run can see.
+
+    Two user-level roots would otherwise contaminate a run: `$dshHome/skills`
+    (rank 400) and `$agentsHome/skills` (rank 500) — this machine holds an
+    intent-router copy in `~/.agents/skills` — and `$DSH_HOME/AGENTS.md`, the
+    operator's own global instructions (measured 2026-10-15: an English eval
+    prompt came back in Chinese under the real home). Both roots therefore point
+    at empty directories created per workspace; the third root,
+    `<projectRoot>/.dsh/skills`, is pinned by DSH_ISOLATION_PATCH.
+
+    Credentials move as a file, never into the environment: the launch
+    environment wins over the stored file, so an exported key still takes
+    precedence over the copy.
+
+    Confinement comes from DSH_ISOLATION_PATCH (read-only sandbox, approval
+    `never`), and the mode is repeated here so every row that reads
+    `DSH_PERMISSION_MODE` agrees with the overlay. Measured 2026-10-15: the
+    shipped `workspace-write` default could not read the runner's own temporary
+    workspace at all (every shell call answered `[sandbox: file access denied
+    under workspace-write mode]`, and a run burned its budget loading the bundled
+    sandbox-ACL diagnosis skill instead of probing), while `read-only` reads the
+    workspace and denies `write`/`edit` — the same posture the other harnesses
+    get, and the reason a fully specified request is answered here rather than
+    carried out.
+    """
+    home = dsh_home_for(cwd)
+    agents = home / "agents-home"
+    (home / "skills").mkdir(parents=True, exist_ok=True)
+    (agents / "skills").mkdir(parents=True, exist_ok=True)
+    source_home = Path(os.environ.get("DSH_HOME") or (Path.home() / ".dsh"))
+    for name in (".credentials.yaml", ".env"):
+        source = source_home / name
+        target = home / name
+        if source.is_file() and not target.exists():
+            shutil.copy2(source, target)
     return {
+        "DSH_HOME": str(home),
+        "DSH_AGENTS_HOME": str(agents),
+        "DSH_PERMISSION_MODE": "read-only",
+    }
+
+
+def harness_env(cwd: Path, harness: str | None = None) -> dict[str, str]:
+    """The environment every harness process runs with, for a session in cwd."""
+    env = {
         **os.environ,
         "PYTHONUTF8": "1",
         # opencode's Claude Code compatibility layer injects the user's
@@ -693,6 +871,9 @@ def harness_env(cwd: Path) -> dict[str, str]:
         # `cd` would.
         "PWD": str(cwd),
     }
+    if harness == "dsh":
+        env.update(dsh_env(cwd))
+    return env
 
 
 def kill_process_tree(proc: subprocess.Popen) -> None:
@@ -715,7 +896,7 @@ def kill_process_tree(proc: subprocess.Popen) -> None:
     proc.kill()
 
 
-def _invoke_once(cmd: list[str], cwd: Path) -> tuple[str, str, int]:
+def _invoke_once(cmd: list[str], cwd: Path, harness: str | None = None) -> tuple[str, str, int]:
     proc = subprocess.Popen(
         cmd,
         cwd=cwd,
@@ -724,7 +905,7 @@ def _invoke_once(cmd: list[str], cwd: Path) -> tuple[str, str, int]:
         text=True,
         encoding="utf-8",
         errors="replace",
-        env=harness_env(cwd),
+        env=harness_env(cwd, harness),
     )
     try:
         stdout, stderr = proc.communicate(timeout=TIMEOUT)
@@ -736,11 +917,11 @@ def _invoke_once(cmd: list[str], cwd: Path) -> tuple[str, str, int]:
             proc.communicate(timeout=30)
         except subprocess.TimeoutExpired:
             pass
-        return "", f"timeout after {TIMEOUT}s", 124
+        return "", f"timeout after {timeout}s", 124
     return stdout or "", stderr or "", proc.returncode
 
 
-def invoke(cmd: list[str], cwd: Path, retries: int = 2) -> tuple[str, str, int]:
+def invoke(cmd: list[str], cwd: Path, retries: int = 2, harness: str | None = None) -> tuple[str, str, int]:
     # This machine keeps the Claude Code credentials in the user-level
     # settings.json env block, which --setting-sources project does not load;
     # run.py is launched with those variables exported, and os.environ passes
@@ -753,7 +934,7 @@ def invoke(cmd: list[str], cwd: Path, retries: int = 2) -> tuple[str, str, int]:
     delay = 5.0
     stdout, stderr, code = "", "", 0
     for attempt in range(retries + 1):
-        stdout, stderr, code = _invoke_once(cmd, cwd)
+        stdout, stderr, code = _invoke_once(cmd, cwd, harness)
         if code == 0 or not RATE_LIMIT_RE.search(stderr or ""):
             return stdout, stderr, code
         if attempt < retries:
@@ -763,12 +944,24 @@ def invoke(cmd: list[str], cwd: Path, retries: int = 2) -> tuple[str, str, int]:
     return stdout, stderr, code
 
 
-def classify_turn(code: int, stdout: str, stderr: str, spec_status: str) -> str:
+def classify_turn(
+    code: int, stdout: str, stderr: str, spec_status: str, harness: str | None = None
+) -> str:
     """Turn status: ok | no_fence | degraded_output | timeout | harness_error."""
     if code == 124 and not stdout.strip():
         return "timeout"
     if code != 0 and (RATE_LIMIT_RE.search(stderr or "") or "Not logged in" in (stderr or "")):
         return "harness_error"
+    if harness == "dsh" and code != 0:
+        # Any dsh turn that ends in an error is an environment fault: a missing
+        # credential, an auth refusal, an exhausted quota or a provider outage.
+        # Without this the turn would be scored as "no spec", and a
+        # should_trigger:false case would pass for the wrong reason. Gated on the
+        # harness so no other channel's stdout can be read this way.
+        if "dsh: AUTH" in (stderr or "") or '"kind":"error"' in (stdout or ""):
+            return "harness_error"
+        if DSH_FAILURE_RE.search(stdout or ""):
+            return "harness_error"
     return spec_status
 
 
@@ -786,6 +979,8 @@ def run_case_once(case: dict, harness: str, model: str | None) -> dict:
     transcript: list[str] = []
     turns: list[dict] = []
     runner_failures: list[str] = []
+    base_sha: str | None = None
+    record: dict = {}
     try:
         cmd = build_command(
             harness,
@@ -799,8 +994,11 @@ def run_case_once(case: dict, harness: str, model: str | None) -> dict:
         transcript.append(f"$ {' '.join(cmd)}\n[exit {code}]\n{stdout}\n[stderr]\n{stderr}")
         session = session_id_of(stdout)
         spec, status, text = extract_spec(harness_texts(stdout))
-        status = classify_turn(code, stdout, stderr, status)
-        turns.append({"spec": spec, "status": status, "text": text, "stderr": stderr, "exit": code})
+        status = classify_turn(code, stdout, stderr, status, harness)
+        turns.append(
+            {"spec": spec, "status": status, "text": text, "stderr": stderr, "exit": code,
+             "stdout": stdout}
+        )
         print(f"  [{case_id}] turn 1: {status}")
         if pending:
             if status in ("timeout", "harness_error"):
@@ -808,35 +1006,55 @@ def run_case_once(case: dict, harness: str, model: str | None) -> dict:
             elif (spec or {}).get("decision", {}).get("state") != "ASK":
                 runner_failures.append("turn1_not_ask")
                 pending = []
-        for answer in pending:
-            if harness == "claude-code" and not session:
+        for entry in pending:
+            if isinstance(entry, dict):
+                next_prompt = str(entry.get("prompt", ""))
+                new_session = bool(entry.get("new_session"))
+            else:
+                next_prompt = str(entry)
+                new_session = False
+            # dsh resumes through --session-id, which refuses an id with no
+            # stored session; "-c" is opencode's flag and would fail the turn
+            # rather than the runner noticing the missing identity. A turn that
+            # asks for a new session resumes nothing at all — no `-c`, no
+            # `--resume`, no `--session-id` — which is what makes the read-back
+            # measurable instead of remembered.
+            if not new_session and harness in ("claude-code", "dsh") and not session:
                 stderr += "\n[runner] no session id in first-turn output; cannot resume"
                 break
             cmd = build_command(
                 harness,
                 executable(harness),
-                str(answer),
+                next_prompt,
                 model,
                 keep_session=True,
                 resume=session or "-c",
             )
             stdout, stderr, code = invoke(cmd, workspace)
             transcript.append(f"$ {' '.join(cmd)}\n[exit {code}]\n{stdout}\n[stderr]\n{stderr}")
+            # A new session's own id replaces the previous one, so a later turn
+            # that resumes resumes this session and not the one before it.
             session = session_id_of(stdout) or session
             spec, status, text = extract_spec(harness_texts(stdout))
-            status = classify_turn(code, stdout, stderr, status)
+            status = classify_turn(code, stdout, stderr, status, harness)
             turns.append(
-                {"spec": spec, "status": status, "text": text, "stderr": stderr, "exit": code}
+                {"spec": spec, "status": status, "text": text, "stderr": stderr, "exit": code,
+                 "stdout": stdout}
             )
             print(f"  [{case_id}] turn {len(turns)}: {status}")
-        return {
+        record = {
             "turns": turns,
             "runner_failures": runner_failures,
             "raw": "\n\n".join(transcript),
             "workspace_fixture": case.get("fixture", "empty"),
         }
+        return record
     finally:
         rm_tree(workspace)
+        if harness == "dsh":
+            # The isolated home holds this workspace's copy of the credential
+            # file; it goes away with the workspace it belongs to.
+            rm_tree(dsh_home_for(workspace))
 
 
 # --------------------------------------------------------------------------- #
@@ -1185,8 +1403,10 @@ def check(
 def user_level_skill_copies(env: dict | None = None) -> list[Path]:
     """Existing intent-router copies in user-level skills directories.
 
-    The three global directories opencode documents (https://opencode.ai/docs/skills)
-    sit under each home directory; CLAUDE_CONFIG_DIR relocates the Claude one.
+    The four global directories the harnesses document — opencode's
+    (https://opencode.ai/docs/skills) plus dsh's `$DSH_HOME/skills`, whose
+    `$DSH_AGENTS_HOME` default is the shared `~/.agents` — sit under each home
+    directory; CLAUDE_CONFIG_DIR relocates the Claude one.
     With env=None the real os.environ is used and Path.home() joins the home
     set; a synthetic env must provide every variable itself, so selftest can
     exercise this function on a machine that also holds real copies.
@@ -1199,6 +1419,7 @@ def user_level_skill_copies(env: dict | None = None) -> list[Path]:
         ".config/opencode/skills/intent-router",
         ".claude/skills/intent-router",
         ".agents/skills/intent-router",
+        ".dsh/skills/intent-router",
     )
     found: set[Path] = set()
     for home in homes:
@@ -1217,7 +1438,7 @@ def user_level_skill_copies(env: dict | None = None) -> list[Path]:
 def preflight(harness: str, model: str | None) -> dict:
     """Contamination check, skill visibility and version, per eval_spec 4.3."""
     copies = user_level_skill_copies()
-    if copies:
+    if copies and harness != "dsh":
         listing = "\n  ".join(str(p) for p in copies)
         raise SystemExit(
             "an intent-router copy sits in a user-level skills directory:\n"
@@ -1226,9 +1447,22 @@ def preflight(harness: str, model: str | None) -> dict:
             "would measure whichever happens to win; move it out, then run again."
         )
     out: dict[str, str] = {}
+    if copies:
+        # dsh does not get this abort: its run is moved into an isolated home
+        # (see dsh_env), so a user-level copy cannot reach a session — and the
+        # isolation probe below measures that instead of asserting it. This
+        # machine keeps a copy in ~/.agents/skills, which is why the check runs
+        # rather than being skipped. Only the leaf directory names are recorded:
+        # a report is published, and a machine's absolute paths are not evidence:
+        # only the last two path components are recorded, deduplicated.
+        out["user_level_copies_present"] = "; ".join(
+            sorted({" / ".join(p.parts[-3:-1]) for p in copies})
+        )
     exe = executable(harness)
 
     version_cmd = [exe, "--version"]
+    # No harness identity: this probe is a bare `--version` in the repository
+    # root, and it must not create an isolated home beside the checkout.
     stdout, stderr, _ = invoke(version_cmd, ROOT)
     out["version"] = (stdout or stderr).strip().splitlines()[0] if (stdout or stderr) else "unknown"
 
@@ -1237,7 +1471,7 @@ def preflight(harness: str, model: str | None) -> dict:
         cmd = build_command(
             harness, exe, "Reply with exactly: OK", model, keep_session=False, resume=None
         )
-        stdout, stderr, _ = invoke(cmd, clean)
+        stdout, stderr, _ = invoke(cmd, clean, harness=harness)
         # Prefer the decoded result field: harness_texts sorts longest-first and
         # the raw JSON envelope is longer than the reply, so it would never match.
         try:
@@ -1249,6 +1483,8 @@ def preflight(harness: str, model: str | None) -> dict:
         out["contamination_ok"] = "yes" if reply.strip().strip(".") == "OK" else "NO — user-level instructions are leaking in"
     finally:
         rm_tree(clean)
+        if harness == "dsh":
+            rm_tree(dsh_home_for(clean))
 
     probe = Path(tempfile.mkdtemp(prefix="intent-router-visible-"))
     try:
@@ -1265,12 +1501,14 @@ def preflight(harness: str, model: str | None) -> dict:
             keep_session=False,
             resume=None,
         )
-        stdout, stderr, _ = invoke(cmd, probe)
+        stdout, stderr, _ = invoke(cmd, probe, harness=harness)
         spec, status, text = extract_spec(harness_texts(stdout))
         out["skill_visible"] = "yes" if spec is not None else f"NO ({status})"
         out["skill_visible_reply"] = (text or stderr)[:300]
     finally:
         rm_tree(probe)
+        if harness == "dsh":
+            rm_tree(dsh_home_for(probe))
     if spec is None:
         # An explicitly invoked skill that does not answer means the session
         # did not run where the skill was installed; every case after this
@@ -1282,7 +1520,42 @@ def preflight(harness: str, model: str | None) -> dict:
             f"reply: {out['skill_visible_reply'][:200]!r}. No case was run."
         )
 
-    out.setdefault("model", model or "(harness default)")
+    if harness == "dsh":
+        # Isolation, measured rather than assumed: the same explicit invocation
+        # in a workspace with no skill must produce no spec. If a user-level or
+        # bundled copy leaked in, this is where a whole suite of "passed" runs
+        # would otherwise be measuring the wrong file.
+        bare = Path(tempfile.mkdtemp(prefix="intent-router-bare-"))
+        try:
+            cmd = build_command(
+                harness,
+                exe,
+                prompt_for({"prompt": "ping", "mode": "explicit"}, harness),
+                model,
+                keep_session=False,
+                resume=None,
+            )
+            stdout, stderr, _ = invoke(cmd, bare, harness=harness)
+            leaked, bare_status, bare_text = extract_spec(harness_texts(stdout))
+            if leaked is not None:
+                out["isolation_ok"] = "NO — a skill was reachable outside the workspace"
+                raise SystemExit(
+                    "preflight: dsh isolation failed — an explicitly invoked skill answered in a "
+                    "workspace with no skill installed, so a user-level or bundled copy is still "
+                    f"reachable ({bare_status}). Fix the isolation before running any case: "
+                    f"reply: {bare_text[:200]!r}"
+                )
+            out["isolation_ok"] = "yes"
+        finally:
+            rm_tree(bare)
+            rm_tree(dsh_home_for(bare))
+        out["model"] = os.environ.get("DSH_EVAL_MODEL_LABEL") or "(headless profile default)"
+        if not os.environ.get("DSH_EVAL_PATCH"):
+            out["model_source"] = "headless profile default route (no DSH_EVAL_PATCH given)"
+        else:
+            out["model_source"] = f"overlay {Path(os.environ['DSH_EVAL_PATCH']).name}"
+    else:
+        out.setdefault("model", model or "(harness default)")
     return out
 
 
@@ -1393,6 +1666,7 @@ def render_report(
             f"- harness: {harness} ({env.get('version', 'unknown')})",
             f"- model: {model}",
             f"- skill commit: {env.get('skill_commit', 'unknown')}",
+            f"- skill file: {env.get('skill_file', 'unknown')}",
             f"- repeats per case: {repeats_distribution({r['id']: r['run_count'] for r in results})[len('- repeats per case: '):]}",
             f"- contamination check: {env.get('contamination_ok', 'not run')} "
             f"(reply: {env.get('contamination_reply', '')!r})",
@@ -1408,6 +1682,41 @@ def render_report(
                 "```",
                 "",
             ]
+        if harness == "dsh":
+            preamble += [
+                "dsh headless profile (`--profile headless`) with this launcher overlay, "
+                "written to a temporary file and passed as `--patch`:",
+                "",
+                "```yaml",
+                DSH_ISOLATION_PATCH.rstrip(),
+                "```",
+                "",
+                f"- model route: {env.get('model_source', 'unknown')}",
+                f"- isolation probe — an explicitly invoked skill in a workspace with none must "
+                f"answer with no spec: {env.get('isolation_ok', 'not run')}",
+                "- `DSH_HOME` and `DSH_AGENTS_HOME` point at an empty home per workspace, so the "
+                "user-level skill roots (rank 400/500) and the operator's `$DSH_HOME/AGENTS.md` are "
+                "outside the run; the probe above is what measures that, rather than a claim.",
+                "- `DSH_PERMISSION_MODE=read-only` with approval `never`, both pinned by the overlay "
+                "above: the same read-only posture the other harnesses get, so `write`/`edit` are "
+                "denied and a non-interactive run never waits on a prompt nobody can answer. "
+                "Measured limitation of this channel: the Windows sandbox cannot read the runner's "
+                "own temporary workspaces (`[sandbox: file access denied under read-only mode]`), so "
+                "a case that must follow a reference into version history fails here — the same case "
+                "passes on dsh with confinement off, which localizes the failure to the sandbox "
+                "rather than to the skill. The shipped `workspace-write` default fails the same way.",
+                "- `--json` event stream; `thinking`, `tool_call` and `tool_result` events are not "
+                "candidate replies.",
+                "- the catalog holds only the workspace copy of the skill: this measures the skill's "
+                "own text, not how it competes with other skills installed on the operator's machine.",
+                "",
+            ]
+            if env.get("user_level_copies_present"):
+                preamble.append(
+                    "- user-level intent-router copies on this machine (recorded, and outside every "
+                    f"run by the isolation above): {env['user_level_copies_present']}"
+                )
+                preamble.append("")
 
     if subset:
         met = passed == total and not_run == 0
@@ -1489,6 +1798,16 @@ def render_report(
 # modes
 
 
+# A skill description is what every harness matches a request against, and the
+# tightest budget in the field is dsh's: its session catalog renders name plus a
+# normalized, capped description (catalogDescriptionMaxLength, default 500 in
+# @deepseek-ai/dsh-tool-skill 0.2.0-rc.2), and anything longer is truncated with
+# an ellipsis — silently, since the fence still parses. 500 is therefore the
+# limit that decides whether every predicate in the description is visible.
+DESCRIPTION_LIMIT = 500
+DESCRIPTION_LIMIT_SOURCE = "dsh catalog cap; description is truncated past it, never rejected"
+
+
 def check_frontmatter(path: Path) -> int:
     text = path.read_text(encoding="utf-8")
     problems = []
@@ -1509,8 +1828,11 @@ def check_frontmatter(path: Path) -> int:
     description = str(data.get("description", ""))
     if not description:
         problems.append("description is empty")
-    if len(description) > 1024:
-        problems.append(f"description is {len(description)} characters, limit is 1024")
+    if len(description) > DESCRIPTION_LIMIT:
+        problems.append(
+            f"description is {len(description)} characters, limit is {DESCRIPTION_LIMIT} "
+            f"({DESCRIPTION_LIMIT_SOURCE})"
+        )
     body_lines = len(text.splitlines())
     if body_lines > 500:
         problems.append(f"{body_lines} lines, limit is 500")
@@ -2629,7 +2951,12 @@ def selftest() -> int:
         "default prepare still installs the skill and denies edit",
         (ws / ".claude" / "skills" / "intent-router").is_dir()
         and (ws / ".agents" / "skills" / "intent-router").is_dir()
+        and (ws / ".dsh" / "skills" / "intent-router").is_dir()
         and json.loads((ws / "opencode.json").read_text(encoding="utf-8"))["permission"]["edit"] == "deny",
+    )
+    expect(
+        "the installed .dsh copy is outside the delivery diff, like .claude and .agents",
+        ":!.dsh" in RUNNER_PATHS,
     )
     rm_tree(ws)
 
@@ -2663,6 +2990,112 @@ def selftest() -> int:
         "delivery claude tools add Edit and Write",
         "Edit" in cmd[index:] and "Write" in cmd[index:],
     )
+
+    print("dsh channel")
+    # Offline by construction: no dsh binary, no session, no network. Only
+    # build_command(), the pure helpers and the stdout parser are exercised.
+    saved_route = os.environ.pop("DSH_EVAL_PATCH", None)
+    try:
+        cmd = build_command("dsh", "dsh", "hello", None, keep_session=False, resume=None)
+        overlay = Path(cmd[4])
+        overlay_text = overlay.read_text(encoding="utf-8")
+        expect(
+            "dsh runs the headless profile with the isolation, sandbox and approval overlay",
+            cmd[:4] == ["dsh", "--profile", "headless", "--patch"]
+            and cmd[-2:] == ["--json", "hello"]
+            and overlay.is_file()
+            and "includeDefaultRoots: false" in overlay_text
+            and "mode: read-only" in overlay_text
+            and "policy: never" in overlay_text,
+        )
+        os.environ["DSH_EVAL_PATCH"] = "C:/tmp/machine-route.yml"
+        cmd = build_command("dsh", "dsh", "hello", None, keep_session=False, resume="session-1")
+        expect(
+            "dsh adds the machine-local route overlay and resumes by session id",
+            cmd.count("--patch") == 2
+            and cmd[-4:] == ["--json", "--session-id", "session-1", "hello"],
+        )
+    finally:
+        if saved_route is None:
+            os.environ.pop("DSH_EVAL_PATCH", None)
+        else:
+            os.environ["DSH_EVAL_PATCH"] = saved_route
+
+    expect(
+        "dsh's explicit gesture is the documented /name token",
+        prompt_for({"prompt": "ping", "mode": "explicit"}, "dsh") == "/intent-router ping",
+    )
+    expect(
+        "a dsh auth failure is an environment fault, not a behaviour verdict",
+        classify_turn(
+            1,
+            '{"type":"turn_end","reason":{"kind":"error","error":{"code":"AUTH"}}}',
+            "",
+            "no_fence",
+            "dsh",
+        )
+        == "harness_error",
+    )
+    expect(
+        "the dsh error grammar is not applied to another harness's stdout",
+        classify_turn(1, '{"code":"AUTH"}', "", "no_fence", "opencode") == "no_fence",
+    )
+    expect("the runner's own .dsh skill copy is never a delivery", ":!.dsh" in RUNNER_PATHS)
+
+    dsh_stream = "\n".join(
+        [
+            '{"type":"session","sessionId":"session-selftest","cwd":"/tmp/ws"}',
+            '{"type":"thinking","text":"```yaml\\nspec_version: \\"0.1\\"\\n```"}',
+            '{"type":"tool_result","result":"```yaml\\nspec_version: \\"0.1\\"\\nintent: from_tool_output\\n```"}',
+            '{"type":"text","text":"No spec needed."}',
+            '{"type":"final","text":"No spec needed."}',
+        ]
+    )
+    spec, status, text = extract_spec(harness_texts(dsh_stream))
+    expect(
+        "a dsh run with no spec is no_fence, never the skill text its tool_result carried",
+        spec is None and status == "no_fence" and text == "No spec needed.",
+    )
+    expect(
+        "a dsh session id is read from the opening session event",
+        session_id_of(dsh_stream) == "session-selftest",
+    )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        fake_home = Path(tmp) / "real-dsh-home"
+        fake_home.mkdir()
+        (fake_home / ".credentials.yaml").write_text("version: 1\n", encoding="utf-8")
+        env_ws = Path(tmp) / "intent-router-eval-dsh"
+        env_ws.mkdir()
+        saved_home = os.environ.pop("DSH_HOME", None)
+        os.environ["DSH_HOME"] = str(fake_home)
+        try:
+            env = harness_env(env_ws, "dsh")
+            home = Path(env["DSH_HOME"])
+            expect(
+                "a dsh run gets its own empty skill roots and the recorded permission mode",
+                home == dsh_home_for(env_ws)
+                and env["DSH_AGENTS_HOME"] == str(home / "agents-home")
+                and (home / "skills").is_dir()
+                and (home / "agents-home" / "skills").is_dir()
+                and env["DSH_PERMISSION_MODE"] == "read-only",
+            )
+            expect(
+                "credentials move as a file, never into the environment",
+                (home / ".credentials.yaml").read_text(encoding="utf-8") == "version: 1\n"
+                and "DSH_HOME" in env
+                and all("KEY" not in key for key in env),
+            )
+            expect(
+                "other harnesses are not moved into an isolated home",
+                harness_env(env_ws, "opencode").get("DSH_HOME") == os.environ.get("DSH_HOME"),
+            )
+        finally:
+            rm_tree(dsh_home_for(env_ws))
+            if saved_home is None:
+                os.environ.pop("DSH_HOME", None)
+            else:
+                os.environ["DSH_HOME"] = saved_home
 
     print("looks_like_question")
     expect("a trailing question is a question", looks_like_question("Sure.\n\nWhich strategy should I use?"))
@@ -2826,6 +3259,11 @@ def selftest() -> int:
             "two created copies resolve to exactly two entries (HOME=USERPROFILE dedupes)",
             len(copies) == 2 and copies[0] != copies[1],
         )
+        (Path(home) / ".dsh" / "skills" / "intent-router").mkdir(parents=True)
+        expect(
+            "the dsh user-level root is checked too (dsh isolates it instead of aborting)",
+            len(user_level_skill_copies(env)) == 3,
+        )
 
     print(f"\n{'selftest passed' if not failures else str(failures) + ' selftest failure(s)'}")
     return 1 if failures else 0
@@ -2863,6 +3301,13 @@ def run_suite(args: argparse.Namespace) -> int:
         text=True,
     )
     env["skill_commit"] = commit.stdout.strip() or "unknown"
+    # The commit alone does not identify the skill when the working tree has
+    # uncommitted edits, and a report is only reproducible against a file that
+    # exists: record the hash of what actually ran.
+    env["skill_file"] = (
+        f"skills/intent-router/SKILL.md sha256 "
+        f"{hashlib.sha256((SKILL_DIR / 'SKILL.md').read_bytes()).hexdigest()[:16]}"
+    )
 
     cases = suite_order(cases, args.harness)
     total_cases = len(cases)
@@ -3051,6 +3496,7 @@ def rescore(raw_dir: Path, out_dir: Path, date_str: str | None) -> int:
             environmental.append(any(m.get("environmental") for m in outcome["measured"]))
             turn_statuses.extend(turn["status"] for turn in turns)
         run_count = len(by_case[case_id])
+        expect = case.get("expect") or {}
         results.append(
             {
                 "id": case_id,
@@ -3124,13 +3570,15 @@ DELIVERY_CASE_KEYS = frozenset(
 )
 
 # The workspace files that are the runner's own, never the model's delivery.
-# .claude/.agents hold the installed skill copies committed by seed_history();
-# opencode.json is written after seeding and stays untracked. .intent/ holds
-# the skill's own emitted specs: the model may write one there even while
-# asking, so it is excluded too — a spec file is not the delivered work, and
-# counting it as a diff once ended the loop before the implement prompt was
-# ever sent (2026-09-24 skill-arm finding).
-RUNNER_PATHS = (":!opencode.json", ":!.claude", ":!.agents", ":!.intent")
+# .claude/.agents/.dsh hold the installed skill copies, committed by
+# seed_history() before the base commit is taken; opencode.json is written after
+# seeding and stays untracked. .intent/ holds the skill's own emitted specs: the
+# model may write one there even while asking, so it is excluded too — a spec
+# file is not the delivered work, and counting it as a diff once ended the loop
+# before the implement prompt was ever sent (2026-09-24 skill-arm finding).
+# .dsh joins them with the dsh channel: it is the directory dsh installs from,
+# and anything the model writes under it is part of the run, not the delivery.
+RUNNER_PATHS = (":!opencode.json", ":!.claude", ":!.agents", ":!.dsh", ":!.intent")
 
 
 def validate_delivery_cases(cases: list[dict]) -> list[str]:
@@ -4130,6 +4578,17 @@ def render_delivery_report(
 
 
 def run_delivery(args: argparse.Namespace) -> int:
+    if args.harness == "dsh":
+        # The delivery comparison writes per-arm harness configuration and a
+        # harness-specific section 1; neither exists for dsh, and the fallback
+        # would print opencode's text into a dsh report. Refuse loudly rather
+        # than publish a report that misdescribes its own setup.
+        raise SystemExit(
+            "--harness dsh has no delivery arm yet: the delivery comparison writes its "
+            "per-arm configuration and its report section 1 per harness, so a dsh run "
+            "would have no honest description of what it measured. Use --harness opencode "
+            "for delivery; the suite channel supports dsh."
+        )
     cases = load_delivery_cases()
     if args.cases != "all":
         wanted = {c.strip() for c in args.cases.split(",") if c.strip()}
@@ -4230,6 +4689,11 @@ def rescore_delivery(raw_dir: Path, out_dir: Path, date_str: str | None) -> int:
     if harness not in HARNESSES:
         raise SystemExit(
             f"--rescore-delivery expects a directory named one of {HARNESSES}, got: {raw_dir}"
+        )
+    if harness == "dsh":
+        raise SystemExit(
+            "--harness dsh has no delivery arm yet, so there are no dsh delivery "
+            "snapshots to re-score; see run_delivery() for the reason."
         )
     cases = {c["id"]: c for c in load_delivery_cases()}
     results: list[dict] = []
@@ -4340,6 +4804,16 @@ def main() -> int:
     parser.add_argument("--check-docs", action="store_true")
     parser.add_argument("--selftest", action="store_true")
     args = parser.parse_args()
+
+    if args.harness == "dsh" and args.model:
+        # The headless app has no --model flag, so --model would be accepted and
+        # then ignored while preflight stamped it into the report as if it had
+        # been used. Pin the route in the profile or an overlay instead.
+        parser.error(
+            "--model is not supported for --harness dsh: the headless app takes no "
+            "--model flag. Pin the provider and model in a profile patch passed through "
+            "DSH_EVAL_PATCH, and label it with DSH_EVAL_MODEL_LABEL for the report."
+        )
 
     if args.rescore_delivery:
         return rescore_delivery(Path(args.rescore_delivery), Path(args.out), args.date)

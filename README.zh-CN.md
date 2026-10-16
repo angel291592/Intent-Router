@@ -403,6 +403,8 @@ skill 没自动触发的 session 里也被读到：*"若 `.intent/` 里有未结
 
 - `.claude/skills/`——Claude Code
 - `.agents/skills/`——Cursor、Codex、OpenCode、Gemini CLI、Copilot、Pi、Amp、Zed 等
+- `.dsh/skills/`——DeepSeek Harness（dsh）；它只扫一层，并以最近的 `.git` 祖先为项目根，
+  所以副本要放在 `<仓库>/.dsh/skills/intent-router/`
 
 前面加 `~/` 就是全局安装。逐个 harness 的路径（包括那些用自己专属目录名的）在
 [`references/harness-compat.md`](skills/intent-router/references/harness-compat.md)。
@@ -415,7 +417,7 @@ system prompt 即可。`references/` 是按需加载的，可以一起粘，也�
 （相比之下 `grill-me` 自己的文档写着 *"agent 不会主动去用它。"*）想强制触发就：
 
 ```
-/intent-router refactor the auth module     # Claude Code、Cursor、Copilot、Zed、Kiro、Augment
+/intent-router refactor the auth module     # Claude Code、Cursor、Copilot、Zed、Kiro、Augment、dsh
 $intent-router refactor the auth module     # Codex
 /skill:intent-router refactor the auth module   # Pi、Kimi Code
 ```
@@ -423,15 +425,15 @@ $intent-router refactor the auth module     # Codex
 <details>
 <summary>它能在哪些 agent 里跑</summary>
 
-`SKILL.md` 不点名任何工具——它只要求 *"你的环境提供的任何读文件、搜索或 shell 能力"*——所以凡是能读
+`SKILL.md` 不点名任何工具——它只要求 *"环境具备的读取、搜索与 shell 能力"*——所以凡是能读
 [Agent Skills](https://agentskills.io/) 格式的地方它都能跑。
 
-**verified**（在这里跑过，报告在 `evals/reports/`）——OpenCode
+**verified**（在这里跑过，报告在 `evals/reports/`）——OpenCode、DeepSeek Harness（dsh）
 
 **spec-compatible**（其文档声称支持标准 `SKILL.md`；本项目未实测）——Claude Code、Codex CLI、
-Cursor、GitHub Copilot（CLI 与 VS Code）、Gemini CLI、Antigravity、Windsurf、DeepSeek Harness
-（dsh）、Pi、Qwen Code、Kimi Code CLI、Trae、Cline、Roo Code、Kilo Code、Goose、OpenHands、Amp、
-Zed、Warp、Kiro CLI、Junie、Augment、Factory Droid
+Cursor、GitHub Copilot（CLI 与 VS Code）、Gemini CLI、Antigravity、Windsurf、Pi、Qwen Code、
+Kimi Code CLI、Trae、Cline、Roo Code、Kilo Code、Goose、OpenHands、Amp、Zed、Warp、Kiro CLI、
+Junie、Augment、Factory Droid
 
 **needs-adapter**（没有公开的 skill 机制；把 `SKILL.md` 粘进 system prompt）——Continue
 
@@ -456,15 +458,20 @@ Zed、Warp、Kiro CLI、Junie、Augment、Factory Droid
 2026-09-24 · opencode · dp/deepseek-flash · delivery add-caching-delivery · bare 5.0/6 (N=5) · with skill 6.0/6 (N=3) · ADR trap avoided bare 5/5 vs skill 3/3
 2026-09-24 · opencode · (harness default) · 4/4 subset cases · probe ratio 0.25 · 0 over-asks · 0 hallucinated evidence
 2026-09-27 · opencode · dp/deepseek-flash · 6/6 subset cases · probe ratio 0.44 · 0 over-asks · 0 hallucinated evidence
+2026-10-15 · dsh · opencode-go3/deepseek-v4.1-flash · 5/6 subset cases · probe ratio 0.35 · 0 over-asks · 0 hallucinated evidence
 <!-- evals:end -->
 
 逐行说明：第 1 行是 2026-09-23 当日套件规模（10 例）下的全量单次运行；第 2 行是当天提示词强化后
 对 8 用例子集的单次重测——子集口径，与全量数字分开陈述；第 3 行是交付对照，本项目的**结果指标**——
 skill 臂三次运行全部交付 6/6，且每次都写明了缓存失败策略，不装的 5 次一次都没有；第 4 行是 v1.1.0
 发版核验，4 用例子集运行；第 5 行是 v1.2.0 新增的三个请求缺陷用例（`ambiguous`、`conflict`、
-`premise`）连同该改动可能影响的三个回归用例一起的子集运行。probe ratio 是**诊断指标**，从不参与
-判定。套件现为 17 例，全量阈值随之为 17 例中至少通过 14 例、且零编造 evidence；这一规模下的全量
-运行尚无公开报告。所有公开报告都在 [`evals/reports/`](evals/reports/)。
+`premise`）连同该改动可能影响的三个回归用例一起的子集运行；第 6 行是 DeepSeek Harness（dsh）的首次
+运行，6 用例子集，其中四个 auto 模式用例正是 description 改写所依据的证据。第六个用例
+`git-only-fact` 失败，而这是沙箱的失败、不是 skill 的：要拿到"只存在于版本历史里的事实"，需要一个能读
+仓库的 shell，而在 Windows 上 dsh 沙箱读不到 runner 自己的临时工作区；同一用例在不设限的 dsh 下通过。
+probe ratio 是**诊断指标**，从不参与判定。套件现为 17 例，全量阈值随之为 17 例中至少通过
+14 例、且零编造 evidence；这一规模下的全量运行尚无公开报告。所有公开报告都在
+[`evals/reports/`](evals/reports/)。
 
 怎么自己跑、每个用例查什么：[`evals/README.md`](evals/README.md)。
 

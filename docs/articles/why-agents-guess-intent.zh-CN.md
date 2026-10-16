@@ -1,4 +1,4 @@
-# agent 为什么会猜错意图：17 个可判定的用例
+# agent 为什么会猜错意图：18 个可判定的用例
 
 > 写于 2026-10-03。本文所有数字都来自 `evals/reports/` 里已提交的报告，没有一处估计值。
 > 方法论见 [`../evals/README.md`](../../evals/README.md)，用例定义见 [`../../evals/cases.yaml`](../../evals/cases.yaml)。
@@ -197,7 +197,7 @@
 
 我把边界写清楚，因为这些边界比结论更影响你怎么用它：
 
-- **只有一个模型、一个 harness 出过可发布的报告**（opencode + `dp/deepseek-flash`）。
+- **有两个 harness 出过可发布的报告**（opencode + `dp/deepseek-flash`；DeepSeek Harness（dsh）+ `opencode-go3/deepseek-v4.1-flash`，6 例子集），两者都由同一个模型家族应答。
 - **Claude Code 的报告被撤回了。** 2026-09-22 那次跑在一个强制关闭 `thinking`、且对英文提问用中文回答的通道上，失败无法归因于 skill 本身。报告已从仓库移除，Claude Code 降级为 `spec-compatible`。方法学和用例保持公开，**只有报告被扣下**——一个无法归因的数字，不该被发布。
 - **`codex` 从未被评测。** 它只在兼容性文档里被列为 `spec-compatible`（文档声称支持标准 `SKILL.md`，本项目未实测）。runner 支持的目标只有 `claude-code` 和 `opencode`。
 - **完整套件的门槛是 14/17**，但**这个规模的完整套件运行还没有发布过**。已提交的最新报告是子集运行。

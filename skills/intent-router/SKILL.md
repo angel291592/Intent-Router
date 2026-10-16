@@ -1,17 +1,12 @@
 ---
 name: intent-router
 description: >-
-  Converges an underspecified request into a typed IntentSpec before planning or acting. Use when
-  the user asks to implement, add, change, refactor, fix, migrate, configure, handle, triage, sort
-  out, look into or decide something and the request leaves decisions open (which objects, which
-  approach, what happens on failure, which trade-off), contradicts itself, admits two readings, or
-  rests on an approach its sources may rule out — in a codebase, a ticket queue, a research brief
-  or a runbook — or when the user says "clarify the intent", "what do you need from me", or
-  invokes intent-router. Looks up what its sources hold (code, history, decision records, a ticket
-  log, an order record, the policy in force) before asking; asks only preference or irreversible
-  questions, one at a time, with a recommended default; halts instead of guessing; checks the
-  delivered work against the spec. Silent on a fully stated task its sources do not contradict.
-  Not for explaining existing state ("what does X do", "why is Y slow").
+  Converges an underspecified request into an IntentSpec: looks up what sources answer, asks only
+  what they cannot, halts instead of guessing, checks delivery against the spec. Use when a request
+  to implement, add, change, fix or configure leaves a decision open — scope, approach, failure
+  behaviour, what done means — contradicts itself, reads two ways, or rests on a premise sources
+  rule out. Silent on a fully stated request its sources do not contradict; not for explaining
+  existing state.
 license: MIT
 metadata:
   version: "1.3.0"
@@ -118,7 +113,7 @@ treat the text after the name as the request.
   something you actually opened, in one of these forms only: `path`, `path:line`, `path:line-line`,
   `path#heading`, `git:<short-sha>`, `git:#<pr-number>`, `user:delegated` (a decision handed back),
   `record:<system>/<id>`, `doc:<slug>#<section>`. Not evidence: the repository root (`.`), anything
-  under `.git/`, `.claude/`, `.agents/` or `.intent/`, the harness config file, and above all a
+  under `.git/`, `.claude/`, `.agents/`, `.dsh/` or `.intent/`, the harness config file, and above all a
   reasoning sentence — that goes in `text`. Anything else is a defect, even if it exists.
 - **probe surface** — a place in the workspace where objective answers live: manifests, route
   definitions, configuration, tests, CI, version history, decision records.
@@ -205,9 +200,9 @@ user. A question whose answer was sitting in the workspace is a defect, not a co
 
 Name the sources first. A code workspace → the surfaces below; anything else (a ticket queue, a
 records system, a policy archive, a notes collection, a candidate registry) → load
-`references/domains.md` and use that domain's table. Use whatever file-reading, search, or shell
-capability your environment provides, version-control history included; if it exposes none, see
-*degraded* below: an absent capability is a fact about the environment, never a gap in the request.
+`references/domains.md` and use that domain's table. Probe with the read, search and shell capability
+the environment has, version-control history included: an absent capability is *degraded* below — a
+fact about the environment, never a gap in the request.
 
 Work the probe surfaces in this order, stopping as soon as the unknown is settled:
 
@@ -222,9 +217,8 @@ Work the probe surfaces in this order, stopping as soon as the unknown is settle
    opinions.
 5. **Tests and CI configuration** — the contract that is already enforced.
 6. **Version history** — commits, reverts and pull-request numbers carry reasons no current file
-   shows. Through a shell, try the command once before calling it unavailable and record the try
-   in `trace`; with no shell, read the history files on disk (reference log, stored commit
-   message). Evidence is `git:<short-sha>` or `git:#<number>`, never a path in the history store.
+   shows; read them from the shell or from the history files on disk. Evidence is `git:<short-sha>`
+   or `git:#<number>`, never a path in the history store.
 
 Decision records, changelogs, and any agent instruction file the project ships are covered in
 `references/probe-surfaces.md`, together with the surfaces for other ecosystems.
@@ -361,8 +355,7 @@ sharing the implementer's is not a check.
 finding that changed the approach; what you decided for the user, one line each, so any line can be
 vetoed; and the one question, if any. Then the fenced `yaml` block, whole spec, in field order.
 
-**The fence stays.** Some environments keep only a turn's final message, and the eval reads the spec
-from the reply, so the block is never dropped in favour of the prose; a workspace that cannot be
+**The fence stays.** The spec is always in the reply, never prose alone; a workspace that cannot be
 written to still gets one sentence after it (below).
 
 **Quote every dirty scalar.** Any value containing `:`, `#`, `{`, `}`, `[`, `]`, `,`, `"` or `'`,

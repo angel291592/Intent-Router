@@ -14,6 +14,9 @@ top-level README may come from. The reports currently committed are:
 - `2026-09-28-delivery-opencode.md` (delivery-quality comparison, harness default model)
 - `2026-10-09-delivery-opencode.md` (v1.3.0 verification attempt; its single run exceeded the
   runner's 480-second ceiling and is recorded as environmental, so nothing in it is scored)
+- `2026-10-15-dsh.md` (first DeepSeek Harness run: 6-case subset on the dsh headless profile,
+  covering four auto-trigger cases after the description was rewritten to fit dsh's 500-character
+  catalog cap)
 
 claude-code run records are kept locally but not committed: the channel they ran through restricted
 the model in ways that make the results unattributable to the skill, so publishing them would be

@@ -15,7 +15,7 @@
 SKILL.md 是一份**给模型读的运行手册**，不是给人读的说明书。它的每一行都在争夺同一份稀缺资源：
 模型的注意力。所以全文遵守三条隐含预算：
 
-- **总长 ≤500 行**（规范上限），目前已贴着上限。每一行都占着这份预算——细节越多，铁律越容易被淹没，
+- **总长 ≤500 行**（规范上限），目前 493 行。每一行都占着这份预算——细节越多，铁律越容易被淹没，
   所以"写进正文"本身就是一次预算决策，references 的存在正是为了给正文省行。
 - **进 SKILL.md 的是"每次都要想起来的东西"**；只在特定分支才需要的细节一律推进 `references/`。
 - **凡是能在别处表达的约束，就不在正文里重复。** 字段形状交给 schema，问题模板交给
@@ -35,13 +35,17 @@ SKILL.md 是一份**给模型读的运行手册**，不是给人读的说明书�
 
 - **第三人称、动词开头**——各家 harness 都把一堆 skill 的 description 排在一起给模型看，第一人称
   ("I help you…") 在列表里读起来像噪声。
-- **前 200 字符塞满触发词**（implement / add / change / refactor / fix / underspecified）——
+- **前 200 字符塞满触发词**（underspecified / implement / add / change / fix / configure）——
   Codex 等会**截断** description 列表。触发词排在后面等于没写。
-- **明写不该用的场景**（"Not for explaining existing state ("what does X do", "why is Y
-  slow")"）——负向判据。这与设计原则第 6 条是同一件事：不声明"我不是什么"，这个 skill 会在纯
-  问答上乱触发，而误触发一次比漏触发一次更让人反感。四项齐全的请求不在这条负向判据里，改由
-  "Silent on a fully stated task its sources do not contradict" 表达：照常加载、来源不反对就不
-  出声，理由见 §2。
+- **压进 harness 目录渲染的 500 字符上限**——dsh 的会话目录只渲染 `name` 加一段归一化后的
+  description，上限 500 字符，超出用省略号截断（不报错）。旧描述 1019 字符，因此在 dsh 里后半段整体
+  不可见，包括两条否定谓词。现为 491 字符，七个谓词一条不少：何时该用、三类缺陷、先查后问、不猜而
+  halt、交付后核对、完整请求保持沉默、不用于解释现状。`--check-frontmatter` 现在超过 500 即失败。
+- **明写不该用的场景**（"Not for explaining existing state"）——负向判据。这与设计原则第 6 条是同一件
+  事：不声明"我不是什么"，这个 skill 会在纯问答上乱触发，而误触发一次比漏触发一次更让人反感。四项齐全
+  的请求不在这条负向判据里，改由 "Silent on a fully stated request **its sources do not contradict**"
+  表达：照常加载、来源不反对就不出声，理由见 §2。限定语"its sources do not contradict"不能省——省掉
+  就等于把前提检查的门也关上了。
 - **只用规范定义的字段**（name / description / license / metadata）——加非标字段（比如
   `disable-model-invocation`）会让 Claude Code 的 IDE 校验器告警；而且本 skill 本来就**需要**自动
   触发，禁用模型调用与设计意图相反。
@@ -123,7 +127,7 @@ skill 在这类请求上被加载得更频繁，但只加载不代表会输出�
 仍能"看见"它。语义不可改动——改了这一句，这个项目就退化成又一个访谈式 skill。
 
 **为什么措辞是"能力描述"而不是工具名**：SKILL.md 里不出现 Read / Grep / Bash 这类名字，而是写
-"use whatever file-reading, search, or shell capability your environment provides"。原因有二：
+"Probe with the read, search and shell capability the environment has"。原因有二：
 ① Agent Skills 开放规范明确"只用 name + description + 纯 markdown 即可全平台通用"，写死工具名会
 让它在别家 harness 上指向不存在的东西；② 工具名会随 harness 版本变，能力不会。代价是措辞啰嗦一
 点，换来的是 26 个 harness 的兼容性——这笔交易值得。

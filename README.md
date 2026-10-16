@@ -447,6 +447,8 @@ agent reads:
 
 - `.claude/skills/` — Claude Code
 - `.agents/skills/` — Cursor, Codex, OpenCode, Gemini CLI, Copilot, Pi, Amp, Zed and others
+- `.dsh/skills/` — DeepSeek Harness (dsh); it scans one level deep and takes the nearest `.git`
+  ancestor as the project root, so the copy belongs at `<repo>/.dsh/skills/intent-router/`
 
 Add `~/` in front for a global install. Per-harness paths, including the ones that use their own
 directory name, are in
@@ -462,7 +464,7 @@ when you remember to invoke it. (`grill-me`, by contrast, documents that *"the a
 for it on its own."*) Force it when you want to:
 
 ```
-/intent-router refactor the auth module     # Claude Code, Cursor, Copilot, Zed, Kiro, Augment
+/intent-router refactor the auth module     # Claude Code, Cursor, Copilot, Zed, Kiro, Augment, dsh
 $intent-router refactor the auth module     # Codex
 /skill:intent-router refactor the auth module   # Pi, Kimi Code
 ```
@@ -470,16 +472,16 @@ $intent-router refactor the auth module     # Codex
 <details>
 <summary>Which agents it runs in</summary>
 
-`SKILL.md` names no tools — it asks for *"whatever file-reading, search, or shell capability your
-environment provides"* — so it runs anywhere that reads the
+`SKILL.md` names no tools — it asks for *"the read, search and shell capability the environment
+has"* — so it runs anywhere that reads the
 [Agent Skills](https://agentskills.io/) format.
 
-**verified** (run here, report in `evals/reports/`) — OpenCode
+**verified** (run here, report in `evals/reports/`) — OpenCode, DeepSeek Harness (dsh)
 
 **spec-compatible** (its docs say it loads standard `SKILL.md`; not exercised here) — Claude Code,
-Codex CLI, Cursor, GitHub Copilot (CLI and VS Code), Gemini CLI, Antigravity, Windsurf, DeepSeek
-Harness (dsh), Pi, Qwen Code, Kimi Code CLI, Trae, Cline, Roo Code, Kilo Code, Goose, OpenHands,
-Amp, Zed, Warp, Kiro CLI, Junie, Augment, Factory Droid
+Codex CLI, Cursor, GitHub Copilot (CLI and VS Code), Gemini CLI, Antigravity, Windsurf, Pi, Qwen
+Code, Kimi Code CLI, Trae, Cline, Roo Code, Kilo Code, Goose, OpenHands, Amp, Zed, Warp, Kiro CLI,
+Junie, Augment, Factory Droid
 
 **needs-adapter** (no documented skill mechanism; paste `SKILL.md` into the system prompt) —
 Continue
@@ -507,6 +509,7 @@ else.
 2026-09-24 · opencode · dp/deepseek-flash · delivery add-caching-delivery · bare 5.0/6 (N=5) · with skill 6.0/6 (N=3) · ADR trap avoided bare 5/5 vs skill 3/3
 2026-09-24 · opencode · (harness default) · 4/4 subset cases · probe ratio 0.25 · 0 over-asks · 0 hallucinated evidence
 2026-09-27 · opencode · dp/deepseek-flash · 6/6 subset cases · probe ratio 0.44 · 0 over-asks · 0 hallucinated evidence
+2026-10-15 · dsh · opencode-go3/deepseek-v4.1-flash · 5/6 subset cases · probe ratio 0.35 · 0 over-asks · 0 hallucinated evidence
 <!-- evals:end -->
 
 Line by line: line 1 is a full-suite run of the suite as it stood on 2026-09-23, which was ten
@@ -516,8 +519,12 @@ project's result metric — the skill arm delivered 6/6 on all three runs and ev
 cache failure policy, where none of the 5 bare runs did; line 4 is the v1.1.0 release
 verification, a 4-case subset run; line 5 is a subset run verifying the three request-defect
 cases (`ambiguous`, `conflict`, `premise`) added for v1.2.0 alongside the three cases that change
-could disturb. Probe ratio is a diagnostic metric, never judged. The suite is seventeen cases,
-which puts the full-suite threshold at 14 of 17 with zero hallucinated evidence; no full-suite
+could disturb; line 6 is the first DeepSeek Harness (dsh) run, a 6-case subset whose four auto-mode
+cases are the evidence for the description rewrite. Its sixth case, `git-only-fact`, failed, and
+the failure is the sandbox's rather than the skill's: reaching a fact that lives only in version
+history needs a shell that can read the repository, and on Windows the dsh sandbox cannot read the
+runner's own temporary workspaces — the same case passes on dsh with confinement off. Probe ratio
+is a diagnostic metric, never judged. The suite is seventeen cases,
 run at that size has been published yet. Every published report is in
 [`evals/reports/`](evals/reports/).
 

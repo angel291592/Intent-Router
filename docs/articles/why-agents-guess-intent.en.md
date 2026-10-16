@@ -235,7 +235,8 @@ itself as a finding.
 
 The boundaries matter more than the conclusions, so here they are:
 
-- **One model, one harness have a publishable report** (opencode + `dp/deepseek-flash`).
+- **Two harnesses have publishable reports** (opencode + `dp/deepseek-flash`; DeepSeek Harness
+  (dsh) + `opencode-go3/deepseek-v4.1-flash`, a 6-case subset), and one model serves both.
 - **The Claude Code report was withdrawn.** The 2026-09-22 run went through a channel that forced
   `thinking` off and answered English prompts in Chinese, so its failures cannot be attributed to the
   skill. The report was removed from the repo and Claude Code dropped to `spec-compatible`. The
@@ -243,8 +244,8 @@ The boundaries matter more than the conclusions, so here they are:
   should not be published.
 - **`codex` has never been evaluated.** It appears only as a `spec-compatible` target in the
   compatibility docs (its docs say it loads standard `SKILL.md`; not exercised here). The runner
-  supports `claude-code` and `opencode` only.
-- **The full-suite threshold is 14/17**, but **no full-suite run at that size has been published**.
+  supports `claude-code`, `opencode` and `dsh`; the dsh channel cannot score a case that needs to
+  read the workspace's git history, because the Windows sandbox denies the shell that access.
   The most recent committed report is a subset run.
 - **The delivery comparison is small** (bare N=5, skill N=3). It can show that the skill arm states a
   failure policy; it cannot give you a precise effect size.

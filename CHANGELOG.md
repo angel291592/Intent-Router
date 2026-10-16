@@ -7,6 +7,83 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
 
 ## [Unreleased]
 
+The description now fits the harness that renders the smallest slice of it, and the eval runner can
+measure DeepSeek Harness alongside the two harnesses it already ran. A description is what a harness
+matches a request against, and dsh renders `name` plus a normalized description capped at 500
+characters — anything longer is truncated with an ellipsis, never rejected. The previous
+1019-character description therefore lost its second half inside dsh, including both negative
+predicates ("silent on a fully stated task", "not for explaining existing state") that keep
+auto-invocation off work that needs no convergence. It is now 491 characters and keeps every
+predicate, including the qualifier that lets a complete request still be premised-checked ("silent
+on a fully stated request its sources do not contradict"); the `ask`-budget detail it dropped lives
+in §4.3, where it is executed. Three passages of
+environment mechanics that restate what any harness already does — how to call tools, how to retry a
+shell command, why a reply keeps its fence — are gone from `SKILL.md`, and the evidence exclusion
+list gained `.dsh/`, the directory dsh installs from. The file is 493 lines.
+`--check-frontmatter` now fails above 500 characters, with the dsh cap as its stated reason.
+
+`evals/run.py` gains `--harness dsh`, which drives `dsh --profile headless` and parses its `--json`
+event stream: only assistant prose is a candidate reply, so a run that correctly stays silent is
+never scored against the skill text its own tool output carried. Each dsh run gets an isolated
+`DSH_HOME` and `DSH_AGENTS_HOME` beside its workspace, a generated `--patch` overlay that pins the
+skill surface to the workspace and the posture to a read-only sandbox with approval `never`,
+credentials copied in as a file, and a fourth preflight session that measures the isolation instead
+of asserting it. The posture is not the shipped default because the shipped `workspace-write`
+sandbox cannot read the runner's temporary workspaces on Windows — every shell call is denied there
+and a run spends its budget diagnosing the sandbox instead of probing. `--delivery`
+and `--rescore-delivery` refuse dsh — their per-arm configuration and report section do not exist
+for it yet. Adding `.dsh` to the delivery diff's runner-owned paths keeps the installed copy and
+anything the model writes under it out of the delivered-work check, exactly as `.claude` and
+`.agents` already did.
+
+`references/harness-compat.md` corrects its dsh row — explicit invocation is `/<skill>`, and the
+project directory is both `.dsh/skills/` and `.agents/skills/` — and its notes now record the
+500-character description cap, that `whenToUse` and `metadata` are parsed but never rendered, the
+root ranking, the `.system` exclusion, and that dsh's project root is the nearest `.git` ancestor.
+
+`README.md` gains the dsh install paths and the `/intent-router` invocation. The description change
+is a triggering-surface change, so it was measured on dsh itself: a six-case subset covering four of
+the suite's auto-mode cases (including both the report scores for auto-trigger) passed 5/6, with
+zero hallucinated evidence (`evals/reports/2026-10-15-dsh.md`). The sixth case, `git-only-fact`,
+failed — and that failure is the sandbox's, not the skill's: following a reference that only version
+history explains needs a shell that can read the repository, and on Windows the dsh sandbox cannot
+read the runner's own temporary workspaces; the same case passes on dsh with confinement off, which
+is how the failure was localized. Reports now also record the SHA-256 of the `SKILL.md` that ran,
+because the commit alone does not identify an uncommitted working tree. The OpenCode numbers above
+were not re-measured against the new description.
+/
+描述现在适配"渲染得最少"的那个 harness，评测跑分器也能把 DeepSeek Harness 和前两个 harness 一起测
+了。description 是 harness 拿来做请求匹配的字段，dsh 只渲染 `name` 加一段归一化后的描述、上限 500
+字符——超长会被省略号截断而不是报错。旧描述 1019 字符，因此在 dsh 里**后半段整体消失**，其中包括两条
+否定谓词（"任务已完整说明时保持沉默"、"不用于解释现状"），而它们正是防止自动触发在无需收敛的工作上开
+火的条件。新描述 491 字符，谓词一条不少，包括让"完整请求仍可做前提检查"的那句限定语（"silent on a
+fully stated request **its sources do not contradict**"）；被它省下的提问预算细节在 §4.3 里，那里才是执行位置。
+`SKILL.md` 删掉三处"环境机制"交代（怎么调工具、怎么重试 shell 命令、回复为什么保留围栏），这些是任何
+harness 都已经在做的事；evidence 排除清单补上 `.dsh/`（dsh 的安装目录）。全文 493 行。
+`--check-frontmatter` 现在超过 500 字符即失败，并在输出里写明理由是 dsh 的目录渲染上限。
+
+`evals/run.py` 新增 `--harness dsh`：驱动 `dsh --profile headless`，解析它的 `--json` 事件流——只有
+assistant 正文进入候选，因此一次"正确地保持沉默"的运行不会被它自己工具输出里的技能正文误判。每次 dsh
+运行都在工作区旁拿到隔离的 `DSH_HOME`/`DSH_AGENTS_HOME`、一份自动生成的 `--patch`（把技能面钉在工作区、
+把权限姿态钉成只读沙箱 + 审批 `never`）、以文件形式复制进来的凭据，以及第四个 preflight 会话**实测**这套
+隔离，而不是声称它成立。之所以不用随包默认姿态：随包的 `workspace-write` 沙箱在 Windows 上读不到 runner
+的临时工作区，每次 shell 调用都被拒绝，一次运行会把预算花在诊断沙箱而不是探测上。`--delivery` 与
+`--rescore-delivery` 对 dsh 直接拒绝：它们的每臂配置与报告段落尚不存在。把 `.dsh` 加进交付 diff 的
+"runner 自有路径"，是为了让安装副本与模型写在 `.dsh/` 下的任何东西都不被算作交付——`.claude` 与
+`.agents` 早就如此。
+
+`references/harness-compat.md` 修正 dsh 行——显式调用是 `/<skill>`，项目目录是 `.dsh/skills/` 与
+`.agents/skills/` 两处——并在注意事项里记下：500 字符描述上限、`whenToUse` 与 `metadata` 会被解析但
+从不渲染、技能根优先级、`.system` 例外，以及 dsh 的项目根是最近的 `.git` 祖先。
+
+`README.md` 补上 dsh 的安装路径与 `/intent-router` 调用方式。description 属触发面改动，因此直接在 dsh
+上实测：覆盖套件中四个 auto 模式用例（含报告里计入自动触发指标的那两个）的 6 例子集通过 5/6，零编造
+evidence（`evals/reports/2026-10-15-dsh.md`）。第六个用例 `git-only-fact` **失败，而这是沙箱的失败、不是
+skill 的**：要跟随一条"只有版本历史能解释"的引用，需要一个能读仓库的 shell，而在 Windows 上 dsh 沙箱读
+不到 runner 自己的临时工作区；同一用例在不设限的 dsh 下通过，失败因此定位在沙箱。报告现在还会记下实际运行
+的那份 `SKILL.md` 的 SHA-256，因为未提交的工作树上"提交号"不足以定位内容。上面那些 OpenCode 数字没有针对
+新描述重测。
+
 ## [1.3.0] — 2026-10-09
 
 The saved contract becomes a two-way artifact. It gains an optional `verification_status`

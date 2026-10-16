@@ -24,7 +24,9 @@ repository with the skill installed into it.
 
 ## 2. Running it
 
-Requires `python` 3.13+, [`uv`](https://docs.astral.sh/uv/), and the harness on `PATH`.
+Requires `python` 3.13+, [`uv`](https://docs.astral.sh/uv/), and the harness on `PATH` —
+`claude`, `opencode`, or `dsh` (`$DSH_EXE` overrides the last one; see
+[the dsh channel](#the-dsh-channel)).
 
 Five tiers, cheapest first. Each is a gate for the next: do not spend a session before the free
 tier above it is green.
@@ -73,14 +75,65 @@ skill is visible where it was installed, and which harness version and model ans
 and `--rescore` never reach preflight and start no session.
 
 Before everything, the runner refuses to start when an intent-router copy sits in a user-level
-skills directory (`~/.config/opencode/skills`, `~/.claude/skills`, `~/.agents/skills`): the harness
-would load that copy alongside the workspace one and the run would measure whichever happens to
-win. Move the copy out, then run.
+skills directory (`~/.config/opencode/skills`, `~/.claude/skills`, `~/.agents/skills`,
+`~/.dsh/skills`): the harness would load that copy alongside the workspace one and the run would
+measure whichever happens to win. Move the copy out, then run. The one exception is `--harness
+dsh`, whose runs are moved into an isolated home (below); there the same copies are recorded in the
+report and a fourth preflight session **proves** they are out of reach instead of taking it on
+trust.
+
+### The dsh channel
+
+`--harness dsh` drives `dsh --profile headless`, the shipped one-shot profile: it answers one task,
+prints the answer, and exits. It was verified against `@deepseek-ai/dsh` **0.2.0-rc.2**.
+
+- **Finding the CLI.** `$DSH_EXE` first, then `dsh` on `PATH`. `DSH_EXE` takes one executable, so a
+  wrapper script is the way to pin a build that lives somewhere unusual.
+- **The model route.** The headless profile's shipped default is DeepSeek's own route, which needs
+  `DEEPSEEK_API_KEY`. A working route that lives in another provider or relay is supplied with
+  `DSH_EVAL_PATCH=<path to a patch overlay>`; the headless app has no `--model` flag, so
+  `--harness dsh --model …` is rejected rather than silently ignored, and the report's model label
+  comes from `DSH_EVAL_MODEL_LABEL` (or `(headless profile default)` when unset).
+- **Isolation, which is measured.** Every run gets its own empty `DSH_HOME` and `DSH_AGENTS_HOME`
+  beside its workspace, so the user-level skill roots and the operator's own
+  `$DSH_HOME/AGENTS.md` stay outside the session; the stored `.credentials.yaml` and `.env` are
+  copied in as files (never into the environment, so an exported key still wins). A generated
+  `--patch` overlay sets `includeDefaultRoots: false` with `customSkillDirs: ['.dsh/skills']`, which
+  pins the skill surface to the workspace — a `with_skill=False` workspace is then genuinely bare.
+  The fourth preflight session re-runs the explicit invocation in a workspace with no skill and
+  fails the run if anything answers: that is `isolation_ok` in the report.
+- **Posture, pinned by the overlay.** The generated overlay also sets
+  `sandbox-policy.mode: read-only` and `approval.policy: never`, and the environment carries
+  `DSH_PERMISSION_MODE=read-only` — the same read-only posture the other harnesses get, so
+  `write`/`edit` are denied and a non-interactive run never waits on a prompt nobody can answer.
+  Not the shipped default, for a measured reason: on Windows the sandbox cannot read the runner's
+  own temporary workspaces at all. Under `workspace-write` every shell call answers
+  `[sandbox: file access denied under workspace-write mode]` — a run then spends its budget
+  diagnosing the sandbox instead of probing; under `read-only` the denial is the same
+  (`…under read-only mode`). The practical consequence: **`git-only-fact` fails on this channel**,
+  because reaching a fact that only lives in version history needs a shell that can read the
+  repository. It passes on dsh with confinement off — an overlay that sets
+  `sandbox-policy.mode: danger-full-access` and `approval.policy: never`, supplied through
+  `DSH_EVAL_PATCH` (the environment variable is written by the runner and does not override that
+  overlay) — which is how the failure was localized to the sandbox rather than to the skill. The
+  posture that fixes one case breaks another (unconfined, a fully specified request is carried out
+  rather than answered, and `fully-specified-auto-quiet` runs past the 480-second ceiling), so the
+  read-only posture is the one published. The `--json` event stream is parsed so that only assistant
+  prose — never `thinking` or `tool_result` — is a candidate reply.
+- **What it costs.** dsh's preflight is **4 sessions** (version, contamination, skill visibility,
+  isolation) instead of the other harnesses' 2.
+- **What it does not cover.** `--delivery` and `--rescore-delivery` refuse `--harness dsh`: the
+  delivery comparison writes per-arm configuration and a harness-specific report section that do
+  not exist for dsh yet, and a dsh report would otherwise describe itself in opencode's words.
+- **CI.** Only the offline tiers (`--selftest`, `--check-frontmatter`, `--check-docs`) run in
+  CI — they need no binary, no key and no network; the dsh channel is a maintainer-machine tier
+  like every other paid tier.
 
 ## 3. Cost
 
 A full suite is **21 sessions per harness**: 17 cases + the second turn for the two two-turn
-cases = 19 case sessions, plus **2 preflight sessions**. The ten-case suite measured about 16
+cases = 19 case sessions, plus **2 preflight sessions** (4 on dsh, which adds the isolation
+probe). The ten-case suite measured about 16
 minutes with `--jobs 4`, so budget roughly 27 minutes for seventeen. The same run also has
 `--smoke` (1 case session + 2 preflight) and Tier 3 re-runs (affected cases × 2, plus 2
 preflight). Tier 0 and Tier 1 cost nothing. Iterate on `--cases <id> --repeat 2` and keep a full
