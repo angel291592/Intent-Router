@@ -2087,7 +2087,7 @@ def skill_reference_problems() -> list[str]:
 
 
 def check_docs() -> int:
-    """Four offline conformance gates over the public documentation. All four
+    """Five offline conformance gates over the public documentation. All five
     groups run before reporting — one CI pass should surface every problem."""
     link_problems: list[str] = []
     for path in tracked_md_files():
@@ -2146,24 +2146,52 @@ def check_docs() -> int:
 
     reference_problems = skill_reference_problems()
 
+    # The install command is written into four surfaces that are edited
+    # independently: both READMEs, the site entry point and the skill's own
+    # compatibility reference (which ships inside the installed copy). Nothing
+    # else compares them, so a rename has to be repeated in all four by hand.
+    install_problems: list[str] = []
+    install_entry_points = (
+        "README.md",
+        "README.zh-CN.md",
+        "docs/index.md",
+        "skills/intent-router/references/harness-compat.md",
+    )
+    install_targets: dict[str, set[str]] = {}
+    for name in install_entry_points:
+        text = (ROOT / name).read_text(encoding="utf-8")
+        targets = set(re.findall(r"npx skills add ([^\s`'\"]+)", text))
+        install_targets[name] = targets
+        if not targets:
+            install_problems.append(f"{name}: no 'npx skills add' install command")
+    distinct_targets = set().union(*install_targets.values())
+    if len(distinct_targets) > 1:
+        install_problems.append(
+            "install command target differs across the entry points: "
+            + ", ".join(sorted(distinct_targets))
+        )
+
     counts = {
         "relative links": (len(tracked_md_files()), len(link_problems)),
         "version match": (1, len(version_problems)),
         "README evals lines": (sum(len(v) for v in readme_lines.values()), len(consistency_problems)),
         "skill references": (1, len(reference_problems)),
+        "install command": (len(install_entry_points), len(install_problems)),
     }
     for name, problems in (
         ("relative link", link_problems),
         ("version", version_problems),
         ("README consistency", consistency_problems),
         ("skill reference", reference_problems),
+        ("install command", install_problems),
     ):
         for problem in problems:
             print(f"FAIL [{name}]: {problem}")
     for name, (checked, bad) in counts.items():
         print(f"{name}: {checked - bad} ok, {bad} problem(s)")
-    print("OK" if not (link_problems or version_problems or consistency_problems or reference_problems) else "FAIL")
-    return 1 if (link_problems or version_problems or consistency_problems or reference_problems) else 0
+    failed = link_problems or version_problems or consistency_problems or reference_problems or install_problems
+    print("OK" if not failed else "FAIL")
+    return 1 if failed else 0
 
 
 def selftest() -> int:
