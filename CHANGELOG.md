@@ -7,6 +7,16 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
 
 ## [Unreleased]
 
+- CI: `--check-docs` now also checks the install command. That command is written into four
+  independently edited surfaces — both READMEs, the site entry point, and the skill's own
+  compatibility reference, which ships inside the installed copy — and nothing compared them, so a
+  rename could leave one of them telling readers to run a command that no longer resolves. The gate
+  requires `npx skills add` on all four and requires all four to name the same target.
+
+- CI：`--check-docs` 现在也校验安装命令。该命令写在四处独立编辑的位置——双语 README、站点入口页、
+  以及随 skill 一起分发的兼容性参考——此前没有任何检查比对它们，改名时可能漏掉一处、让读者照着
+  一个已失效的命令去安装。该闸门要求四处都出现 `npx skills add`，且四处指向的目标名一致。
+
 ## [1.4.0] — 2026-10-16
 
 The description now fits the harness that renders the smallest slice of it, and the eval runner can
