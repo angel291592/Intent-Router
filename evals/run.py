@@ -604,19 +604,30 @@ def harness_texts(stdout: str) -> list[str]:
 # One persisted turn block, exactly as run_case_once writes it:
 #   $ {cmd}\n[exit {code}]\n{stdout}\n[stderr]\n{stderr}
 TRANSCRIPT_BLOCK = re.compile(r"^\$ (.*)\n\[exit (-?\d+)\]\n(.*?)\n\[stderr\]\n?(.*)$", re.DOTALL)
+# Output routinely echoes a prompt, so a bare `$ ` line is not a safe boundary.
+# The command immediately followed by its exit line is the header shape output does not normally produce.
+TRANSCRIPT_HEADER = re.compile(r"(?m)^\$ [^\n]*\n\[exit -?\d+\]\n")
+
+
+def split_transcript_blocks(text: str) -> list[str]:
+    starts = [match.start() for match in TRANSCRIPT_HEADER.finditer(text)]
+    return [text[start:end] for start, end in zip(starts, starts[1:] + [len(text)])]
 
 
 def parse_transcript(path: Path) -> list[dict]:
     """Parse a persisted transcript back into per-turn records (R1).
 
-    Blocks are split on lines starting with ``$ `` because stdout and stderr may
-    be empty and may themselves contain blank lines, so the block separator is
-    the command marker, not a blank line. Verified against all 32 turn records
-    of the 2026-09-22 corpus.
+    Blocks start at a command line immediately followed by its ``[exit N]``
+    line. A bare ``$ `` line can occur in command output and is not a boundary.
+
+    Raises ``SystemExit`` naming the file when the transcript yields no turn at
+    all: an empty or truncated file is malformed evidence, and judging it as
+    "no turns" would either crash ``--rescore`` on ``turns[-1]`` or, worse,
+    silently score the case without the turn that carried the reply.
     """
     text = Path(path).read_text(encoding="utf-8")
     turns: list[dict] = []
-    for block in re.split(r"(?m)^(?=\$ )", text):
+    for block in split_transcript_blocks(text):
         if not block.strip():
             continue
         match = TRANSCRIPT_BLOCK.match(block)
@@ -630,6 +641,8 @@ def parse_transcript(path: Path) -> list[dict]:
                 "stderr": match.group(4),
             }
         )
+    if not turns:
+        raise SystemExit(f"{path}: no parseable turns in transcript")
     return turns
 
 
@@ -2205,6 +2218,45 @@ def selftest() -> int:
         if not condition:
             failures += 1
 
+    print("transcript boundaries")
+    fd, transcript_name = tempfile.mkstemp(prefix="intent-router-transcript-")
+    os.close(fd)
+    transcript_path = Path(transcript_name)
+    try:
+        first_stdout = "before\n$ npm test\nrunner output continues"
+        transcript_path.write_text(
+            "$ first\n[exit 7]\n" + first_stdout + "\n[stderr]\n\n"
+            "$ second\n[exit 0]\ndone\n[stderr]\n",
+            encoding="utf-8",
+        )
+        parsed = parse_transcript(transcript_path)
+        expect(
+            "stdout prompt echo does not split a turn",
+            len(parsed) == 2 and parsed[0]["stdout"] == first_stdout and parsed[0]["exit"] == 7,
+        )
+        transcript_path.write_text(
+            "$ genuine\n[exit 0]\ndone\n[stderr]\n\ntrailing fragment",
+            encoding="utf-8",
+        )
+        parsed = parse_transcript(transcript_path)
+        expect("trailing non-block fragment is skipped", len(parsed) == 1 and parsed[0]["cmd"] == "genuine")
+        transcript_path.write_text("not a transcript", encoding="utf-8")
+        try:
+            parse_transcript(transcript_path)
+            named_parse_error = False
+        except SystemExit as exc:
+            named_parse_error = str(transcript_path) in str(exc) and "no parseable turns" in str(exc)
+        expect("no parseable turn reports the transcript path", named_parse_error)
+        transcript_path.write_text("", encoding="utf-8")
+        try:
+            parse_transcript(transcript_path)
+            empty_parse_error = False
+        except SystemExit as exc:
+            empty_parse_error = str(transcript_path) in str(exc)
+        expect("an empty transcript reports the transcript path", empty_parse_error)
+    finally:
+        transcript_path.unlink(missing_ok=True)
+
     print("fence extraction")
     spec, status, _ = extract_spec(["prose\n```yaml\na: 1\n```\ntail"])
     expect("reads a fenced block", status == "ok" and spec == {"a": 1})
@@ -3384,6 +3436,14 @@ def selftest() -> int:
             [session_block('{"text":"Intent check"}'), session_block('{"text":"done"}')],
             False,
         ),
+        (
+            "plain-text prompt echo before final marker",
+            [
+                session_block('{"text":"earlier"}'),
+                session_block("Intent check\n- met: src/routes/users.ts:12\n\n$ not-a-boundary\nplain text"),
+            ],
+            True,
+        ),
         ("no marker anywhere", [session_block('{"text":"done"}')], False),
     ):
         snap = make_snapshot(
@@ -4550,9 +4610,6 @@ def handler_sections(routes_text: str) -> dict[tuple[str, str], str]:
     return sections
 
 
-DELIVERY_SESSION_SEP = "\n\n$ "
-
-
 def delivery_spec(snapshot: Path) -> dict | None:
     """The IntentSpec a delivery run emitted, or None when it emitted no fence.
 
@@ -4568,7 +4625,7 @@ def delivery_spec(snapshot: Path) -> dict | None:
     if not path.exists():
         return None
     text = path.read_text(encoding="utf-8", errors="replace")
-    for session in reversed(text.split(DELIVERY_SESSION_SEP)):
+    for session in reversed(split_transcript_blocks(text)):
         spec, _status, _text = extract_spec(harness_texts(session))
         if spec is not None:
             return spec
@@ -4744,10 +4801,10 @@ def score_user_api_caching(snapshot: Path) -> dict:
         aux["adr_read"] = "0007" in text or "adr/" in text
         # Verify (SKILL.md section 5) reports under a line reading exactly
         # `Intent check`, and only the final session can report on the delivered
-        # work. persist_snapshot joins sessions with "\n\n" and each starts with
-        # "$ "; the harness JSON escapes newlines inside texts, so that
-        # separator occurs only between sessions.
-        aux["intent_check"] = "Intent check" in text.split("\n\n$ ")[-1]
+        # work. A fake prompt line in the body must not truncate that session.
+        blocks = split_transcript_blocks(text)
+        final_block = blocks[-1] if blocks else text
+        aux["intent_check"] = "Intent check" in final_block
     return {"items": items, "score": score, "obtainable": obtainable, "aux": aux}
 
 
