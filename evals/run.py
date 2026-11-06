@@ -619,6 +619,11 @@ def parse_transcript(path: Path) -> list[dict]:
 
     Blocks start at a command line immediately followed by its ``[exit N]``
     line. A bare ``$ `` line can occur in command output and is not a boundary.
+
+    Raises ``SystemExit`` naming the file when the transcript yields no turn at
+    all: an empty or truncated file is malformed evidence, and judging it as
+    "no turns" would either crash ``--rescore`` on ``turns[-1]`` or, worse,
+    silently score the case without the turn that carried the reply.
     """
     text = Path(path).read_text(encoding="utf-8")
     turns: list[dict] = []
@@ -636,7 +641,7 @@ def parse_transcript(path: Path) -> list[dict]:
                 "stderr": match.group(4),
             }
         )
-    if text.strip() and not turns:
+    if not turns:
         raise SystemExit(f"{path}: no parseable turns in transcript")
     return turns
 
@@ -2242,6 +2247,13 @@ def selftest() -> int:
         except SystemExit as exc:
             named_parse_error = str(transcript_path) in str(exc) and "no parseable turns" in str(exc)
         expect("no parseable turn reports the transcript path", named_parse_error)
+        transcript_path.write_text("", encoding="utf-8")
+        try:
+            parse_transcript(transcript_path)
+            empty_parse_error = False
+        except SystemExit as exc:
+            empty_parse_error = str(transcript_path) in str(exc)
+        expect("an empty transcript reports the transcript path", empty_parse_error)
     finally:
         transcript_path.unlink(missing_ok=True)
 
