@@ -7,6 +7,10 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
 
 ## [Unreleased]
 
+- Transcript turns are now split only at a command line immediately followed by its `[exit N]` line, so command output that echoes a `$ ` prompt no longer drops turns during `--rescore`. A non-empty transcript with no parseable turn now fails with its file name instead of reaching an `IndexError`.
+
+- Transcript 现在仅在命令行后紧跟 `[exit N]` 行时切分，因此命令输出回显 `$ ` 提示符时，`--rescore` 不会再丢失轮次。非空但没有可解析轮次的 transcript 现在会报出文件名，而不是触发 `IndexError`。
+
 - CI: `--check-docs` now also checks the install command. That command is written into four
   independently edited surfaces — both READMEs, the site entry point, and the skill's own
   compatibility reference, which ships inside the installed copy — and nothing compared them, so a
