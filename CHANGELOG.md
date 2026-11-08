@@ -7,6 +7,8 @@ This project follows semantic versioning from 1.0 onwards; 0.x releases may chan
 
 ## [Unreleased]
 
+## [1.4.1] — 2026-11-08
+
 - Transcript turns are now split only at a command line immediately followed by its `[exit N]` line, so command output that echoes a `$ ` prompt no longer drops turns during `--rescore`. A transcript with no parseable turn — empty, truncated or otherwise malformed — now fails with its file name instead of reaching an `IndexError`.
 
 - Transcript 现在仅在命令行后紧跟 `[exit N]` 行时切分，因此命令输出回显 `$ ` 提示符时，`--rescore` 不会再丢失轮次。没有可解析轮次的 transcript（空文件、被截断或其它损坏形态）现在会报出文件名，而不是触发 `IndexError`。
@@ -779,7 +781,8 @@ First release. L0 only: a prompt-only skill with no dependencies and no keys. /
 - L1 and L2 backends are declared and not implemented.
 - L1 与 L2 后端只做声明，未实现。
 
-[Unreleased]: https://github.com/angel291592/Intent-Router/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/angel291592/Intent-Router/compare/v1.4.1...HEAD
+[1.4.1]: https://github.com/angel291592/Intent-Router/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/angel291592/Intent-Router/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/angel291592/Intent-Router/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/angel291592/Intent-Router/compare/v1.1.0...v1.2.0

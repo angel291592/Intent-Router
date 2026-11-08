@@ -9,7 +9,7 @@ description: >-
   existing state.
 license: MIT
 metadata:
-  version: "1.4.0"
+  version: "1.4.1"
   author: angel291592
   homepage: https://github.com/angel291592/Intent-Router
 ---
